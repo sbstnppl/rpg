@@ -1,0 +1,171 @@
+# RPG Game - Claude Code Instructions
+
+## Custom Subagents
+
+This project has specialized subagents in `.claude/agents/`. **Proactively use them** for relevant tasks:
+
+| Agent | Invoke When |
+|-------|-------------|
+| `langgraph-expert` | Building LangGraph graphs, agent nodes, state schemas, async patterns |
+| `database-architect` | Creating/modifying SQLAlchemy models, writing migrations, query optimization |
+| `game-designer` | Designing dice mechanics, attribute systems, combat balance, skill checks |
+| `prompt-engineer` | Writing LLM prompts, entity extraction, structured output parsing |
+| `storyteller` | Creating NPCs, quests, locations, narrative content, world-building |
+
+### When to Use Subagents
+
+- **Complex implementation tasks**: Spawn the relevant expert agent
+- **Design decisions**: Use `game-designer` for mechanics, `storyteller` for content
+- **Multiple domains**: Spawn multiple agents in parallel for comprehensive solutions
+- **Code review**: Have relevant expert review implementation
+
+**Example**: "Building the CombatResolver agent" → spawn both `langgraph-expert` (for the agent structure) and `game-designer` (for combat mechanics)
+
+---
+
+## Project Overview
+
+An agentic console-based RPG using LangGraph for multi-agent orchestration. The game features:
+- Persistent world state with SQL database
+- Flexible character attributes (setting-dependent)
+- Dice-based combat and skill checks
+- NPC schedules and dynamic events
+- Relationship tracking (trust, liking, respect, romantic interest)
+
+## Tech Stack
+
+- **Python 3.11+**
+- **LangGraph** - Multi-agent orchestration
+- **SQLAlchemy 2.0+** - ORM with async support
+- **PostgreSQL** - Database
+- **Alembic** - Migrations
+- **Typer + Rich** - CLI
+- **Anthropic + OpenAI** - Dual LLM support
+
+## Quick Commands
+
+```bash
+# Run the game
+python -m src.main
+
+# Run tests
+pytest
+
+# Run migrations
+alembic upgrade head
+
+# Create new migration
+alembic revision --autogenerate -m "description"
+```
+
+## Project Structure
+
+```
+rpg/
+├── src/
+│   ├── database/models/    # SQLAlchemy models
+│   ├── managers/           # Business logic (Manager pattern)
+│   ├── agents/             # LangGraph agents
+│   ├── llm/                # LLM provider abstraction
+│   ├── cli/                # Typer CLI commands
+│   ├── dice/               # Dice rolling mechanics
+│   └── schemas/            # Setting configurations
+├── tests/
+├── docs/                   # User documentation
+├── .claude/docs/           # Claude-specific docs
+├── data/
+│   ├── settings/           # Setting templates (fantasy, etc.)
+│   └── templates/          # Prompt templates
+└── alembic/                # Database migrations
+```
+
+## Key Documentation
+
+- `docs/architecture.md` - System architecture
+- `docs/implementation-plan.md` - Implementation checklist
+- `.claude/docs/coding-standards.md` - Code style guide
+- `.claude/docs/agent-prompts.md` - LLM prompt templates
+- `.claude/docs/database-conventions.md` - DB patterns
+
+## Core Patterns
+
+### Manager Pattern
+Each domain has a dedicated manager class:
+```python
+class EntityManager(BaseManager):
+    def get_entity(self, key: str) -> Entity | None
+    def create_entity(self, **data) -> Entity
+```
+
+### LangGraph State
+```python
+class GameState(TypedDict):
+    session_id: int
+    player_input: str
+    gm_response: str | None
+    scene_context: str
+    next_agent: str
+```
+
+### Database Session Scoping
+Every query must filter by `session_id`:
+```python
+self.db.query(Entity).filter(Entity.session_id == self.game_session.id)
+```
+
+## Important Design Decisions
+
+1. **Owner vs Holder**: Items have `owner_id` (permanent) and `holder_id` (who has it now)
+2. **Body Slots + Layers**: Clothing uses `body_slot` and `body_layer` for realistic outfit tracking
+3. **SPV Facts**: Subject-Predicate-Value pattern for flexible world facts
+4. **Immutable Turns**: Turn history never modified; session context is mutable
+
+## Environment Variables
+
+```
+ANTHROPIC_API_KEY=...
+OPENAI_API_KEY=...
+DATABASE_URL=postgresql://localhost/rpg_game
+LLM_PROVIDER=anthropic  # or openai
+```
+
+## Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test file
+pytest tests/test_managers/test_entity_manager.py
+
+# Run with coverage
+pytest --cov=src
+```
+
+## Common Tasks
+
+### Add a new entity type
+1. Add enum value to `src/database/models/enums.py`
+2. Create extension model if needed (like `NPCExtension`)
+3. Update `EntityManager` methods
+4. Add migration
+
+### Add a new agent
+1. Create agent file in `src/agents/`
+2. Add node to graph in `src/agents/graph.py`
+3. Create prompt template in `data/templates/`
+4. Add tools in `src/agents/tools/`
+
+### Add a new CLI command
+1. Create command file in `src/cli/commands/`
+2. Register with Typer app in `src/cli/main.py`
+
+## Reference Project
+
+The `../story-learning/` project uses similar patterns:
+- Manager pattern for state
+- SPV fact store
+- Attitude tracking (0-100 scale)
+- Item ownership model
+
+Refer to it for implementation examples.
