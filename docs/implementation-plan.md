@@ -10,25 +10,31 @@
 - [ ] Set up `.env.example`
 
 ### 1.2 Database Models
-- [ ] Create `src/database/models/enums.py` - All enumerations
-- [ ] Create `src/database/models/base.py` - Base class, mixins
-- [ ] Create `src/database/models/session.py` - GameSession, Turn
-- [ ] Create `src/database/models/entities.py` - Entity, Attribute, Skill, NPCExtension, MonsterExtension
-- [ ] Create `src/database/models/items.py` - Item, StorageLocation, EquipmentSlot
-- [ ] Create `src/database/models/relationships.py` - Relationship, RelationshipChange
-- [ ] Create `src/database/models/world.py` - Location, Schedule, TimeState, Fact, WorldEvent
-- [ ] Create `src/database/models/tasks.py` - Task, Appointment, Quest
+- [x] Create `src/database/models/enums.py` - All enumerations
+- [x] Create `src/database/models/base.py` - Base class, mixins
+- [x] Create `src/database/models/session.py` - GameSession, Turn
+- [x] Create `src/database/models/entities.py` - Entity, Attribute, Skill, NPCExtension, MonsterExtension
+- [x] Create `src/database/models/items.py` - Item, StorageLocation, EquipmentSlot
+- [x] Create `src/database/models/relationships.py` - Relationship, RelationshipChange
+- [x] Create `src/database/models/world.py` - Location, Schedule, TimeState, Fact, WorldEvent
+- [x] Create `src/database/models/tasks.py` - Task, Appointment, Quest
 - [ ] Create `src/database/connection.py` - Session management
 
+### 1.2.1 Realism System Models (NEW)
+- [x] Create `src/database/models/character_state.py` - CharacterNeeds, IntimacyProfile
+- [x] Create `src/database/models/injuries.py` - BodyInjury, ActivityRestriction
+- [x] Create `src/database/models/vital_state.py` - EntityVitalState
+- [x] Create `src/database/models/mental_state.py` - MentalCondition, GriefCondition
+
 ### 1.3 Alembic Setup
-- [ ] Initialize Alembic
-- [ ] Create initial migration with all tables
+- [x] Initialize Alembic
+- [x] Create initial migration with all tables
 - [ ] Test migration up/down
 
 ## Phase 2: Core Managers
 
 ### 2.1 Base Manager
-- [ ] Create `src/managers/base.py` - BaseManager class
+- [x] Create `src/managers/base.py` - BaseManager class
 
 ### 2.2 Entity Management
 - [ ] Create `src/managers/entity_manager.py`
@@ -46,11 +52,14 @@
   - `update_visibility()` - recalculate layer visibility
 
 ### 2.4 Relationship Management
-- [ ] Create `src/managers/relationship_manager.py`
+- [x] Create `src/managers/relationship_manager.py`
   - `get_attitude(from, to)`
   - `update_attitude(from, to, dimension, delta, reason)`
   - `record_meeting(entity1, entity2)`
   - `get_relationship_history(from, to)`
+  - `apply_personality_modifiers()` - trait-based multipliers
+  - `check_familiarity_cap()` - strangers can't reach max trust
+  - `expire_mood_modifiers()` - turn-based expiration
 
 ### 2.5 Location Management
 - [ ] Create `src/managers/location_manager.py`
@@ -94,10 +103,30 @@
   - `check_missed_appointments()`
 
 ### 2.11 Context Compiler
-- [ ] Create `src/managers/context_compiler.py`
+- [x] Create `src/managers/context_compiler.py`
   - `compile_scene(npcs_present, location)`
   - Aggregates data from all managers
   - Returns formatted context for GM
+  - Includes needs/injury summaries for NPCs
+
+### 2.12 Realism Managers (NEW)
+- [x] Create `src/managers/needs.py` - NeedsManager
+  - `apply_time_decay()` - activity-based need changes
+  - `get_active_effects()` - stat penalties from unmet needs
+  - `get_npc_urgency()` - for schedule overrides
+- [x] Create `src/managers/injuries.py` - InjuryManager
+  - `add_injury()`, `get_injuries()`
+  - `get_activity_impact()` - penalties for walking/running/etc
+  - `apply_healing()` - recovery progression
+  - `sync_pain_to_needs()` - pain↔needs integration
+- [x] Create `src/managers/death.py` - DeathManager
+  - `take_damage()` - vital status + injury creation
+  - `make_death_save()` - d20 mechanics
+  - `attempt_revival()` - setting-specific revival
+- [x] Create `src/managers/grief.py` - GriefManager
+  - Kübler-Ross stages based on relationship strength
+- [x] Create `src/managers/consistency.py` - ConsistencyValidator
+  - Possession/spatial/temporal/behavioral checks
 
 ## Phase 3: LLM Integration
 
@@ -157,10 +186,12 @@
   - Loot generation
 
 ### 5.2 World Simulator
-- [ ] Create `src/agents/world_simulator.py`
+- [x] Create `src/agents/world_simulator.py`
   - NPC schedule execution
-  - Random event generation
-  - Missed appointment checking
+  - Need decay integration (calls NeedsManager)
+  - Mood modifier expiration
+  - Time advancement
+  - LangGraph node wrapper
 
 ### 5.3 Combat Tools
 - [ ] Create `src/agents/tools/combat_tools.py`
