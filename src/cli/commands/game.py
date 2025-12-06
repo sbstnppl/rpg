@@ -12,6 +12,7 @@ from src.cli.display import (
     display_narrative,
     display_success,
     display_welcome,
+    progress_spinner,
     prompt_input,
 )
 from src.cli.commands.session import get_db_session
@@ -123,7 +124,7 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
     initial_state["_db"] = db
     initial_state["_game_session"] = game_session
 
-    with console.status("[bold green]Setting the scene..."):
+    with progress_spinner("Setting the scene..."):
         try:
             result = await compiled.ainvoke(initial_state)
             if result.get("gm_response"):
@@ -184,7 +185,7 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
         state["_db"] = db
         state["_game_session"] = game_session
 
-        with console.status("[bold green]Thinking..."):
+        with progress_spinner("Thinking..."):
             try:
                 result = await compiled.ainvoke(state)
             except Exception as e:
@@ -293,7 +294,7 @@ async def _single_turn(
     state["_db"] = db
     state["_game_session"] = game_session
 
-    with console.status("[bold green]Processing..."):
+    with progress_spinner("Processing..."):
         result = await compiled.ainvoke(state)
 
     if result.get("gm_response"):

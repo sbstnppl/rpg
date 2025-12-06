@@ -4,10 +4,10 @@
 
 ### 1.1 Project Setup
 - [x] Create directory structure
-- [ ] Create `pyproject.toml` with dependencies
-- [ ] Set up `src/__init__.py` files
-- [ ] Create `config.py` with pydantic-settings
-- [ ] Set up `.env.example`
+- [x] Create `pyproject.toml` with dependencies
+- [x] Set up `src/__init__.py` files
+- [x] Create `config.py` with pydantic-settings
+- [x] Set up `.env.example`
 
 ### 1.2 Database Models
 - [x] Create `src/database/models/enums.py` - All enumerations
@@ -18,7 +18,7 @@
 - [x] Create `src/database/models/relationships.py` - Relationship, RelationshipChange
 - [x] Create `src/database/models/world.py` - Location, Schedule, TimeState, Fact, WorldEvent
 - [x] Create `src/database/models/tasks.py` - Task, Appointment, Quest
-- [ ] Create `src/database/connection.py` - Session management
+- [x] Create `src/database/connection.py` - Session management
 
 ### 1.2.1 Realism System Models (NEW)
 - [x] Create `src/database/models/character_state.py` - CharacterNeeds, IntimacyProfile
@@ -29,7 +29,7 @@
 ### 1.3 Alembic Setup
 - [x] Initialize Alembic
 - [x] Create initial migration with all tables
-- [ ] Test migration up/down
+- [x] Test migration up/down
 
 ## Phase 2: Core Managers
 
@@ -170,39 +170,40 @@
 ## Phase 4: LangGraph Agents
 
 ### 4.1 State Schema
-- [ ] Create `src/agents/state.py` - GameState TypedDict
+- [x] Create `src/agents/state.py` - GameState TypedDict
 
 ### 4.2 Graph Builder
-- [ ] Create `src/agents/graph.py` - Build LangGraph graph
+- [x] Create `src/agents/graph.py` - Build LangGraph graph
 
 ### 4.3 Context Compiler Agent
-- [ ] Create `src/agents/context_compiler.py`
+- [x] Create `src/agents/nodes/context_compiler_node.py`
   - Node that calls ContextCompiler manager
 
 ### 4.4 Game Master Agent
-- [ ] Create `src/agents/game_master.py`
+- [x] Create `src/agents/nodes/game_master_node.py`
   - System prompt template
   - Narrative generation
   - Routing logic
 
 ### 4.5 Entity Extractor Agent
-- [ ] Create `src/agents/entity_extractor.py`
+- [x] Create `src/agents/nodes/entity_extractor_node.py`
   - Parse GM responses
   - Extract entities, facts, changes
   - Call managers to persist
 
 ### 4.6 Agent Tools
-- [ ] Create `src/agents/tools/gm_tools.py`
-- [ ] Create `src/agents/tools/extraction_tools.py`
+- [x] Create `src/agents/tools/gm_tools.py`
+- [x] Create `src/agents/tools/extraction_tools.py`
 
 ## Phase 5: Advanced Features
 
 ### 5.1 Combat Resolver
-- [ ] Create `src/agents/combat_resolver.py`
+- [x] Create `src/agents/nodes/combat_resolver_node.py`
   - Initiative system
   - Attack resolution
   - Damage calculation
   - Loot generation
+- [x] Create `src/managers/combat_manager.py` - Combat state management
 
 ### 5.2 World Simulator
 - [x] Create `src/agents/world_simulator.py`
@@ -213,61 +214,66 @@
   - LangGraph node wrapper
 
 ### 5.3 Combat Tools
-- [ ] Create `src/agents/tools/combat_tools.py`
+- [x] Create `src/agents/tools/combat_tools.py`
 
 ### 5.4 World Tools
-- [ ] Create `src/agents/tools/world_tools.py`
+- [x] Create `src/agents/tools/world_tools.py`
 
 ## Phase 6: CLI & UX
 
 ### 6.1 CLI Setup
-- [ ] Create `src/main.py` - Entry point
-- [ ] Create `src/cli/main.py` - Typer app
+- [x] Create `src/main.py` - Entry point
+- [x] Create `src/cli/main.py` - Typer app
+- [x] Create `src/cli/display.py` - Display utilities
 
 ### 6.2 Session Commands
-- [ ] Create `src/cli/commands/session.py`
+- [x] Create `src/cli/commands/session.py`
   - `start`, `continue`, `list`, `load`, `save`
 
 ### 6.3 Character Commands
-- [ ] Create `src/cli/commands/character.py`
+- [x] Create `src/cli/commands/character.py`
   - `status`, `inventory`, `equipment`
 
 ### 6.4 World Commands
-- [ ] Create `src/cli/commands/world.py`
+- [x] Create `src/cli/commands/world.py`
   - `locations`, `npcs`, `time`
 
-### 6.5 Character Creation Flow
-- [ ] Implement conversational character creation
-- [ ] AI-assisted attribute assignment
-- [ ] Starting equipment selection
+### 6.5 Game Command
+- [x] Create `src/cli/commands/game.py` - Main game loop
 
-### 6.6 Rich Formatting
-- [ ] Styled output for narrative
-- [ ] Tables for stats/inventory
-- [ ] Progress bars for loading
+### 6.6 Character Creation Flow
+- [x] Implement conversational character creation
+- [x] AI-assisted attribute assignment
+- [x] Starting equipment selection
+
+### 6.7 Rich Formatting
+- [x] Styled output for narrative (basic)
+- [x] Tables for stats/inventory
+- [x] Progress bars for loading
 
 ## Phase 7: Polish & Testing
 
 ### 7.1 Tests
-- [ ] Test database models
-- [ ] Test managers
-- [ ] Test agents
-- [ ] Integration tests
+- [x] Test database models (1226 tests total)
+- [x] Test managers
+- [x] Test agent tools
+- [x] Integration tests
 
 ### 7.2 Documentation
 - [x] Project outline
 - [x] Architecture doc
 - [x] User guide
 - [x] Implementation plan
-- [ ] API documentation
+- [x] API documentation
 
 ### 7.3 Setting Templates
-- [ ] Create `data/settings/fantasy.json`
-- [ ] Create `data/settings/contemporary.json`
-- [ ] Create `data/settings/scifi.json`
+- [x] Create `data/settings/fantasy.json`
+- [x] Create `data/settings/contemporary.json`
+- [x] Create `data/settings/scifi.json`
 
 ### 7.4 Prompt Templates
-- [ ] Create `data/templates/game_master.md`
-- [ ] Create `data/templates/entity_extractor.md`
-- [ ] Create `data/templates/world_simulator.md`
-- [ ] Create `data/templates/combat_resolver.md`
+- [x] Create `data/templates/game_master.md`
+- [x] Create `data/templates/entity_extractor.md`
+- [x] Create `data/templates/world_simulator.md`
+- [x] Create `data/templates/combat_resolver.md`
+- [x] Create `data/templates/character_creator.md`

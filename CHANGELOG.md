@@ -8,8 +8,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Starting equipment** - Characters now receive starting equipment on creation
+  - `StartingItem` dataclass in `src/schemas/settings.py`
+  - Starting equipment definitions in all setting JSON files
+  - `_create_starting_equipment()` function in character.py
+  - Equipment displayed after character creation
+- **Enhanced Rich tables** - Improved display formatting
+  - Enhanced `display_character_status()` with proper Rich tables
+  - Enhanced `display_inventory()` with slot, condition columns
+  - New `display_equipment()` function with layer visualization
+  - Color-coded condition display (pristine/good/worn/damaged/broken)
+- **Progress indicators** - Rich progress spinners for loading
+  - `progress_spinner()` context manager for async operations
+  - `progress_bar()` context manager for multi-step operations
+  - `_create_progress_bar()` returns styled Rich Text objects
+  - Game loop now uses progress spinners instead of status
+- **API reference documentation** - `docs/api-reference.md`
+  - Complete manager API documentation
+  - LLM module reference
+  - Dice system reference
+  - Agent nodes reference
+- **Setting templates** - JSON configuration files for game settings
+  - `data/settings/fantasy.json` - D&D-style fantasy with 6 attributes
+  - `data/settings/contemporary.json` - Modern setting with 6 attributes
+  - `data/settings/scifi.json` - Sci-fi setting with 6 attributes
+  - JSON loader in `src/schemas/settings.py` - `load_setting_from_json()`
+  - `EquipmentSlot` dataclass for per-setting equipment definitions
+- **Prompt templates** - LLM prompt templates for agents
+  - `data/templates/world_simulator.md` - World simulation narration
+  - `data/templates/combat_resolver.md` - Combat narration
+  - `data/templates/character_creator.md` - AI character creation assistant
+- **Agent tools** - Tool definitions for LLM function calling
+  - `src/agents/tools/extraction_tools.py` - Entity/fact/item extraction tools
+  - `src/agents/tools/combat_tools.py` - Combat resolution tools
+  - `src/agents/tools/world_tools.py` - World simulation tools
+- **AI character creation** - Conversational character creation with LLM
+  - `--ai` flag for `rpg character create` command
+  - AI suggests attributes based on character concept
+  - Validates suggestions against point-buy rules
+  - Display helpers in `src/cli/display.py`
 - Mandatory documentation requirements in CLAUDE.md
-- Documentation must be updated after every change
+- 32 new tests for starting equipment and display functions (1226 total)
+
+### Changed
+- Game loop uses `progress_spinner` instead of `console.status()`
+- `display_character_status()` now uses Rich Table instead of Panel
+
+### Fixed
+- `is_equipped` bug in character.py - was referencing non-existent field
+  - Now correctly uses `body_slot is not None` to check equipped status
+  - Fixed both inventory and equipment commands
+
+### Also Changed
+- Updated `docs/implementation-plan.md` to reflect actual implementation status
+- Updated test count in CLAUDE.md (1121 tests, not 500)
+- Extended `SettingSchema` with `description`, `equipment_slots`, and `starting_equipment` fields
+- Extended `AttributeDefinition` with `description` field
 
 ## [0.1.0] - 2025-12-06
 

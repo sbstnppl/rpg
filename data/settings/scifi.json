@@ -1,0 +1,136 @@
+{
+  "name": "scifi",
+  "description": "Far-future science fiction setting. Characters explore space, interact with advanced technology, and may encounter alien species.",
+  "attributes": [
+    {
+      "key": "physical",
+      "display_name": "Physical",
+      "description": "Raw physical power, melee combat, heavy lifting",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "reflexes",
+      "display_name": "Reflexes",
+      "description": "Reaction time, coordination, ranged combat, piloting",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "technical",
+      "display_name": "Technical",
+      "description": "Engineering, hacking, operating complex systems",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "intelligence",
+      "display_name": "Intelligence",
+      "description": "Scientific knowledge, problem solving, memory",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "willpower",
+      "display_name": "Willpower",
+      "description": "Mental fortitude, stress resistance, psionics (if enabled)",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "social",
+      "display_name": "Social",
+      "description": "Negotiation, leadership, reading people across cultures",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    }
+  ],
+  "point_buy": {
+    "total_points": 32,
+    "min_value": 5,
+    "max_value": 17,
+    "cost_table": {
+      "5": 0,
+      "6": 1,
+      "7": 2,
+      "8": 3,
+      "9": 4,
+      "10": 5,
+      "11": 6,
+      "12": 7,
+      "13": 9,
+      "14": 11,
+      "15": 13,
+      "16": 16,
+      "17": 19
+    }
+  },
+  "equipment_slots": [
+    {"key": "head", "display_name": "Head/Helmet", "layers": 1},
+    {"key": "visor", "display_name": "Visor/HUD", "layers": 1},
+    {"key": "torso", "display_name": "Torso", "layers": 3},
+    {"key": "exosuit", "display_name": "Exosuit", "layers": 1},
+    {"key": "back", "display_name": "Back Mount", "layers": 1},
+    {"key": "waist", "display_name": "Utility Belt", "layers": 1},
+    {"key": "hands", "display_name": "Hands/Gloves", "layers": 1},
+    {"key": "legs", "display_name": "Legs", "layers": 2},
+    {"key": "feet", "display_name": "Feet/Boots", "layers": 1},
+    {"key": "main_hand", "display_name": "Main Hand", "layers": 1},
+    {"key": "off_hand", "display_name": "Off Hand", "layers": 1},
+    {"key": "implant_neural", "display_name": "Neural Implant", "layers": 1},
+    {"key": "implant_ocular", "display_name": "Ocular Implant", "layers": 1},
+    {"key": "implant_arm", "display_name": "Arm Augment", "layers": 1}
+  ],
+  "starting_equipment": [
+    {
+      "item_key": "jumpsuit",
+      "display_name": "Standard Jumpsuit",
+      "item_type": "clothing",
+      "body_slot": "torso",
+      "body_layer": 0,
+      "description": "A functional one-piece jumpsuit with utility pockets"
+    },
+    {
+      "item_key": "utility_boots",
+      "display_name": "Utility Boots",
+      "item_type": "clothing",
+      "body_slot": "feet",
+      "body_layer": 0,
+      "description": "Mag-lock boots suitable for low-gravity environments"
+    },
+    {
+      "item_key": "wrist_comm",
+      "display_name": "Wrist Communicator",
+      "item_type": "tool",
+      "body_slot": "wrist_left",
+      "description": "Personal communication and data device"
+    },
+    {
+      "item_key": "utility_belt",
+      "display_name": "Utility Belt",
+      "item_type": "container",
+      "body_slot": "waist",
+      "body_layer": 0,
+      "description": "Standard issue belt with multiple pouches"
+    },
+    {
+      "item_key": "credit_chip",
+      "display_name": "Credit Chip",
+      "item_type": "misc",
+      "description": "Universal credit storage device",
+      "properties": {"value": 100, "currency": "credits"}
+    },
+    {
+      "item_key": "id_card",
+      "display_name": "ID Card",
+      "item_type": "misc",
+      "description": "Personal identification and access card"
+    }
+  ]
+}

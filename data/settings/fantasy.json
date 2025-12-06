@@ -1,0 +1,124 @@
+{
+  "name": "fantasy",
+  "description": "Classic fantasy setting inspired by D&D. Heroes explore dungeons, fight monsters, and wield magic in a medieval world of swords and sorcery.",
+  "attributes": [
+    {
+      "key": "strength",
+      "display_name": "Strength",
+      "description": "Physical power, melee damage, carrying capacity",
+      "min_value": 3,
+      "max_value": 18,
+      "default_value": 10
+    },
+    {
+      "key": "dexterity",
+      "display_name": "Dexterity",
+      "description": "Agility, reflexes, ranged attacks, stealth",
+      "min_value": 3,
+      "max_value": 18,
+      "default_value": 10
+    },
+    {
+      "key": "constitution",
+      "display_name": "Constitution",
+      "description": "Health, stamina, resistance to poison and disease",
+      "min_value": 3,
+      "max_value": 18,
+      "default_value": 10
+    },
+    {
+      "key": "intelligence",
+      "display_name": "Intelligence",
+      "description": "Reasoning, memory, arcane magic aptitude",
+      "min_value": 3,
+      "max_value": 18,
+      "default_value": 10
+    },
+    {
+      "key": "wisdom",
+      "display_name": "Wisdom",
+      "description": "Perception, insight, divine magic, willpower",
+      "min_value": 3,
+      "max_value": 18,
+      "default_value": 10
+    },
+    {
+      "key": "charisma",
+      "display_name": "Charisma",
+      "description": "Force of personality, leadership, social influence",
+      "min_value": 3,
+      "max_value": 18,
+      "default_value": 10
+    }
+  ],
+  "point_buy": {
+    "total_points": 27,
+    "min_value": 8,
+    "max_value": 15,
+    "cost_table": {
+      "8": 0,
+      "9": 1,
+      "10": 2,
+      "11": 3,
+      "12": 4,
+      "13": 5,
+      "14": 7,
+      "15": 9
+    }
+  },
+  "equipment_slots": [
+    {"key": "head", "display_name": "Head", "layers": 1},
+    {"key": "neck", "display_name": "Neck", "layers": 1},
+    {"key": "torso", "display_name": "Torso", "layers": 3},
+    {"key": "back", "display_name": "Back", "layers": 1},
+    {"key": "waist", "display_name": "Waist", "layers": 1},
+    {"key": "hands", "display_name": "Hands", "layers": 2},
+    {"key": "legs", "display_name": "Legs", "layers": 2},
+    {"key": "feet", "display_name": "Feet", "layers": 2},
+    {"key": "main_hand", "display_name": "Main Hand", "layers": 1},
+    {"key": "off_hand", "display_name": "Off Hand", "layers": 1},
+    {"key": "ring_left", "display_name": "Ring (Left)", "layers": 1},
+    {"key": "ring_right", "display_name": "Ring (Right)", "layers": 1}
+  ],
+  "starting_equipment": [
+    {
+      "item_key": "simple_tunic",
+      "display_name": "Simple Tunic",
+      "item_type": "clothing",
+      "body_slot": "torso",
+      "body_layer": 0,
+      "description": "A plain linen tunic suitable for travel"
+    },
+    {
+      "item_key": "cloth_trousers",
+      "display_name": "Cloth Trousers",
+      "item_type": "clothing",
+      "body_slot": "legs",
+      "body_layer": 0,
+      "description": "Simple cloth trousers"
+    },
+    {
+      "item_key": "leather_boots",
+      "display_name": "Leather Boots",
+      "item_type": "clothing",
+      "body_slot": "feet",
+      "body_layer": 0,
+      "description": "Sturdy leather boots for traveling"
+    },
+    {
+      "item_key": "belt_pouch",
+      "display_name": "Belt Pouch",
+      "item_type": "container",
+      "body_slot": "waist",
+      "body_layer": 0,
+      "description": "A small leather pouch worn on the belt"
+    },
+    {
+      "item_key": "starting_gold",
+      "display_name": "Gold Coins (10)",
+      "item_type": "misc",
+      "description": "A small purse of gold coins",
+      "properties": {"value": 10, "currency": "gold"}
+    }
+  ]
+}

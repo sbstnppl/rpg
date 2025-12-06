@@ -141,14 +141,14 @@ LLM_PROVIDER=anthropic  # or openai
 tests/
 ├── conftest.py                    # Core fixtures (db_session, game_session)
 ├── factories.py                   # Test data factories
-├── test_database/test_models/     # Model tests (319 tests)
-├── test_managers/                 # Manager tests (158 tests)
-└── test_integration/              # Integration tests (23 tests)
+├── test_database/test_models/     # Model tests
+├── test_managers/                 # Manager tests
+└── test_integration/              # Integration tests
 ```
 
 ### Commands
 ```bash
-# Run all tests (500 tests, ~1 second)
+# Run all tests (1194 tests, ~3 seconds)
 pytest
 
 # Run specific test file

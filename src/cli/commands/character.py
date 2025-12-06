@@ -1,8 +1,10 @@
 """Character-related commands."""
 
+import json
 import random
 import re
 import unicodedata
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -10,14 +12,19 @@ from rich.console import Console
 from sqlalchemy.orm import Session
 
 from src.cli.display import (
+    display_ai_message,
     display_attribute_table,
     display_character_status,
+    display_character_summary,
     display_dice_roll,
     display_error,
     display_info,
     display_inventory,
     display_point_buy_status,
+    display_starting_equipment,
     display_success,
+    display_suggested_attributes,
+    prompt_ai_input,
     prompt_background,
     prompt_character_name,
 )
@@ -30,6 +37,7 @@ from src.database.models.session import GameSession
 from src.database.models.vital_state import EntityVitalState
 from src.managers.needs import NeedsManager
 from src.schemas.settings import (
+    SettingSchema,
     get_setting_schema,
     roll_all_attributes,
     validate_point_buy,
@@ -159,7 +167,9 @@ def inventory(
             {
                 "name": item.display_name,
                 "type": item.item_type.value if item.item_type else "misc",
-                "equipped": item.is_equipped,
+                "equipped": item.body_slot is not None,
+                "slot": item.body_slot,
+                "condition": item.condition.value if item.condition else "good",
             }
             for item in items
         ]
@@ -193,13 +203,13 @@ def equipment(
             display_error("No player character found")
             raise typer.Exit(1)
 
-        # Get equipped items
+        # Get equipped items (items with a body_slot are equipped)
         items = (
             db.query(Item)
             .filter(
                 Item.session_id == game_session.id,
                 Item.holder_id == player.id,
-                Item.is_equipped == True,
+                Item.body_slot.isnot(None),
             )
             .all()
         )
@@ -213,6 +223,10 @@ def equipment(
                 "name": item.display_name,
                 "type": item.item_type.value if item.item_type else "misc",
                 "equipped": True,
+                "slot": item.body_slot,
+                "layer": item.body_layer,
+                "visible": item.is_visible,
+                "condition": item.condition.value if item.condition else "good",
             }
             for item in items
         ]
@@ -333,6 +347,70 @@ def _create_character_records(
     return entity
 
 
+def _create_starting_equipment(
+    db: Session,
+    game_session: GameSession,
+    entity: Entity,
+    schema: SettingSchema,
+) -> list:
+    """Create starting equipment for a new character.
+
+    Args:
+        db: Database session.
+        game_session: Game session.
+        entity: The player entity.
+        schema: Setting schema with starting equipment definitions.
+
+    Returns:
+        List of created Item objects.
+    """
+    from src.database.models.enums import ItemType, ItemCondition
+    from src.managers.item_manager import ItemManager
+
+    if not schema.starting_equipment:
+        return []
+
+    item_manager = ItemManager(db, game_session)
+    created_items = []
+
+    for equip in schema.starting_equipment:
+        # Map string to ItemType enum
+        try:
+            item_type = ItemType(equip.item_type)
+        except ValueError:
+            item_type = ItemType.MISC
+
+        # Create unique key for this player
+        unique_key = f"{entity.entity_key}_{equip.item_key}"
+
+        item = item_manager.create_item(
+            item_key=unique_key,
+            display_name=equip.display_name,
+            item_type=item_type,
+            owner_id=entity.id,
+            holder_id=entity.id,
+            description=equip.description or None,
+            properties=equip.properties,
+            condition=ItemCondition.GOOD,
+        )
+
+        # Equip if body_slot specified
+        if equip.body_slot:
+            item_manager.equip_item(
+                unique_key,
+                entity.id,
+                body_slot=equip.body_slot,
+                body_layer=equip.body_layer,
+            )
+
+        created_items.append(item)
+
+    # Update visibility for equipped items
+    item_manager.update_visibility(entity.id)
+
+    return created_items
+
+
 def _point_buy_interactive(schema) -> dict[str, int]:
     """Interactive point-buy attribute allocation.
 
@@ -424,12 +502,275 @@ def _roll_attributes_interactive() -> dict[str, int]:
     return attributes
 
 
+def _load_character_creator_template() -> str:
+    """Load the character creator prompt template.
+
+    Returns:
+        Template string.
+    """
+    template_path = Path(__file__).parent.parent.parent.parent / "data" / "templates" / "character_creator.md"
+    if template_path.exists():
+        return template_path.read_text()
+    return ""
+
+
+def _parse_attribute_suggestion(response: str) -> dict[str, int] | None:
+    """Extract suggested attributes from LLM response.
+
+    Args:
+        response: LLM response text.
+
+    Returns:
+        Dict of attribute_key to value, or None if not found.
+    """
+    # Look for JSON block with suggested_attributes
+    try:
+        # Try to find JSON in the response
+        json_match = re.search(r'\{[^{}]*"suggested_attributes"[^{}]*\{[^{}]*\}[^{}]*\}', response, re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group())
+            return data.get("suggested_attributes")
+
+        # Try simpler JSON with just attributes
+        json_match = re.search(r'\{[^{}]*"[a-z]+"\s*:\s*\d+[^{}]*\}', response, re.DOTALL)
+        if json_match:
+            # Could be direct attributes
+            data = json.loads(json_match.group())
+            # Check if it looks like attributes (has expected keys)
+            if any(k in data for k in ["strength", "dexterity", "intelligence", "physical", "reflexes"]):
+                return data
+
+    except json.JSONDecodeError:
+        pass
+
+    return None
+
+
+def _parse_character_complete(response: str) -> dict | None:
+    """Check if character creation is complete.
+
+    Args:
+        response: LLM response text.
+
+    Returns:
+        Dict with name, attributes, background if complete, else None.
+    """
+    try:
+        json_match = re.search(r'\{[^{}]*"character_complete"[^{}]*\}', response, re.DOTALL)
+        if json_match:
+            data = json.loads(json_match.group())
+            if data.get("character_complete"):
+                return data
+    except json.JSONDecodeError:
+        pass
+    return None
+
+
+def _validate_ai_attributes(
+    attributes: dict[str, int],
+    schema: SettingSchema,
+) -> tuple[bool, str | None]:
+    """Validate AI-suggested attributes against point-buy rules.
+
+    Args:
+        attributes: Suggested attributes.
+        schema: Setting schema with rules.
+
+    Returns:
+        Tuple of (is_valid, error_message or None).
+    """
+    # Check all required attributes are present
+    required_keys = {attr.key for attr in schema.attributes}
+    provided_keys = set(attributes.keys())
+
+    if required_keys != provided_keys:
+        missing = required_keys - provided_keys
+        extra = provided_keys - required_keys
+        errors = []
+        if missing:
+            errors.append(f"Missing: {missing}")
+        if extra:
+            errors.append(f"Extra: {extra}")
+        return False, ", ".join(errors)
+
+    # Validate point-buy
+    return validate_point_buy(attributes, schema.point_buy_total)
+
+
+def _ai_character_creation(
+    schema: SettingSchema,
+) -> tuple[str, dict[str, int], str]:
+    """Run AI-assisted character creation.
+
+    Args:
+        schema: Setting schema.
+
+    Returns:
+        Tuple of (name, attributes, background).
+
+    Raises:
+        typer.Exit: If creation is cancelled.
+    """
+    try:
+        from src.llm.factory import get_cheap_provider
+    except ImportError:
+        display_error("LLM providers not available. Use standard creation instead.")
+        raise typer.Exit(1)
+
+    provider = get_cheap_provider()
+
+    # Prepare context
+    template = _load_character_creator_template()
+    attributes_list = "\n".join(
+        f"- {attr.display_name} ({attr.key}): {attr.description}"
+        for attr in schema.attributes
+    )
+
+    conversation_history = []
+    stage = "concept"
+    stage_descriptions = {
+        "concept": "Ask about their character concept and playstyle",
+        "name": "Help choose a fitting character name",
+        "attributes": "Suggest attribute allocation based on concept",
+        "background": "Develop the character's backstory",
+        "review": "Confirm the final character",
+    }
+
+    # Collected data
+    character_name = ""
+    character_attributes: dict[str, int] = {}
+    character_background = ""
+
+    console.print("\n[bold magenta]═══ AI-Assisted Character Creation ═══[/bold magenta]\n")
+    console.print("[dim]Chat with the AI to create your character. Type 'quit' to cancel.[/dim]\n")
+
+    # Initial greeting
+    initial_prompt = f"""You are starting a character creation session.
+
+Setting: {schema.name}
+Attributes available: {attributes_list}
+Point-buy rules: {schema.point_buy_total} points, values {schema.point_buy_min}-{schema.point_buy_max}
+
+Start by greeting the player and asking what kind of character they want to create."""
+
+    try:
+        from src.llm.message_types import Message, MessageRole
+
+        messages = [Message(role=MessageRole.USER, content=initial_prompt)]
+        response = provider.complete(messages)
+        display_ai_message(response.content)
+        conversation_history.append(f"Assistant: {response.content}")
+
+    except Exception as e:
+        display_error(f"Failed to connect to AI: {e}")
+        display_info("Falling back to standard character creation...")
+        raise typer.Exit(1)
+
+    # Conversation loop
+    max_turns = 20
+    for turn in range(max_turns):
+        player_input = prompt_ai_input()
+
+        if player_input.lower() in ("quit", "exit", "cancel"):
+            display_info("Character creation cancelled.")
+            raise typer.Exit(0)
+
+        conversation_history.append(f"Player: {player_input}")
+
+        # Build prompt
+        prompt = template.format(
+            setting_name=schema.name,
+            setting_description=f"{schema.name.title()} setting",
+            attributes_list=attributes_list,
+            point_buy_total=schema.point_buy_total,
+            point_buy_min=schema.point_buy_min,
+            point_buy_max=schema.point_buy_max,
+            conversation_history="\n".join(conversation_history[-10:]),  # Last 10 messages
+            stage=stage,
+            stage_description=stage_descriptions.get(stage, ""),
+            player_input=player_input,
+        )
+
+        try:
+            messages = [Message(role=MessageRole.USER, content=prompt)]
+            response = provider.complete(messages)
+            ai_response = response.content
+
+            conversation_history.append(f"Assistant: {ai_response}")
+
+            # Check for suggested attributes
+            suggested = _parse_attribute_suggestion(ai_response)
+            if suggested:
+                is_valid, error = _validate_ai_attributes(suggested, schema)
+                if is_valid:
+                    character_attributes = suggested
+                    display_ai_message(ai_response)
+                    display_suggested_attributes(suggested)
+                    stage = "background" if character_name else "name"
+                else:
+                    display_ai_message(ai_response)
+                    console.print(f"[yellow]Note: Suggested attributes invalid: {error}[/yellow]")
+            else:
+                display_ai_message(ai_response)
+
+            # Check for completion
+            complete = _parse_character_complete(ai_response)
+            if complete:
+                character_name = complete.get("name", character_name)
+                if "attributes" in complete:
+                    character_attributes = complete["attributes"]
+                character_background = complete.get("background", character_background)
+
+                # Validate and confirm
+                if character_name and character_attributes:
+                    console.print("\n[bold green]Character creation complete![/bold green]\n")
+                    display_character_summary(character_name, character_attributes, character_background)
+
+                    confirm = console.input("\n[bold cyan]Create this character? (y/n): [/bold cyan]").strip().lower()
+                    if confirm in ("y", "yes"):
+                        return character_name, character_attributes, character_background
+                    else:
+                        console.print("[dim]Let's continue refining...[/dim]")
+                        stage = "concept"
+
+            # Detect name if mentioned
+            if not character_name and "name" in player_input.lower():
+                # Try to extract a name from the conversation
+                name_match = re.search(r'(?:name is|called|named)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)', player_input)
+                if name_match:
+                    character_name = name_match.group(1)
+                    stage = "attributes" if not character_attributes else "background"
+
+        except Exception as e:
+            display_error(f"AI error: {e}")
+            continue
+
+    # If we reach max turns, offer manual completion
+    display_info("Let's wrap up character creation.")
+
+    if not character_name:
+        character_name = prompt_character_name()
+
+    if not character_attributes:
+        console.print("\n[dim]Falling back to point-buy for attributes...[/dim]")
+        character_attributes = _point_buy_interactive(schema)
+
+    if not character_background:
+        character_background = prompt_background()
+
+    return character_name, character_attributes, character_background
+
+
 @app.command()
 def create(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
     random_stats: bool = typer.Option(False, "--random", "-r", help="Use random 4d6 drop lowest"),
+    ai_assisted: bool = typer.Option(False, "--ai", "-a", help="Use AI-assisted character creation"),
 ) -> None:
-    """Create a new player character (interactive)."""
+    """Create a new player character (interactive).
+
+    Use --ai for conversational AI-assisted creation, or --random for dice rolls.
+    """
     db = get_db_session()
 
     try:
@@ -451,15 +792,16 @@ def create(
             display_info("Use 'rpg character status' to view your character")
             raise typer.Exit(1)
 
-        console.print("\n[bold cyan]═══ Character Creation ═══[/bold cyan]\n")
-
-        # Get name
-        name = prompt_character_name()
-
-        # Get attributes
+        # Get attributes from schema
         schema = get_setting_schema(game_session.setting)
 
-        if random_stats:
+        if ai_assisted:
+            # AI-assisted character creation
+            name, attributes, background = _ai_character_creation(schema)
+        elif random_stats:
+            console.print("\n[bold cyan]═══ Character Creation ═══[/bold cyan]\n")
+            name = prompt_character_name()
+
             attributes = _roll_attributes_interactive()
             display_attribute_table(attributes)
 
@@ -471,11 +813,14 @@ def create(
                 elif choice in ("n", "no"):
                     attributes = _roll_attributes_interactive()
                     display_attribute_table(attributes)
-        else:
-            attributes = _point_buy_interactive(schema)
 
-        # Get background
-        background = prompt_background()
+            background = prompt_background()
+        else:
+            # Standard point-buy
+            console.print("\n[bold cyan]═══ Character Creation ═══[/bold cyan]\n")
+            name = prompt_character_name()
+            attributes = _point_buy_interactive(schema)
+            background = prompt_background()
 
         # Create character
         try:
@@ -486,10 +831,32 @@ def create(
                 attributes=attributes,
                 background=background,
             )
+
+            # Create starting equipment
+            starting_items = _create_starting_equipment(
+                db=db,
+                game_session=game_session,
+                entity=entity,
+                schema=schema,
+            )
+
             db.commit()
 
             console.print()
             display_success(f"Character '{name}' created successfully!")
+
+            # Display starting equipment
+            if starting_items:
+                item_dicts = [
+                    {
+                        "name": item.display_name,
+                        "type": item.item_type.value if item.item_type else "misc",
+                        "slot": item.body_slot,
+                    }
+                    for item in starting_items
+                ]
+                display_starting_equipment(item_dicts)
+
             console.print("\n[dim]Use 'rpg play' to start your adventure.[/dim]")
 
         except ValueError as e:

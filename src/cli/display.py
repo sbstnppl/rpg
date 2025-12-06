@@ -1,8 +1,18 @@
 """Rich display helpers for CLI output."""
 
+from contextlib import contextmanager
+
+from rich import box
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.table import Table
 from rich.text import Text
 
@@ -104,7 +114,7 @@ def display_character_status(
     needs: dict | None = None,
     conditions: list[str] | None = None,
 ) -> None:
-    """Display character status panel.
+    """Display character status with Rich tables.
 
     Args:
         name: Character name.
@@ -112,54 +122,87 @@ def display_character_status(
         needs: Optional dict of need name to value (0-100).
         conditions: Optional list of condition strings.
     """
-    lines = [f"[bold]{name}[/bold]", ""]
+    console.print()
+    console.print(f"[bold cyan]{name}[/bold cyan]")
+    console.print()
 
-    # Stats
+    # Attributes table
     if stats:
-        lines.append("[underline]Attributes[/underline]")
-        for stat_name, value in stats.items():
-            lines.append(f"  {stat_name}: {value}")
-        lines.append("")
+        attr_table = Table(title="Attributes", box=box.ROUNDED)
+        attr_table.add_column("Attribute", style="white")
+        attr_table.add_column("Value", justify="center", style="cyan")
+        attr_table.add_column("Modifier", justify="center", style="yellow")
 
-    # Needs as progress bars
+        for stat_name, value in stats.items():
+            modifier = (value - 10) // 2
+            mod_str = f"+{modifier}" if modifier >= 0 else str(modifier)
+            attr_table.add_row(stat_name, str(value), mod_str)
+
+        console.print(attr_table)
+        console.print()
+
+    # Needs with progress bars
     if needs:
-        lines.append("[underline]Needs[/underline]")
+        needs_table = Table(title="Needs", box=box.ROUNDED)
+        needs_table.add_column("Need", style="white", width=12)
+        needs_table.add_column("Level", width=25)
+        needs_table.add_column("Value", justify="right", width=8)
+
         for need_name, value in needs.items():
-            bar = _progress_bar(value, 100)
-            color = "green" if value > 60 else "yellow" if value > 30 else "red"
-            lines.append(f"  {need_name}: [{color}]{bar}[/{color}] {value}/100")
-        lines.append("")
+            bar = _create_progress_bar(value, 100)
+            needs_table.add_row(need_name, bar, f"{value}/100")
+
+        console.print(needs_table)
+        console.print()
 
     # Conditions
     if conditions:
-        lines.append("[underline]Conditions[/underline]")
+        cond_table = Table(title="Conditions", box=box.ROUNDED)
+        cond_table.add_column("Status", style="yellow")
         for condition in conditions:
-            lines.append(f"  - {condition}")
-
-    panel = Panel("\n".join(lines), title="Character Status", border_style="blue")
-    console.print(panel)
+            cond_table.add_row(condition)
+        console.print(cond_table)
 
 
 def display_inventory(items: list[dict]) -> None:
-    """Display inventory table.
+    """Display inventory table with enhanced formatting.
 
     Args:
-        items: List of item dicts with name, type, equipped.
+        items: List of item dicts with name, type, equipped, slot, condition.
     """
     if not items:
         console.print("[dim]Inventory is empty.[/dim]")
         return
 
-    table = Table(title="Inventory")
-    table.add_column("Item", style="white")
+    table = Table(title="Inventory", box=box.ROUNDED)
+    table.add_column("Item", style="white", no_wrap=True)
     table.add_column("Type", style="cyan")
-    table.add_column("Status", style="yellow")
+    table.add_column("Slot", style="blue")
+    table.add_column("Condition", style="yellow")
+    table.add_column("Status", style="green")
 
     for item in items:
         status = "[green]Equipped[/green]" if item.get("equipped") else ""
+        slot = item.get("slot", "")
+        condition = item.get("condition", "good").title()
+
+        # Color condition based on state
+        if condition.lower() == "pristine":
+            condition = f"[bright_green]{condition}[/bright_green]"
+        elif condition.lower() == "good":
+            condition = f"[green]{condition}[/green]"
+        elif condition.lower() == "worn":
+            condition = f"[yellow]{condition}[/yellow]"
+        elif condition.lower() == "damaged":
+            condition = f"[red]{condition}[/red]"
+        elif condition.lower() == "broken":
+            condition = f"[bright_red]{condition}[/bright_red]"
+
         table.add_row(
             item.get("name", "Unknown"),
-            item.get("type", "misc"),
+            item.get("type", "misc").title(),
+            slot.replace("_", " ").title() if slot else "-",
+            condition,
             status,
         )
 
@@ -194,8 +237,39 @@ def display_location_info(
     console.print(panel)
 
 
+def _create_progress_bar(value: int, max_value: int, width: int = 20) -> Text:
+    """Create a Rich Text progress bar with color coding.
+
+    Args:
+        value: Current value.
+        max_value: Maximum value.
+        width: Bar width in characters.
+
+    Returns:
+        Rich Text object with styled progress bar.
+    """
+    filled = int((value / max_value) * width) if max_value > 0 else 0
+    empty = width - filled
+
+    # Color based on value percentage
+    if value > 60:
+        color = "green"
+    elif value > 30:
+        color = "yellow"
+    else:
+        color = "red"
+
+    bar_text = Text()
+    bar_text.append("[", style="dim")
+    bar_text.append("=" * filled, style=color)
+    bar_text.append(" " * empty, style="dim")
+    bar_text.append("]", style="dim")
+
+    return bar_text
+
+
 def _progress_bar(value: int, max_value: int, width: int = 20) -> str:
-    """Create a simple progress bar string.
+    """Create a simple progress bar string (legacy).
 
     Args:
         value: Current value.
@@ -205,7 +279,7 @@ def _progress_bar(value: int, max_value: int, width: int = 20) -> str:
     Returns:
         Progress bar string.
     """
-    filled = int((value / max_value) * width)
+    filled = int((value / max_value) * width) if max_value > 0 else 0
     empty = width - filled
     return "[" + "=" * filled + " " * empty + "]"
 
@@ -308,3 +382,201 @@ def prompt_background() -> str:
     """
     console.print("\n[dim]Enter a brief background for your character (or press Enter to skip):[/dim]")
     return console.input("[bold cyan]Background: [/bold cyan]").strip()
+
+
+def display_ai_message(text: str) -> None:
+    """Display AI assistant message in conversation style.
+
+    Args:
+        text: AI response text.
+    """
+    panel = Panel(
+        text,
+        title="Character Creation Assistant",
+        title_align="left",
+        border_style="magenta",
+        padding=(1, 2),
+    )
+    console.print(panel)
+
+
+def display_suggested_attributes(attributes: dict[str, int]) -> None:
+    """Display AI-suggested attributes.
+
+    Args:
+        attributes: Dict of attribute_key to suggested value.
+    """
+    console.print("\n[bold magenta]Suggested Attributes:[/bold magenta]")
+    display_attribute_table(attributes, show_modifiers=True)
+
+
+def prompt_ai_input() -> str:
+    """Get player input during AI conversation.
+
+    Returns:
+        Player input.
+    """
+    return console.input("\n[bold cyan]You: [/bold cyan]").strip()
+
+
+def display_character_summary(
+    name: str,
+    attributes: dict[str, int],
+    background: str,
+) -> None:
+    """Display final character summary for confirmation.
+
+    Args:
+        name: Character name.
+        attributes: Final attributes.
+        background: Character background.
+    """
+    lines = [
+        f"[bold]Name:[/bold] {name}",
+        "",
+        "[underline]Attributes[/underline]",
+    ]
+
+    for key, value in attributes.items():
+        modifier = (value - 10) // 2
+        mod_str = f"+{modifier}" if modifier >= 0 else str(modifier)
+        lines.append(f"  {key.title()}: {value} ({mod_str})")
+
+    if background:
+        lines.extend(["", "[underline]Background[/underline]", f"  {background}"])
+
+    panel = Panel(
+        "\n".join(lines),
+        title="Character Summary",
+        border_style="green",
+    )
+    console.print(panel)
+
+
+def display_equipment(slots: dict[str, list[dict]]) -> None:
+    """Display equipment by body slot with layer visualization.
+
+    Args:
+        slots: Dict of slot_name to list of items at that slot.
+               Each item dict should have: name, layer, visible, condition.
+    """
+    if not slots or all(not items for items in slots.values()):
+        console.print("[dim]No equipment worn.[/dim]")
+        return
+
+    table = Table(title="Equipment", box=box.ROUNDED)
+    table.add_column("Slot", style="cyan", width=15)
+    table.add_column("Layer", justify="center", width=6)
+    table.add_column("Item", style="white")
+    table.add_column("Visible", justify="center", width=8)
+    table.add_column("Condition", style="yellow")
+
+    for slot_name, items in sorted(slots.items()):
+        if not items:
+            table.add_row(
+                slot_name.replace("_", " ").title(),
+                "-",
+                "[dim]Empty[/dim]",
+                "-",
+                "-"
+            )
+        else:
+            # Sort by layer (innermost first)
+            sorted_items = sorted(items, key=lambda x: x.get("layer", 0))
+            for i, item in enumerate(sorted_items):
+                visible = "[green]Yes[/green]" if item.get("visible", True) else "[dim]No[/dim]"
+                slot_display = slot_name.replace("_", " ").title() if i == 0 else ""
+                condition = item.get("condition", "good").title()
+
+                # Color condition
+                if condition.lower() == "pristine":
+                    condition = f"[bright_green]{condition}[/bright_green]"
+                elif condition.lower() == "good":
+                    condition = f"[green]{condition}[/green]"
+                elif condition.lower() == "worn":
+                    condition = f"[yellow]{condition}[/yellow]"
+                elif condition.lower() == "damaged":
+                    condition = f"[red]{condition}[/red]"
+                elif condition.lower() == "broken":
+                    condition = f"[bright_red]{condition}[/bright_red]"
+
+                table.add_row(
+                    slot_display,
+                    str(item.get("layer", 0)),
+                    item.get("name", "Unknown"),
+                    visible,
+                    condition
+                )
+
+    console.print(table)
+
+
+def display_starting_equipment(items: list[dict]) -> None:
+    """Display starting equipment after character creation.
+
+    Args:
+        items: List of item dicts with name, type, slot.
+    """
+    if not items:
+        return
+
+    console.print("\n[bold cyan]Starting Equipment:[/bold cyan]")
+    table = Table(box=box.SIMPLE)
+    table.add_column("Item", style="white")
+    table.add_column("Type", style="cyan")
+    table.add_column("Slot", style="blue")
+
+    for item in items:
+        slot = item.get("slot", "")
+        table.add_row(
+            item.get("name", "Unknown"),
+            item.get("type", "misc").title(),
+            slot.replace("_", " ").title() if slot else "Inventory",
+        )
+
+    console.print(table)
+
+
+@contextmanager
+def progress_spinner(description: str = "Processing..."):
+    """Context manager for spinner during operations.
+
+    Args:
+        description: Text to show next to spinner.
+
+    Yields:
+        Tuple of (progress, task_id) for optional updates.
+    """
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task(description, total=None)
+        yield progress, task
+
+
+@contextmanager
+def progress_bar(description: str, total: int = 100):
+    """Context manager for progress bar during multi-step operations.
+
+    Args:
+        description: Text to show next to bar.
+        total: Total steps (default 100 for percentage).
+
+    Yields:
+        Tuple of (progress, task_id) for updating.
+    """
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True,
+    ) as progress:
+        task = progress.add_task(description, total=total)
+        yield progress, task

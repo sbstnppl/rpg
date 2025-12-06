@@ -1,0 +1,131 @@
+{
+  "name": "contemporary",
+  "description": "Modern-day setting. Characters navigate urban environments, deal with everyday challenges, and may encounter subtle supernatural elements.",
+  "attributes": [
+    {
+      "key": "strength",
+      "display_name": "Strength",
+      "description": "Physical power and athletic ability",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "agility",
+      "display_name": "Agility",
+      "description": "Speed, reflexes, coordination, fine motor control",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "endurance",
+      "display_name": "Endurance",
+      "description": "Stamina, health, resistance to fatigue and stress",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "intelligence",
+      "display_name": "Intelligence",
+      "description": "Reasoning, education, technical knowledge",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "perception",
+      "display_name": "Perception",
+      "description": "Awareness, intuition, reading people and situations",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "charisma",
+      "display_name": "Charisma",
+      "description": "Social skills, persuasion, presence",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    }
+  ],
+  "point_buy": {
+    "total_points": 30,
+    "min_value": 6,
+    "max_value": 16,
+    "cost_table": {
+      "6": 0,
+      "7": 1,
+      "8": 2,
+      "9": 3,
+      "10": 4,
+      "11": 5,
+      "12": 6,
+      "13": 7,
+      "14": 9,
+      "15": 11,
+      "16": 14
+    }
+  },
+  "equipment_slots": [
+    {"key": "head", "display_name": "Head", "layers": 1},
+    {"key": "neck", "display_name": "Neck", "layers": 1},
+    {"key": "torso", "display_name": "Torso", "layers": 3},
+    {"key": "jacket", "display_name": "Jacket/Coat", "layers": 1},
+    {"key": "waist", "display_name": "Waist/Belt", "layers": 1},
+    {"key": "hands", "display_name": "Hands", "layers": 1},
+    {"key": "legs", "display_name": "Legs", "layers": 2},
+    {"key": "feet", "display_name": "Feet", "layers": 2},
+    {"key": "wrist_left", "display_name": "Wrist (Left)", "layers": 1},
+    {"key": "wrist_right", "display_name": "Wrist (Right)", "layers": 1},
+    {"key": "bag", "display_name": "Bag/Backpack", "layers": 1},
+    {"key": "holster", "display_name": "Holster", "layers": 1}
+  ],
+  "starting_equipment": [
+    {
+      "item_key": "casual_shirt",
+      "display_name": "Casual Shirt",
+      "item_type": "clothing",
+      "body_slot": "torso",
+      "body_layer": 0,
+      "description": "A comfortable everyday shirt"
+    },
+    {
+      "item_key": "jeans",
+      "display_name": "Jeans",
+      "item_type": "clothing",
+      "body_slot": "legs",
+      "body_layer": 0,
+      "description": "Classic denim jeans"
+    },
+    {
+      "item_key": "sneakers",
+      "display_name": "Sneakers",
+      "item_type": "clothing",
+      "body_slot": "feet",
+      "body_layer": 0,
+      "description": "Comfortable athletic shoes"
+    },
+    {
+      "item_key": "wallet",
+      "display_name": "Wallet",
+      "item_type": "container",
+      "description": "A leather wallet with ID and cards",
+      "properties": {"value": 50, "currency": "dollars"}
+    },
+    {
+      "item_key": "smartphone",
+      "display_name": "Smartphone",
+      "item_type": "tool",
+      "description": "A modern smartphone with various apps"
+    },
+    {
+      "item_key": "keys",
+      "display_name": "Keys",
+      "item_type": "misc",
+      "description": "House and car keys on a keyring"
+    }
+  ]
+}
