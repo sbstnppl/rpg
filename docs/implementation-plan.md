@@ -37,19 +37,21 @@
 - [x] Create `src/managers/base.py` - BaseManager class
 
 ### 2.2 Entity Management
-- [ ] Create `src/managers/entity_manager.py`
+- [x] Create `src/managers/entity_manager.py`
   - `get_entity(key)`, `create_entity(**data)`
   - `update_attribute(key, attr, value)`
   - `get_entities_at_location(location)`
   - `get_player()`, `get_npcs_in_scene(location)`
+  - `get_active_entities()` - alive + active entities
 
 ### 2.3 Item Management
-- [ ] Create `src/managers/item_manager.py`
+- [x] Create `src/managers/item_manager.py`
   - `get_item(key)`, `create_item(**data)`
   - `transfer_item(item, from, to)`
   - `equip_item(entity, item, slot, layer)`
   - `get_inventory(entity)`, `get_visible_equipment(entity)`
   - `update_visibility()` - recalculate layer visibility
+  - `get_items_at_location(location)` - items at world location
 
 ### 2.4 Relationship Management
 - [x] Create `src/managers/relationship_manager.py`
@@ -62,45 +64,51 @@
   - `expire_mood_modifiers()` - turn-based expiration
 
 ### 2.5 Location Management
-- [ ] Create `src/managers/location_manager.py`
+- [x] Create `src/managers/location_manager.py`
   - `get_location(key)`, `create_location(**data)`
-  - `get_sublocation(parent, child)`
-  - `get_items_at_location(location)`
+  - `get_sublocation(parent, child)`, `get_sublocations(parent)`
+  - `get_items_at_location(location)`, `get_entities_at_location(location)`
+  - `set_player_location(location)` - update player position
 
 ### 2.6 Schedule Management
-- [ ] Create `src/managers/schedule_manager.py`
+- [x] Create `src/managers/schedule_manager.py`
   - `get_schedule(entity)`
   - `set_schedule_entry(entity, day, time, location, activity)`
   - `get_activity_at_time(entity, day, time)`
   - `get_npcs_at_location_time(location, day, time)`
+  - `clear_schedule(entity)`, `copy_schedule(from, to)`
 
 ### 2.7 Fact Management
-- [ ] Create `src/managers/fact_manager.py`
+- [x] Create `src/managers/fact_manager.py`
   - `record_fact(subject_type, subject_key, predicate, value)`
   - `get_facts_about(subject_key)`
-  - `get_facts_by_predicate(predicate)`
+  - `get_facts_by_predicate(predicate)`, `get_facts_by_category(category)`
   - `get_secrets()` - GM-only facts
+  - `get_player_known_facts()` - non-secret facts
+  - `update_certainty(fact_id, certainty)`, `contradict_fact(fact_id, new_value, reason)`
 
 ### 2.8 Time Management
-- [ ] Create `src/managers/time_manager.py`
+- [x] Create `src/managers/time_manager.py`
   - `get_current_time()`, `advance_time(minutes)`
   - `set_weather(weather)`
   - `get_day_of_week()`
 
 ### 2.9 Event Management
-- [ ] Create `src/managers/event_manager.py`
+- [x] Create `src/managers/event_manager.py`
   - `create_event(type, summary, details)`
   - `get_unprocessed_events()`
   - `mark_processed(event_id)`
   - `get_events_at_location(location)`
+  - `get_events_involving(entity_id)`, `get_recent_events(limit)`
 
 ### 2.10 Task Management
-- [ ] Create `src/managers/task_manager.py`
+- [x] Create `src/managers/task_manager.py`
   - `create_task(description, category, **kwargs)`
-  - `complete_task(task_id)`
+  - `complete_task(task_id)`, `fail_task(task_id, reason)`
   - `get_active_tasks()`
-  - `get_appointments_today()`
+  - `get_appointments_for_day(day)`
   - `check_missed_appointments()`
+  - `mark_appointment_kept(id)`, `mark_appointment_missed(id)`
 
 ### 2.11 Context Compiler
 - [x] Create `src/managers/context_compiler.py`
