@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
     llm_provider: Literal["anthropic", "openai"] = "anthropic"
+    openai_base_url: str | None = None  # Custom endpoint for Ollama/vLLM/DeepSeek
 
     # Model Selection
     gm_model: str = "claude-sonnet-4-20250514"  # Primary narrative model

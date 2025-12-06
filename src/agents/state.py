@@ -1,0 +1,182 @@
+"""GameState TypedDict for LangGraph agent orchestration.
+
+This module defines the central state schema that flows through all agent nodes.
+State is passed between nodes and accumulated via reducer functions.
+"""
+
+from typing import Annotated, Any, Literal, TypedDict
+
+from operator import add
+
+
+# Agent names for routing
+AgentName = Literal[
+    "context_compiler",
+    "game_master",
+    "entity_extractor",
+    "combat_resolver",
+    "world_simulator",
+    "persistence",
+    "end",
+]
+
+
+class GameState(TypedDict, total=False):
+    """Central state for LangGraph game orchestration.
+
+    All fields are optional (total=False) to allow partial updates.
+    Fields with Annotated[list, add] use reducers to accumulate values.
+
+    Attributes:
+        session_id: Database session ID for scoping all queries.
+        player_id: Player entity ID.
+        player_location: Current location key.
+        player_input: Raw input from player this turn.
+        gm_response: Generated narrative response.
+        scene_context: Compiled scene context for GM prompt.
+        next_agent: Which agent to route to next.
+        time_advance_minutes: How much game time to advance.
+        location_changed: Whether player moved locations.
+        combat_active: Whether combat is in progress.
+        combat_state: Combat encounter state (participants, initiative, etc.).
+        extracted_entities: Entities extracted from GM response.
+        extracted_facts: Facts extracted from GM response.
+        extracted_items: Items extracted from GM response.
+        relationship_changes: Relationship changes from GM response.
+        appointments: Appointments/tasks extracted.
+        simulation_result: Results from world simulation.
+        turn_number: Current turn number.
+        errors: Accumulated error messages.
+    """
+
+    # Session context (set once at turn start)
+    session_id: int
+    player_id: int
+    player_location: str
+
+    # Turn input/output
+    player_input: str
+    gm_response: str | None
+    scene_context: str
+
+    # Routing control
+    next_agent: AgentName
+
+    # Triggers for conditional routing
+    time_advance_minutes: int
+    location_changed: bool
+    previous_location: str | None
+    combat_active: bool
+    combat_state: dict[str, Any] | None
+
+    # Extraction results (accumulated via reducers)
+    extracted_entities: Annotated[list[dict[str, Any]], add]
+    extracted_facts: Annotated[list[dict[str, Any]], add]
+    extracted_items: Annotated[list[dict[str, Any]], add]
+    relationship_changes: Annotated[list[dict[str, Any]], add]
+    appointments: Annotated[list[dict[str, Any]], add]
+
+    # World simulation results
+    simulation_result: dict[str, Any] | None
+
+    # Metadata
+    turn_number: int
+    errors: Annotated[list[str], add]
+
+    # Runtime dependencies (injected by game loop, not persisted)
+    _db: Any  # SQLAlchemy Session
+    _game_session: Any  # GameSession model
+
+
+# Fields that use the add reducer for accumulation
+_REDUCER_FIELDS = {
+    "extracted_entities",
+    "extracted_facts",
+    "extracted_items",
+    "relationship_changes",
+    "appointments",
+    "errors",
+}
+
+
+def create_initial_state(
+    session_id: int,
+    player_id: int,
+    player_location: str,
+    player_input: str,
+    turn_number: int = 1,
+) -> GameState:
+    """Create initial state for a new turn.
+
+    Args:
+        session_id: Database session ID.
+        player_id: Player entity ID.
+        player_location: Current location key.
+        player_input: Player's input for this turn.
+        turn_number: Turn number (default 1).
+
+    Returns:
+        Initial GameState with defaults set.
+    """
+    return GameState(
+        # Session context
+        session_id=session_id,
+        player_id=player_id,
+        player_location=player_location,
+        # Turn I/O
+        player_input=player_input,
+        gm_response=None,
+        scene_context="",
+        # Routing
+        next_agent="context_compiler",
+        # Triggers
+        time_advance_minutes=0,
+        location_changed=False,
+        previous_location=None,
+        combat_active=False,
+        combat_state=None,
+        # Extraction results (empty lists)
+        extracted_entities=[],
+        extracted_facts=[],
+        extracted_items=[],
+        relationship_changes=[],
+        appointments=[],
+        # Simulation
+        simulation_result=None,
+        # Metadata
+        turn_number=turn_number,
+        errors=[],
+    )
+
+
+def merge_state(
+    original: GameState,
+    updates: dict[str, Any],
+) -> GameState:
+    """Merge updates into state, respecting reducer fields.
+
+    Non-reducer fields are overwritten. Reducer fields (lists) are
+    accumulated by extending the original list.
+
+    Args:
+        original: Original state dictionary.
+        updates: Updates to merge.
+
+    Returns:
+        New state with updates applied (original is not mutated).
+    """
+    # Start with a copy of original
+    result: dict[str, Any] = dict(original)
+
+    for key, value in updates.items():
+        if key in _REDUCER_FIELDS and isinstance(value, list):
+            # Accumulate list fields
+            existing = result.get(key, [])
+            if not isinstance(existing, list):
+                existing = []
+            result[key] = existing + value
+        else:
+            # Overwrite non-reducer fields
+            result[key] = value
+
+    return GameState(**result)

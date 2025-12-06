@@ -159,17 +159,46 @@ class RelationshipManager:
 
 ## LLM Provider Abstraction
 
+Located in `src/llm/`, provides a unified interface for LLM providers.
+
+### Protocol
 ```python
 class LLMProvider(Protocol):
-    def complete(messages: list, model: str, **kwargs) -> str
-    def complete_with_tools(messages: list, tools: list, **kwargs) -> dict
+    provider_name: str
+    default_model: str
 
-class AnthropicProvider(LLMProvider):
-    # Claude implementation
-
-class OpenAIProvider(LLMProvider):
-    # GPT implementation
+    async def complete(messages, model, max_tokens, temperature, system_prompt) -> LLMResponse
+    async def complete_with_tools(messages, tools, tool_choice, ...) -> LLMResponse
+    async def complete_structured(messages, response_schema, ...) -> LLMResponse
+    def count_tokens(text, model) -> int
 ```
+
+### Providers
+- **AnthropicProvider**: Claude models via `anthropic` SDK
+- **OpenAIProvider**: GPT models + OpenAI-compatible APIs (DeepSeek, Ollama, vLLM) via configurable `base_url`
+
+### Usage
+```python
+from src.llm import get_provider, Message, with_retry
+
+# Default provider from settings
+provider = get_provider()
+
+# With retry for robustness
+response = await with_retry(
+    provider.complete,
+    messages=[Message.user("Tell me about dragons")],
+    max_tokens=500,
+)
+
+# OpenAI-compatible API (e.g., DeepSeek)
+provider = get_provider("openai", model="deepseek-chat", base_url="https://api.deepseek.com")
+```
+
+### Key Types
+- `Message`: Immutable message with factory methods (`.user()`, `.assistant()`, `.system()`)
+- `LLMResponse`: Response with `content`, `tool_calls`, `usage` stats
+- `ToolDefinition`: Tool/function definition with JSON schema conversion
 
 ## State Persistence
 

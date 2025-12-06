@@ -1,0 +1,235 @@
+"""Persistence node for saving extracted state to database.
+
+This node processes extraction results and persists them using
+the appropriate managers.
+"""
+
+from typing import Any, Callable, Coroutine
+
+from sqlalchemy.orm import Session
+
+from src.agents.state import GameState
+from src.database.models.enums import EntityType
+from src.database.models.session import GameSession, Turn
+from src.managers.entity_manager import EntityManager
+from src.managers.fact_manager import FactManager
+from src.managers.relationship_manager import RelationshipManager
+
+
+async def persistence_node(state: GameState) -> dict[str, Any]:
+    """Persist extracted state to database.
+
+    This is the default node function that expects _db and _game_session
+    to be present in state.
+
+    Args:
+        state: Current game state with _db and _game_session.
+
+    Returns:
+        Empty dict (persistence is a side effect).
+    """
+    db: Session = state.get("_db")  # type: ignore
+    game_session: GameSession = state.get("_game_session")  # type: ignore
+
+    if db is None or game_session is None:
+        return {
+            "errors": ["Missing database session or game session in state"],
+        }
+
+    return await _persist_state(db, game_session, state)
+
+
+def create_persistence_node(
+    db: Session,
+    game_session: GameSession,
+) -> Callable[[GameState], Coroutine[Any, Any, dict[str, Any]]]:
+    """Create a persistence node with bound dependencies.
+
+    Args:
+        db: Database session.
+        game_session: Current game session.
+
+    Returns:
+        Async node function that persists state.
+    """
+
+    async def node(state: GameState) -> dict[str, Any]:
+        """Persist extracted state to database.
+
+        Args:
+            state: Current game state.
+
+        Returns:
+            Empty dict (persistence is a side effect).
+        """
+        return await _persist_state(db, game_session, state)
+
+    return node
+
+
+async def _persist_state(
+    db: Session,
+    game_session: GameSession,
+    state: GameState,
+) -> dict[str, Any]:
+    """Internal helper to persist state.
+
+    Args:
+        db: Database session.
+        game_session: Current game session.
+        state: Current game state with extractions.
+
+    Returns:
+        Empty dict or errors.
+    """
+    errors: list[str] = []
+
+    # Initialize managers
+    entity_manager = EntityManager(db, game_session)
+    fact_manager = FactManager(db, game_session)
+    relationship_manager = RelationshipManager(db, game_session)
+
+    # Persist extracted entities
+    for entity_data in state.get("extracted_entities", []):
+        try:
+            _persist_entity(entity_manager, entity_data)
+        except Exception as e:
+            errors.append(f"Failed to persist entity: {e}")
+
+    # Persist extracted facts
+    for fact_data in state.get("extracted_facts", []):
+        try:
+            _persist_fact(fact_manager, fact_data)
+        except Exception as e:
+            errors.append(f"Failed to persist fact: {e}")
+
+    # Persist relationship changes
+    for change_data in state.get("relationship_changes", []):
+        try:
+            _persist_relationship_change(relationship_manager, change_data, state["player_id"])
+        except Exception as e:
+            errors.append(f"Failed to persist relationship change: {e}")
+
+    # Create turn record
+    try:
+        _create_turn_record(db, game_session, state)
+    except Exception as e:
+        errors.append(f"Failed to create turn record: {e}")
+
+    if errors:
+        return {"errors": errors}
+    return {}
+
+
+def _persist_entity(
+    entity_manager: EntityManager,
+    entity_data: dict[str, Any],
+) -> None:
+    """Persist a single extracted entity.
+
+    Args:
+        entity_manager: EntityManager instance.
+        entity_data: Extracted entity data.
+    """
+    entity_key = entity_data.get("entity_key")
+    if not entity_key:
+        return
+
+    # Check if entity already exists
+    existing = entity_manager.get_entity(entity_key)
+    if existing:
+        return  # Don't create duplicate
+
+    # Map string entity_type to enum
+    entity_type_str = entity_data.get("entity_type", "npc")
+    entity_type = EntityType.NPC
+    if entity_type_str == "player":
+        entity_type = EntityType.PLAYER
+    elif entity_type_str == "monster":
+        entity_type = EntityType.MONSTER
+    elif entity_type_str == "object":
+        entity_type = EntityType.OBJECT
+
+    entity_manager.create_entity(
+        entity_key=entity_key,
+        display_name=entity_data.get("display_name", entity_key),
+        entity_type=entity_type,
+        description=entity_data.get("description"),
+    )
+
+
+def _persist_fact(
+    fact_manager: FactManager,
+    fact_data: dict[str, Any],
+) -> None:
+    """Persist a single extracted fact.
+
+    Args:
+        fact_manager: FactManager instance.
+        fact_data: Extracted fact data.
+    """
+    subject = fact_data.get("subject")
+    predicate = fact_data.get("predicate")
+    value = fact_data.get("value")
+
+    if not all([subject, predicate, value]):
+        return
+
+    fact_manager.record_fact(
+        subject=subject,
+        predicate=predicate,
+        value=value,
+        is_secret=fact_data.get("is_secret", False),
+    )
+
+
+def _persist_relationship_change(
+    relationship_manager: RelationshipManager,
+    change_data: dict[str, Any],
+    player_id: int,
+) -> None:
+    """Persist a relationship change.
+
+    Args:
+        relationship_manager: RelationshipManager instance.
+        change_data: Relationship change data.
+        player_id: Player entity ID.
+    """
+    entity_key = change_data.get("entity_key")
+    dimension = change_data.get("dimension")
+    change = change_data.get("change", 0)
+
+    if not entity_key or not dimension:
+        return
+
+    # Get entity ID from key
+    # For now, we assume the relationship is with the player
+    # In a real implementation, we'd look up the entity ID
+    # This is a simplified version
+    pass  # TODO: Implement when entity lookup is available
+
+
+def _create_turn_record(
+    db: Session,
+    game_session: GameSession,
+    state: GameState,
+) -> Turn:
+    """Create a turn record for this interaction.
+
+    Args:
+        db: Database session.
+        game_session: Current game session.
+        state: Current game state.
+
+    Returns:
+        Created Turn record.
+    """
+    turn = Turn(
+        session_id=game_session.id,
+        turn_number=state.get("turn_number", game_session.total_turns + 1),
+        player_input=state.get("player_input", ""),
+        gm_response=state.get("gm_response", ""),
+    )
+    db.add(turn)
+    db.flush()
+    return turn

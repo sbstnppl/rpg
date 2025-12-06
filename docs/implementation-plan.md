@@ -131,22 +131,33 @@
 ## Phase 3: LLM Integration
 
 ### 3.1 Provider Abstraction
-- [ ] Create `src/llm/base.py` - LLMProvider protocol
-- [ ] Create `src/llm/message_types.py` - Message structures
+- [x] Create `src/llm/base.py` - LLMProvider protocol
+- [x] Create `src/llm/message_types.py` - Message, MessageContent, MessageRole
+- [x] Create `src/llm/tool_types.py` - ToolDefinition, ToolParameter
+- [x] Create `src/llm/response_types.py` - LLMResponse, ToolCall, UsageStats
+- [x] Create `src/llm/exceptions.py` - LLMError hierarchy
+- [x] Create `src/llm/factory.py` - get_provider() factory
+- [x] Create `src/llm/retry.py` - Exponential backoff with jitter
 
 ### 3.2 Anthropic Provider
-- [ ] Create `src/llm/anthropic_provider.py`
-  - `complete()`, `complete_with_tools()`
+- [x] Create `src/llm/anthropic_provider.py`
+  - `complete()`, `complete_with_tools()`, `complete_structured()`
+  - Tool use / function calling support
+  - Token counting (heuristic)
 
 ### 3.3 OpenAI Provider
-- [ ] Create `src/llm/openai_provider.py`
-  - `complete()`, `complete_with_tools()`
+- [x] Create `src/llm/openai_provider.py`
+  - `complete()`, `complete_with_tools()`, `complete_structured()`
+  - Configurable `base_url` for OpenAI-compatible APIs (DeepSeek, Ollama, vLLM)
+  - Token counting via tiktoken
 
-### 3.4 Dice Roller
-- [ ] Create `src/dice/roller.py`
-  - Parse dice notation (1d20, 2d6+3)
-  - Roll with modifiers
-  - Critical success/failure detection
+### 3.4 Dice System
+- [x] Create `src/dice/types.py` - Dataclasses for expressions and results
+- [x] Create `src/dice/parser.py` - Parse dice notation (1d20, 2d6+3)
+- [x] Create `src/dice/roller.py` - Roll with modifiers, advantage/disadvantage
+- [x] Create `src/dice/checks.py` - Skill checks, saving throws, DC constants
+- [x] Create `src/dice/combat.py` - Attack rolls, damage, initiative
+- [x] Critical success/failure detection (natural 20/1)
 
 ## Phase 4: LangGraph Agents
 

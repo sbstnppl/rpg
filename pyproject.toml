@@ -15,6 +15,11 @@ dependencies = [
     "langchain-anthropic>=0.2.0",
     "langchain-openai>=0.2.0",
 
+    # Native LLM SDKs (used directly in src/llm/)
+    "anthropic>=0.40.0",
+    "openai>=1.50.0",
+    "tiktoken>=0.7.0",  # Token counting for OpenAI
+
     # Database
     "sqlalchemy[asyncio]>=2.0.0",
     "alembic>=1.13.0",
