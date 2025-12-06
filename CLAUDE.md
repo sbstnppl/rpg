@@ -131,24 +131,62 @@ LLM_PROVIDER=anthropic  # or openai
 
 ## Testing
 
+**TDD Required**: All new features must be developed using Test-Driven Development:
+1. Write failing tests first
+2. Implement minimum code to pass
+3. Refactor while keeping tests green
+
+### Test Structure
+```
+tests/
+├── conftest.py                    # Core fixtures (db_session, game_session)
+├── factories.py                   # Test data factories
+├── test_database/test_models/     # Model tests (319 tests)
+├── test_managers/                 # Manager tests (158 tests)
+└── test_integration/              # Integration tests (23 tests)
+```
+
+### Commands
 ```bash
-# Run all tests
+# Run all tests (500 tests, ~1 second)
 pytest
 
 # Run specific test file
-pytest tests/test_managers/test_entity_manager.py
+pytest tests/test_managers/test_needs_manager.py
+
+# Run with verbose output
+pytest -v
 
 # Run with coverage
 pytest --cov=src
 ```
 
+### Writing Tests
+Use factories from `tests/factories.py`:
+```python
+from tests.factories import create_entity, create_relationship
+
+def test_something(db_session, game_session):
+    entity = create_entity(db_session, game_session, entity_key="hero")
+    # ... test logic
+```
+
 ## Common Tasks
 
-### Add a new entity type
-1. Add enum value to `src/database/models/enums.py`
-2. Create extension model if needed (like `NPCExtension`)
-3. Update `EntityManager` methods
-4. Add migration
+### Add a new entity type (TDD)
+1. Write tests in `tests/test_database/test_models/test_entities.py`
+2. Add enum value to `src/database/models/enums.py`
+3. Create extension model if needed (like `NPCExtension`)
+4. Run tests - verify they pass
+5. Write manager tests in `tests/test_managers/`
+6. Update manager methods
+7. Add migration
+
+### Add a new manager (TDD)
+1. Write tests in `tests/test_managers/test_<manager_name>.py`
+2. Create manager in `src/managers/`
+3. Implement methods until tests pass
+4. Add integration tests if needed
 
 ### Add a new agent
 1. Create agent file in `src/agents/`

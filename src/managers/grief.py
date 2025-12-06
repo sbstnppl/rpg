@@ -214,8 +214,8 @@ class GriefManager(BaseManager):
         relationship = (
             self.db.query(Relationship)
             .filter(
-                Relationship.source_entity_id == entity_id,
-                Relationship.target_entity_id == deceased_id,
+                Relationship.from_entity_id == entity_id,
+                Relationship.to_entity_id == deceased_id,
                 Relationship.session_id == self.session_id,
             )
             .first()

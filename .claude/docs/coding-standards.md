@@ -166,10 +166,37 @@ return state
 
 ## Testing
 
+### TDD Approach (Required)
+All new features **must** follow Test-Driven Development:
+1. **Red**: Write a failing test first
+2. **Green**: Write minimum code to pass
+3. **Refactor**: Improve while keeping tests green
+
+### Test Categories
+- **Model tests**: `tests/test_database/test_models/` - Test DB models, constraints, relationships
+- **Manager tests**: `tests/test_managers/` - Test business logic
+- **Integration tests**: `tests/test_integration/` - Test cross-component behavior
+
+### Use Factories
+Always use factories from `tests/factories.py` instead of creating models directly:
+```python
+from tests.factories import create_entity, create_relationship, create_game_session
+
+def test_something(db_session, game_session):
+    # Good - uses factory
+    entity = create_entity(db_session, game_session, entity_key="hero")
+
+    # Bad - creates model directly
+    entity = Entity(session_id=game_session.id, ...)
+```
+
 ### Test Structure
 ```python
 class TestEntityManager:
+    """Group related tests in classes."""
+
     def test_create_entity(self, db_session, game_session):
+        """Test names describe expected behavior."""
         manager = EntityManager(db_session, game_session)
         entity = manager.create_entity(
             name="Test NPC",
@@ -179,22 +206,23 @@ class TestEntityManager:
         assert entity.entity_type == EntityType.NPC
 ```
 
-### Fixtures
-Use pytest fixtures for common setup:
+### Session Scoping Tests
+Always verify session isolation when testing queries:
 ```python
-@pytest.fixture
-def db_session():
-    # ... create test session
-    yield session
-    session.rollback()
+def test_query_scopes_to_session(db_session, game_session):
+    other_session = create_game_session(db_session)
+    entity1 = create_entity(db_session, game_session)
+    entity2 = create_entity(db_session, other_session)
 
-@pytest.fixture
-def game_session(db_session):
-    session = GameSession(setting="fantasy")
-    db_session.add(session)
-    db_session.commit()
-    return session
+    result = manager.get_entities()
+    assert entity1 in result
+    assert entity2 not in result  # Different session
 ```
+
+### Core Fixtures (from conftest.py)
+- `engine`: SQLite in-memory database (session scope)
+- `db_session`: Fresh database session per test with rollback
+- `game_session`: GameSession fixture with defaults
 
 ## Error Handling
 
