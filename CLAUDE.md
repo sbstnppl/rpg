@@ -177,12 +177,14 @@ def test_something(db_session, game_session):
 
 ### After Every Change, Update:
 
-1. **`docs/implementation-plan.md`** - Mark completed items with `[x]`, add new methods/features to the appropriate section
-2. **Code docstrings** - All public methods MUST have Google-style docstrings with Args, Returns, and Raises sections
-3. **`docs/architecture.md`** - Update if architectural changes are made (new managers, agents, patterns)
-4. **`CLAUDE.md`** - Update if new patterns, conventions, or workflows are established
+1. **`CHANGELOG.md`** - Add entry under `[Unreleased]` section (Added/Changed/Fixed/Removed)
+2. **`docs/implementation-plan.md`** - Mark completed items with `[x]`, add new methods/features to the appropriate section
+3. **Code docstrings** - All public methods MUST have Google-style docstrings with Args, Returns, and Raises sections
+4. **`docs/architecture.md`** - Update if architectural changes are made (new managers, agents, patterns)
+5. **`CLAUDE.md`** - Update if new patterns, conventions, or workflows are established
 
 ### Documentation Checklist (run after implementation):
+- [ ] CHANGELOG.md updated with new entry
 - [ ] Implementation plan updated with completed items
 - [ ] New methods have docstrings
 - [ ] Test count updated if significantly changed
@@ -192,6 +194,7 @@ def test_something(db_session, game_session):
 ### Key Documentation Files:
 | File | Update When |
 |------|-------------|
+| `CHANGELOG.md` | **Every change** - Add entry under [Unreleased] section |
 | `docs/implementation-plan.md` | Any feature completion, new methods added |
 | `docs/architecture.md` | New components, patterns, or system changes |
 | `docs/user-guide.md` | New CLI commands, user-facing features |
