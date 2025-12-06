@@ -311,6 +311,58 @@ class ItemManager(BaseManager):
             .all()
         )
 
+    def get_items_at_location(self, location_key: str) -> list[Item]:
+        """Get items at a world location (not held by anyone).
+
+        Finds items in storage locations linked to the given world location.
+
+        Args:
+            location_key: World location key.
+
+        Returns:
+            List of Items at the location.
+        """
+        from src.database.models.world import Location
+
+        # Find the world location
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+
+        if location is None:
+            return []
+
+        # Find storage locations at this world location
+        storage_ids = (
+            self.db.query(StorageLocation.id)
+            .filter(
+                StorageLocation.session_id == self.session_id,
+                StorageLocation.world_location_id == location.id,
+            )
+            .all()
+        )
+
+        if not storage_ids:
+            return []
+
+        storage_id_list = [s.id for s in storage_ids]
+
+        # Return items in those storage locations (no holder)
+        return (
+            self.db.query(Item)
+            .filter(
+                Item.session_id == self.session_id,
+                Item.storage_location_id.in_(storage_id_list),
+                Item.holder_id.is_(None),
+            )
+            .all()
+        )
+
     def create_storage(
         self,
         location_key: str,

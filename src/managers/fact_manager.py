@@ -163,6 +163,104 @@ class FactManager(BaseManager):
             .all()
         )
 
+    def get_player_known_facts(self) -> list[Fact]:
+        """Get all facts known to the player (non-secret).
+
+        Returns:
+            List of non-secret Facts.
+        """
+        return (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.session_id,
+                Fact.is_secret == False,
+            )
+            .all()
+        )
+
+    def update_certainty(self, fact_id: int, certainty: int) -> Fact:
+        """Update confidence level of a fact.
+
+        Args:
+            fact_id: Fact ID.
+            certainty: New confidence level (0-100).
+
+        Returns:
+            Updated Fact.
+
+        Raises:
+            ValueError: If fact not found.
+        """
+        fact = (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.session_id,
+                Fact.id == fact_id,
+            )
+            .first()
+        )
+
+        if fact is None:
+            raise ValueError(f"Fact not found: {fact_id}")
+
+        fact.confidence = self._clamp(certainty, 0, 100)
+        self.db.flush()
+        return fact
+
+    def contradict_fact(
+        self, fact_id: int, new_value: str, reason: str
+    ) -> Fact:
+        """Contradict an existing fact with a new value.
+
+        Marks the old fact as not current (by setting is_secret or similar)
+        and creates a new fact with the corrected value.
+
+        Args:
+            fact_id: Fact ID to contradict.
+            new_value: Correct value.
+            reason: Reason for the contradiction.
+
+        Returns:
+            New Fact with correct value.
+
+        Raises:
+            ValueError: If fact not found.
+        """
+        old_fact = (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.session_id,
+                Fact.id == fact_id,
+            )
+            .first()
+        )
+
+        if old_fact is None:
+            raise ValueError(f"Fact not found: {fact_id}")
+
+        # Record what the player used to believe (old value)
+        if old_fact.player_believes is None:
+            old_fact.player_believes = old_fact.value
+
+        # Create new fact with corrected value
+        new_fact = Fact(
+            session_id=self.session_id,
+            subject_type=old_fact.subject_type,
+            subject_key=old_fact.subject_key,
+            predicate=old_fact.predicate,
+            value=new_value,
+            category=old_fact.category,
+            is_secret=False,
+            confidence=100,
+            source_turn=self.current_turn,
+        )
+
+        # Delete the old fact (it's been replaced)
+        self.db.delete(old_fact)
+        self.db.add(new_fact)
+        self.db.flush()
+        return new_fact
+
     def reveal_secret(self, fact_id: int) -> Fact:
         """Mark a secret as known to player.
 

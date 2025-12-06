@@ -243,6 +243,30 @@ class EventManager(BaseManager):
             if e.affected_entities and entity_key in e.affected_entities
         ]
 
+    def get_events_involving(self, entity_id: int) -> list[WorldEvent]:
+        """Get events involving an entity by ID.
+
+        Looks up entity key and delegates to get_events_affecting_entity.
+
+        Args:
+            entity_id: Entity ID.
+
+        Returns:
+            List of WorldEvents involving the entity.
+        """
+        from src.database.models.entities import Entity
+
+        entity = (
+            self.db.query(Entity)
+            .filter(Entity.id == entity_id)
+            .first()
+        )
+
+        if entity is None:
+            return []
+
+        return self.get_events_affecting_entity(entity.entity_key)
+
     def get_events_on_day(self, game_day: int) -> list[WorldEvent]:
         """Get all events on a specific day.
 

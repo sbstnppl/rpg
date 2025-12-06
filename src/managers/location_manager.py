@@ -143,6 +143,41 @@ class LocationManager(BaseManager):
             .all()
         )
 
+    def get_sublocations(self, parent_key: str) -> list[Location]:
+        """Get all sublocations (alias for get_child_locations).
+
+        Args:
+            parent_key: Parent location key.
+
+        Returns:
+            List of child Locations.
+        """
+        return self.get_child_locations(parent_key)
+
+    def get_sublocation(self, parent_key: str, child_key: str) -> Location | None:
+        """Get a specific child location.
+
+        Args:
+            parent_key: Parent location key.
+            child_key: Child location key.
+
+        Returns:
+            Child Location if found, None otherwise.
+        """
+        parent = self.get_location(parent_key)
+        if parent is None:
+            return None
+
+        return (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.parent_location_id == parent.id,
+                Location.location_key == child_key,
+            )
+            .first()
+        )
+
     def get_location_chain(self, location_key: str) -> list[Location]:
         """Get full hierarchy from root to this location.
 
@@ -329,3 +364,61 @@ class LocationManager(BaseManager):
             )
             .all()
         )
+
+    def get_items_at_location(self, location_key: str) -> list:
+        """Get items at a location.
+
+        Delegates to ItemManager.get_items_at_location.
+
+        Args:
+            location_key: Location key.
+
+        Returns:
+            List of Items at the location.
+        """
+        from src.managers.item_manager import ItemManager
+
+        item_manager = ItemManager(self.db, self.game_session)
+        return item_manager.get_items_at_location(location_key)
+
+    def get_entities_at_location(self, location_key: str) -> list:
+        """Get entities at a location.
+
+        Delegates to EntityManager.get_entities_at_location.
+
+        Args:
+            location_key: Location key.
+
+        Returns:
+            List of Entities at the location.
+        """
+        from src.managers.entity_manager import EntityManager
+
+        entity_manager = EntityManager(self.db, self.game_session)
+        return entity_manager.get_entities_at_location(location_key)
+
+    def set_player_location(self, location_key: str) -> None:
+        """Set the player's current location.
+
+        Updates the player entity's NPCExtension.current_location.
+
+        Args:
+            location_key: New location key.
+
+        Raises:
+            ValueError: If player not found or location not found.
+        """
+        from src.managers.entity_manager import EntityManager
+
+        # Verify location exists
+        location = self.get_location(location_key)
+        if location is None:
+            raise ValueError(f"Location not found: {location_key}")
+
+        # Get player and update their location
+        entity_manager = EntityManager(self.db, self.game_session)
+        player = entity_manager.get_player()
+        if player is None:
+            raise ValueError("No player entity found")
+
+        entity_manager.update_location(player.entity_key, location_key)

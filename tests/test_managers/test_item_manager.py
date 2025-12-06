@@ -7,7 +7,7 @@ from src.database.models.enums import ItemType, ItemCondition, StorageLocationTy
 from src.database.models.session import GameSession
 from src.database.models.items import Item, StorageLocation
 from src.managers.item_manager import ItemManager
-from tests.factories import create_item, create_entity, create_storage_location
+from tests.factories import create_item, create_entity, create_storage_location, create_location
 
 
 class TestItemManagerBasics:
@@ -449,3 +449,112 @@ class TestItemManagerCondition:
         assert result.durability == 45
         # At durability 45, should be WORN (threshold 50 not met)
         assert result.condition == ItemCondition.DAMAGED
+
+
+class TestItemManagerLocation:
+    """Tests for get_items_at_location method."""
+
+    def test_get_items_at_location_returns_empty_when_no_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_items_at_location returns empty list when location doesn't exist."""
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_items_at_location("nonexistent")
+
+        assert result == []
+
+    def test_get_items_at_location_returns_items_in_storage(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_items_at_location returns items in storage at that location."""
+        # Create world location
+        location = create_location(
+            db_session, game_session,
+            location_key="tavern",
+            display_name="The Tavern"
+        )
+        # Create storage at that location
+        storage = create_storage_location(
+            db_session, game_session,
+            location_key="tavern_shelf",
+            location_type=StorageLocationType.PLACE,
+            world_location_id=location.id
+        )
+        # Create items in storage (no holder)
+        item1 = create_item(
+            db_session, game_session,
+            item_key="mug",
+            storage_location_id=storage.id,
+            holder_id=None
+        )
+        item2 = create_item(
+            db_session, game_session,
+            item_key="plate",
+            storage_location_id=storage.id,
+            holder_id=None
+        )
+        # Create item being held (should not be returned)
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="drink",
+            storage_location_id=storage.id,
+            holder_id=entity.id
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_items_at_location("tavern")
+
+        assert len(result) == 2
+        keys = [i.item_key for i in result]
+        assert "mug" in keys
+        assert "plate" in keys
+
+    def test_get_items_at_location_excludes_other_locations(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_items_at_location excludes items at other locations."""
+        # Create two locations
+        tavern = create_location(
+            db_session, game_session,
+            location_key="tavern"
+        )
+        market = create_location(
+            db_session, game_session,
+            location_key="market"
+        )
+        # Storage at tavern
+        tavern_storage = create_storage_location(
+            db_session, game_session,
+            location_key="tavern_storage",
+            location_type=StorageLocationType.PLACE,
+            world_location_id=tavern.id
+        )
+        # Storage at market
+        market_storage = create_storage_location(
+            db_session, game_session,
+            location_key="market_storage",
+            location_type=StorageLocationType.PLACE,
+            world_location_id=market.id
+        )
+        # Items at tavern
+        create_item(
+            db_session, game_session,
+            item_key="tavern_item",
+            storage_location_id=tavern_storage.id,
+            holder_id=None
+        )
+        # Items at market
+        create_item(
+            db_session, game_session,
+            item_key="market_item",
+            storage_location_id=market_storage.id,
+            holder_id=None
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_items_at_location("tavern")
+
+        assert len(result) == 1
+        assert result[0].item_key == "tavern_item"

@@ -7,7 +7,14 @@ from src.database.models.enums import StorageLocationType
 from src.database.models.session import GameSession
 from src.database.models.world import Location
 from src.managers.location_manager import LocationManager
-from tests.factories import create_location, create_storage_location
+from src.database.models.enums import EntityType
+from tests.factories import (
+    create_location,
+    create_storage_location,
+    create_entity,
+    create_npc_extension,
+    create_item,
+)
 
 
 class TestLocationManagerBasics:
@@ -450,3 +457,174 @@ class TestLocationManagerStorage:
         keys = [s.location_key for s in result]
         assert "chest1" in keys
         assert "chest2" in keys
+
+
+class TestLocationManagerSublocation:
+    """Tests for sublocation operations."""
+
+    def test_get_sublocation_returns_child(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_sublocation returns specific child location."""
+        parent = create_location(
+            db_session, game_session,
+            location_key="tavern"
+        )
+        child = create_location(
+            db_session, game_session,
+            location_key="cellar",
+            parent_location_id=parent.id
+        )
+        manager = LocationManager(db_session, game_session)
+
+        result = manager.get_sublocation("tavern", "cellar")
+
+        assert result is not None
+        assert result.id == child.id
+
+    def test_get_sublocation_returns_none_when_not_child(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_sublocation returns None when not a child."""
+        parent = create_location(
+            db_session, game_session,
+            location_key="tavern"
+        )
+        # Location that is NOT a child of parent
+        create_location(
+            db_session, game_session,
+            location_key="market"
+        )
+        manager = LocationManager(db_session, game_session)
+
+        result = manager.get_sublocation("tavern", "market")
+
+        assert result is None
+
+    def test_get_sublocations_returns_all_children(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_sublocations returns all children."""
+        parent = create_location(
+            db_session, game_session,
+            location_key="building"
+        )
+        create_location(
+            db_session, game_session,
+            location_key="room1",
+            parent_location_id=parent.id
+        )
+        create_location(
+            db_session, game_session,
+            location_key="room2",
+            parent_location_id=parent.id
+        )
+        manager = LocationManager(db_session, game_session)
+
+        result = manager.get_sublocations("building")
+
+        assert len(result) == 2
+        keys = [loc.location_key for loc in result]
+        assert "room1" in keys
+        assert "room2" in keys
+
+
+class TestLocationManagerEntityAndItemQueries:
+    """Tests for get_entities_at_location and get_items_at_location."""
+
+    def test_get_entities_at_location_returns_entities(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_entities_at_location delegates to EntityManager."""
+        create_location(
+            db_session, game_session,
+            location_key="tavern"
+        )
+        entity = create_entity(db_session, game_session, entity_key="bartender")
+        create_npc_extension(db_session, entity, current_location="tavern")
+        manager = LocationManager(db_session, game_session)
+
+        result = manager.get_entities_at_location("tavern")
+
+        assert len(result) == 1
+        assert result[0].entity_key == "bartender"
+
+    def test_get_items_at_location_returns_items(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_items_at_location delegates to ItemManager."""
+        location = create_location(
+            db_session, game_session,
+            location_key="tavern"
+        )
+        storage = create_storage_location(
+            db_session, game_session,
+            location_key="tavern_floor",
+            location_type=StorageLocationType.PLACE,
+            world_location_id=location.id
+        )
+        create_item(
+            db_session, game_session,
+            item_key="mug",
+            storage_location_id=storage.id,
+            holder_id=None
+        )
+        manager = LocationManager(db_session, game_session)
+
+        result = manager.get_items_at_location("tavern")
+
+        assert len(result) == 1
+        assert result[0].item_key == "mug"
+
+
+class TestLocationManagerSetPlayerLocation:
+    """Tests for set_player_location."""
+
+    def test_set_player_location_updates_player(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify set_player_location updates player's location."""
+        create_location(
+            db_session, game_session,
+            location_key="tavern"
+        )
+        player = create_entity(
+            db_session, game_session,
+            entity_key="hero",
+            entity_type=EntityType.PLAYER
+        )
+        create_npc_extension(db_session, player, current_location="start")
+        manager = LocationManager(db_session, game_session)
+
+        manager.set_player_location("tavern")
+
+        # Refresh to get updated value
+        db_session.refresh(player)
+        assert player.npc_extension.current_location == "tavern"
+
+    def test_set_player_location_raises_when_no_player(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify set_player_location raises when no player exists."""
+        create_location(
+            db_session, game_session,
+            location_key="tavern"
+        )
+        manager = LocationManager(db_session, game_session)
+
+        with pytest.raises(ValueError, match="No player entity found"):
+            manager.set_player_location("tavern")
+
+    def test_set_player_location_raises_when_location_missing(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify set_player_location raises when location doesn't exist."""
+        create_entity(
+            db_session, game_session,
+            entity_key="hero",
+            entity_type=EntityType.PLAYER
+        )
+        manager = LocationManager(db_session, game_session)
+
+        with pytest.raises(ValueError, match="Location not found"):
+            manager.set_player_location("nonexistent")

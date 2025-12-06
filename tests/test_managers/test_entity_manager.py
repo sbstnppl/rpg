@@ -486,3 +486,98 @@ class TestEntityManagerStatus:
         result = manager.mark_inactive("traveler")
 
         assert result.is_active is False
+
+    def test_get_active_entities_filters_inactive(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_active_entities excludes inactive entities."""
+        create_entity(
+            db_session, game_session,
+            entity_key="active",
+            is_alive=True,
+            is_active=True
+        )
+        create_entity(
+            db_session, game_session,
+            entity_key="inactive",
+            is_alive=True,
+            is_active=False
+        )
+        create_entity(
+            db_session, game_session,
+            entity_key="dead",
+            is_alive=False,
+            is_active=True
+        )
+        manager = EntityManager(db_session, game_session)
+
+        result = manager.get_active_entities()
+
+        assert len(result) == 1
+        assert result[0].entity_key == "active"
+
+    def test_get_active_entities_returns_all_types(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_active_entities returns all entity types."""
+        create_entity(
+            db_session, game_session,
+            entity_key="player",
+            entity_type=EntityType.PLAYER,
+            is_alive=True,
+            is_active=True
+        )
+        create_entity(
+            db_session, game_session,
+            entity_key="npc",
+            entity_type=EntityType.NPC,
+            is_alive=True,
+            is_active=True
+        )
+        create_entity(
+            db_session, game_session,
+            entity_key="monster",
+            entity_type=EntityType.MONSTER,
+            is_alive=True,
+            is_active=True
+        )
+        manager = EntityManager(db_session, game_session)
+
+        result = manager.get_active_entities()
+
+        assert len(result) == 3
+
+
+class TestEntityManagerUpdateAttribute:
+    """Tests for update_attribute method."""
+
+    def test_update_attribute_creates_new(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify update_attribute creates attribute if missing."""
+        entity = create_entity(db_session, game_session)
+        manager = EntityManager(db_session, game_session)
+
+        result = manager.update_attribute(entity.id, "strength", 16)
+
+        assert result is not None
+        assert result.attribute_key == "strength"
+        assert result.value == 16
+        assert result.entity_id == entity.id
+
+    def test_update_attribute_updates_existing(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify update_attribute updates existing attribute."""
+        entity = create_entity(db_session, game_session)
+        attr = create_entity_attribute(
+            db_session, entity,
+            attribute_key="strength",
+            value=10
+        )
+        manager = EntityManager(db_session, game_session)
+
+        result = manager.update_attribute(entity.id, "strength", 18)
+
+        assert result.id == attr.id
+        assert result.value == 18

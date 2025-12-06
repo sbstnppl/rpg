@@ -286,3 +286,45 @@ class ScheduleManager(BaseManager):
         if pattern == DayOfWeek.WEEKEND:
             return day in WEEKEND
         return day == pattern
+
+    def clear_schedule(self, entity_id: int) -> None:
+        """Remove all schedule entries for an entity.
+
+        Args:
+            entity_id: Entity ID.
+        """
+        self.db.query(Schedule).filter(
+            Schedule.entity_id == entity_id
+        ).delete()
+        self.db.flush()
+
+    def copy_schedule(
+        self, from_entity_id: int, to_entity_id: int
+    ) -> list[Schedule]:
+        """Copy all schedule entries from one entity to another.
+
+        Args:
+            from_entity_id: Source entity ID.
+            to_entity_id: Target entity ID.
+
+        Returns:
+            List of newly created Schedule entries.
+        """
+        source_schedules = self.get_schedule(from_entity_id)
+        new_schedules = []
+
+        for source in source_schedules:
+            new_schedule = Schedule(
+                entity_id=to_entity_id,
+                day_pattern=source.day_pattern,
+                start_time=source.start_time,
+                end_time=source.end_time,
+                activity=source.activity,
+                location_key=source.location_key,
+                priority=source.priority,
+            )
+            self.db.add(new_schedule)
+            new_schedules.append(new_schedule)
+
+        self.db.flush()
+        return new_schedules

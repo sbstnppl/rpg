@@ -159,6 +159,28 @@ class TaskManager(BaseManager):
         self.db.flush()
         return task
 
+    def fail_task(self, task_id: int, reason: str | None = None) -> Task:
+        """Mark task as failed.
+
+        Args:
+            task_id: Task ID.
+            reason: Optional reason for failure.
+
+        Returns:
+            Updated Task.
+
+        Raises:
+            ValueError: If task not found.
+        """
+        task = self.get_task(task_id)
+        if task is None:
+            raise ValueError(f"Task not found: {task_id}")
+
+        task.completed = True  # Task is done (failed)
+        task.completed_turn = self.current_turn
+        self.db.flush()
+        return task
+
     # =========================================================================
     # Appointment Operations
     # =========================================================================
@@ -346,6 +368,39 @@ class TaskManager(BaseManager):
 
         self.db.flush()
         return missed
+
+    def mark_appointment_kept(self, appointment_id: int) -> Appointment:
+        """Mark appointment as kept/completed.
+
+        Alias for complete_appointment.
+
+        Args:
+            appointment_id: Appointment ID.
+
+        Returns:
+            Updated Appointment.
+        """
+        return self.complete_appointment(appointment_id)
+
+    def mark_appointment_missed(self, appointment_id: int) -> Appointment:
+        """Mark appointment as missed.
+
+        Args:
+            appointment_id: Appointment ID.
+
+        Returns:
+            Updated Appointment.
+
+        Raises:
+            ValueError: If appointment not found.
+        """
+        appointment = self.get_appointment(appointment_id)
+        if appointment is None:
+            raise ValueError(f"Appointment not found: {appointment_id}")
+
+        appointment.status = AppointmentStatus.MISSED
+        self.db.flush()
+        return appointment
 
     # =========================================================================
     # Quest Operations

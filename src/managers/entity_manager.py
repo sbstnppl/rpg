@@ -123,6 +123,22 @@ class EntityManager(BaseManager):
             query = query.filter(Entity.is_alive == True)
         return query.all()
 
+    def get_active_entities(self) -> list[Entity]:
+        """Get all active and alive entities.
+
+        Returns:
+            List of entities where is_alive=True and is_active=True.
+        """
+        return (
+            self.db.query(Entity)
+            .filter(
+                Entity.session_id == self.session_id,
+                Entity.is_alive == True,
+                Entity.is_active == True,
+            )
+            .all()
+        )
+
     def get_entities_at_location(self, location_key: str) -> list[Entity]:
         """Get all entities at a location.
 
@@ -255,6 +271,24 @@ class EntityManager(BaseManager):
         if attr is None:
             return None
         return attr.value + attr.temporary_modifier
+
+    def update_attribute(
+        self,
+        entity_id: int,
+        attribute_key: str,
+        value: int,
+    ) -> EntityAttribute:
+        """Update attribute value (creates if missing). Alias for set_attribute.
+
+        Args:
+            entity_id: Entity ID.
+            attribute_key: Attribute key.
+            value: New value.
+
+        Returns:
+            Created or updated EntityAttribute.
+        """
+        return self.set_attribute(entity_id, attribute_key, value)
 
     def set_attribute(
         self,
