@@ -171,6 +171,33 @@ def test_something(db_session, game_session):
     # ... test logic
 ```
 
+## Documentation Requirements
+
+**MANDATORY**: Documentation MUST be updated after any changes, feature implementations, bug fixes, or refactoring. The documentation MUST always reflect the current project and implementation status.
+
+### After Every Change, Update:
+
+1. **`docs/implementation-plan.md`** - Mark completed items with `[x]`, add new methods/features to the appropriate section
+2. **Code docstrings** - All public methods MUST have Google-style docstrings with Args, Returns, and Raises sections
+3. **`docs/architecture.md`** - Update if architectural changes are made (new managers, agents, patterns)
+4. **`CLAUDE.md`** - Update if new patterns, conventions, or workflows are established
+
+### Documentation Checklist (run after implementation):
+- [ ] Implementation plan updated with completed items
+- [ ] New methods have docstrings
+- [ ] Test count updated if significantly changed
+- [ ] Architecture doc updated (if applicable)
+- [ ] Commit message describes changes clearly
+
+### Key Documentation Files:
+| File | Update When |
+|------|-------------|
+| `docs/implementation-plan.md` | Any feature completion, new methods added |
+| `docs/architecture.md` | New components, patterns, or system changes |
+| `docs/user-guide.md` | New CLI commands, user-facing features |
+| `.claude/docs/coding-standards.md` | New coding conventions established |
+| `.claude/docs/database-conventions.md` | New DB patterns or model conventions |
+
 ## Common Tasks
 
 ### Add a new entity type (TDD)
