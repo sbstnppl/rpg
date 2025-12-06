@@ -98,6 +98,27 @@ class Location(Base, TimestampMixin):
         nullable=True,
     )
 
+    # Consistency tracking (new)
+    canonical_description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Saved on first visit. Layout never changes unless event explains it.",
+    )
+    first_visited_turn: Mapped[int | None] = mapped_column(
+        nullable=True,
+        comment="Turn when player first visited (locks canonical description)",
+    )
+    state_history: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="History of changes: [{turn: X, change: 'description', reason: 'why'}]",
+    )
+    spatial_layout: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Room connections, passages, exits - never changes unless event explains",
+    )
+
     # Relationships
     parent_location: Mapped["Location | None"] = relationship(
         remote_side="Location.id",
@@ -287,6 +308,24 @@ class Fact(Base):
         Text,
         nullable=True,
         comment="What player thinks is true (if different)",
+    )
+
+    # Story/narrative flags
+    is_foreshadowing: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Hint planted for future payoff (AI tracks these)",
+    )
+    foreshadow_target: Mapped[str | None] = mapped_column(
+        String(200),
+        nullable=True,
+        comment="What this foreshadows (for AI reference)",
+    )
+    times_mentioned: Mapped[int] = mapped_column(
+        default=1,
+        nullable=False,
+        comment="Rule of three: mention hints in 3 contexts before payoff",
     )
 
     # Tracking

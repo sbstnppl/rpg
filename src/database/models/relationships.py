@@ -75,6 +75,23 @@ class Relationship(Base, TimestampMixin):
         comment="Romantic attraction? 0-100",
     )
 
+    # Context dimensions (new)
+    familiarity: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+        comment="How well they know each other. 0-100. Caps relationship growth for strangers.",
+    )
+    fear: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+        comment="Intimidation/power dynamics. 0-100. Affects compliance, willingness to refuse.",
+    )
+    social_debt: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+        comment="Favor economy. -100 to +100. Positive = they owe you.",
+    )
+
     # Temporary modifiers (mood-based)
     mood_modifier: Mapped[int] = mapped_column(
         default=0,
@@ -138,7 +155,7 @@ class Relationship(Base, TimestampMixin):
     def __repr__(self) -> str:
         return (
             f"<Relationship {self.from_entity_id}→{self.to_entity_id} "
-            f"T:{self.trust} L:{self.liking} R:{self.respect}>"
+            f"T:{self.trust} L:{self.liking} R:{self.respect} F:{self.familiarity}>"
         )
 
 

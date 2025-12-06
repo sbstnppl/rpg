@@ -261,6 +261,13 @@ class NPCExtension(Base, TimestampMixin):
         comment="How they speak (accent, vocabulary, quirks)",
     )
 
+    # Personality traits affecting relationship dynamics
+    personality_traits: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Traits affecting relationships: suspicious, forgiving, shy, prideful, etc.",
+    )
+
     # Relationships
     entity: Mapped["Entity"] = relationship(back_populates="npc_extension")
 

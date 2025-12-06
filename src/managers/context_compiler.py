@@ -1,0 +1,556 @@
+"""Context compiler for assembling GM prompt context."""
+
+from dataclasses import dataclass
+
+from sqlalchemy.orm import Session
+
+from src.database.models.character_state import CharacterNeeds
+from src.database.models.entities import Entity, NPCExtension
+from src.database.models.enums import EntityType
+from src.database.models.injuries import BodyInjury
+from src.database.models.relationships import Relationship
+from src.database.models.session import GameSession
+from src.database.models.world import Fact, Location, TimeState, WorldEvent
+from src.managers.base import BaseManager
+from src.managers.injuries import InjuryManager
+from src.managers.needs import NeedsManager
+from src.managers.relationship_manager import RelationshipManager
+
+
+@dataclass
+class SceneContext:
+    """Compiled scene context for GM."""
+
+    time_context: str
+    location_context: str
+    player_context: str
+    npcs_context: str
+    tasks_context: str
+    recent_events_context: str
+    secrets_context: str  # GM-only info
+
+    def to_prompt(self, include_secrets: bool = True) -> str:
+        """Format as prompt string for GM."""
+        sections = [
+            self.time_context,
+            self.location_context,
+            self.player_context,
+            self.npcs_context,
+        ]
+
+        if self.tasks_context:
+            sections.append(self.tasks_context)
+
+        if self.recent_events_context:
+            sections.append(self.recent_events_context)
+
+        if include_secrets and self.secrets_context:
+            sections.append(self.secrets_context)
+
+        return "\n\n".join(sections)
+
+
+class ContextCompiler(BaseManager):
+    """Compiles game state into context strings for GM prompts."""
+
+    def __init__(
+        self,
+        db: Session,
+        game_session: GameSession,
+        needs_manager: NeedsManager | None = None,
+        injury_manager: InjuryManager | None = None,
+        relationship_manager: RelationshipManager | None = None,
+    ) -> None:
+        """Initialize with optional manager references.
+
+        If managers aren't provided, they'll be created on demand.
+        """
+        super().__init__(db, game_session)
+        self._needs_manager = needs_manager
+        self._injury_manager = injury_manager
+        self._relationship_manager = relationship_manager
+
+    @property
+    def needs_manager(self) -> NeedsManager:
+        if self._needs_manager is None:
+            self._needs_manager = NeedsManager(self.db, self.game_session)
+        return self._needs_manager
+
+    @property
+    def injury_manager(self) -> InjuryManager:
+        if self._injury_manager is None:
+            self._injury_manager = InjuryManager(self.db, self.game_session)
+        return self._injury_manager
+
+    @property
+    def relationship_manager(self) -> RelationshipManager:
+        if self._relationship_manager is None:
+            self._relationship_manager = RelationshipManager(self.db, self.game_session)
+        return self._relationship_manager
+
+    def compile_scene(
+        self,
+        player_id: int,
+        location_key: str,
+        include_secrets: bool = True,
+    ) -> SceneContext:
+        """Compile full scene context for GM.
+
+        Args:
+            player_id: Player entity ID
+            location_key: Current location key
+            include_secrets: Whether to include GM-only secrets
+
+        Returns:
+            SceneContext with all compiled sections
+        """
+        return SceneContext(
+            time_context=self._get_time_context(),
+            location_context=self._get_location_context(location_key),
+            player_context=self._get_player_context(player_id),
+            npcs_context=self._get_npcs_context(location_key, player_id),
+            tasks_context=self._get_tasks_context(player_id),
+            recent_events_context=self._get_recent_events(limit=5),
+            secrets_context=self._get_secrets_context(location_key) if include_secrets else "",
+        )
+
+    def _get_time_context(self) -> str:
+        """Get current time/date/weather context."""
+        time_state = (
+            self.db.query(TimeState)
+            .filter(TimeState.session_id == self.session_id)
+            .first()
+        )
+
+        if not time_state:
+            return "## Current Scene\n- Time: Unknown"
+
+        lines = ["## Current Scene"]
+        lines.append(
+            f"- Time: Day {time_state.current_day}, {time_state.current_time} "
+            f"({time_state.day_of_week})"
+        )
+
+        if time_state.weather:
+            lines.append(f"- Weather: {time_state.weather}")
+        if time_state.temperature:
+            lines.append(f"- Temperature: {time_state.temperature}")
+        if time_state.season:
+            lines.append(f"- Season: {time_state.season}")
+
+        return "\n".join(lines)
+
+    def _get_location_context(self, location_key: str) -> str:
+        """Get location description context."""
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+
+        if not location:
+            return f"- Location: {location_key}"
+
+        lines = [f"- Location: {location.display_name}"]
+
+        if location.description:
+            lines.append(f"- Description: {location.description[:200]}...")
+        if location.atmosphere:
+            lines.append(f"- Atmosphere: {location.atmosphere}")
+
+        return "\n".join(lines)
+
+    def _get_player_context(self, player_id: int) -> str:
+        """Get player character context including needs and injuries."""
+        player = (
+            self.db.query(Entity)
+            .filter(Entity.id == player_id)
+            .first()
+        )
+
+        if not player:
+            return "## Player Character\n- Not found"
+
+        lines = ["## Player Character"]
+        lines.append(f"- Name: {player.display_name}")
+
+        # Appearance
+        if player.appearance:
+            appearance_desc = self._format_appearance(player.appearance)
+            if appearance_desc:
+                lines.append(f"- Appearance: {appearance_desc}")
+
+        # Condition (needs + injuries)
+        condition = self._get_condition_summary(player_id)
+        if condition:
+            lines.append(f"- Condition: {condition}")
+
+        # TODO: Add equipment/held items when ItemManager is available
+
+        return "\n".join(lines)
+
+    def _get_npcs_context(self, location_key: str, player_id: int) -> str:
+        """Get context for all NPCs at the current location."""
+        # Get NPCs at this location
+        # TODO: Use proper location tracking when EntityManager is available
+        # For now, get all active NPCs in session (placeholder)
+        npcs = (
+            self.db.query(Entity)
+            .filter(
+                Entity.session_id == self.session_id,
+                Entity.entity_type == EntityType.NPC,
+                Entity.is_alive == True,
+                Entity.is_active == True,
+            )
+            .limit(10)  # Don't overwhelm context
+            .all()
+        )
+
+        if not npcs:
+            return "## NPCs Present\nNone present"
+
+        lines = ["## NPCs Present"]
+
+        for npc in npcs:
+            npc_lines = self._format_npc_context(npc, player_id)
+            lines.extend(npc_lines)
+
+        return "\n".join(lines)
+
+    def _format_npc_context(self, npc: Entity, player_id: int) -> list[str]:
+        """Format context for a single NPC."""
+        lines = [f"\n### {npc.display_name}"]
+
+        # Appearance
+        if npc.appearance:
+            appearance = self._format_appearance(npc.appearance)
+            if appearance:
+                lines.append(f"- Appearance: {appearance}")
+
+        # Current activity (from NPC extension or schedule)
+        if npc.npc_extension:
+            if npc.npc_extension.current_activity:
+                lines.append(f"- Activity: {npc.npc_extension.current_activity}")
+            if npc.npc_extension.current_mood:
+                lines.append(f"- Mood: {npc.npc_extension.current_mood}")
+
+        # Condition (visible needs/injuries)
+        condition = self._get_condition_summary(npc.id, visible_only=True)
+        if condition:
+            lines.append(f"- Condition: {condition}")
+
+        # Attitude toward player
+        attitude = self.relationship_manager.get_attitude(npc.id, player_id)
+        if attitude["knows"]:
+            lines.append("- Attitude toward you:")
+            lines.append(f"  - Trust: {attitude['trust']}/100")
+            lines.append(f"  - Liking: {attitude['effective_liking']}/100")
+            lines.append(f"  - Respect: {attitude['respect']}/100")
+            if attitude["romantic_interest"] > 0:
+                lines.append(f"  - Romantic Interest: {attitude['romantic_interest']}/100")
+            if attitude["fear"] > 20:
+                lines.append(f"  - Fear: {attitude['fear']}/100")
+
+            # Disposition description
+            disposition = self.relationship_manager.get_attitude_description(npc.id, player_id)
+            lines.append(f"  - Disposition: {disposition}")
+
+        # Visible personality traits
+        if npc.npc_extension and npc.npc_extension.personality_traits:
+            visible_traits = self._get_visible_personality_traits(npc.npc_extension.personality_traits)
+            if visible_traits:
+                lines.append(f"- Personality: {visible_traits}")
+
+        return lines
+
+    def _get_visible_personality_traits(self, traits: dict) -> str:
+        """Get personality traits that would be observable."""
+        # Some traits are observable, others are hidden
+        observable = {
+            "shy": "reserved",
+            "outgoing": "outgoing",
+            "prideful": "proud",
+            "humble": "humble",
+            "romantic": "flirtatious",
+            "suspicious": "wary",
+            "trusting": "open",
+            "fearless": "bold",
+            "anxious": "nervous",
+        }
+
+        visible = []
+        for trait, is_active in traits.items():
+            if is_active and trait in observable:
+                visible.append(observable[trait])
+
+        return ", ".join(visible) if visible else ""
+
+    def _get_condition_summary(
+        self, entity_id: int, visible_only: bool = False
+    ) -> str:
+        """Get human-readable condition summary (needs + injuries).
+
+        Args:
+            entity_id: Entity to summarize
+            visible_only: If True, only include visually obvious conditions
+
+        Returns:
+            Condition description string
+        """
+        parts = []
+
+        # Needs summary
+        needs_summary = self._get_needs_description(entity_id, visible_only)
+        if needs_summary:
+            parts.append(needs_summary)
+
+        # Injuries summary
+        injuries_summary = self._get_injury_description(entity_id, visible_only)
+        if injuries_summary:
+            parts.append(injuries_summary)
+
+        return "; ".join(parts) if parts else ""
+
+    def _get_needs_description(self, entity_id: int, visible_only: bool = False) -> str:
+        """Get human-readable needs description."""
+        needs = self.needs_manager.get_needs(entity_id)
+        if not needs:
+            return ""
+
+        descriptions = []
+
+        # Visible conditions (someone else could observe)
+        if needs.fatigue > 80:
+            descriptions.append("exhausted")
+        elif needs.fatigue > 60:
+            descriptions.append("tired")
+
+        if needs.hunger < 15:
+            descriptions.append("starving")
+        elif needs.hunger < 30:
+            descriptions.append("hungry")
+
+        if needs.hygiene < 20:
+            descriptions.append("filthy")
+        elif needs.hygiene < 40:
+            descriptions.append("disheveled")
+
+        if needs.pain > 60:
+            descriptions.append("in obvious pain")
+        elif needs.pain > 40:
+            descriptions.append("uncomfortable")
+
+        # Less visible (only for player/self)
+        if not visible_only:
+            if needs.morale < 20:
+                descriptions.append("depressed")
+            elif needs.morale < 40:
+                descriptions.append("low spirits")
+
+            if needs.social_connection < 20:
+                descriptions.append("lonely")
+
+            if needs.intimacy > 80:
+                descriptions.append("restless")
+
+        return ", ".join(descriptions)
+
+    def _get_injury_description(self, entity_id: int, visible_only: bool = False) -> str:
+        """Get human-readable injury description."""
+        injuries = self.injury_manager.get_injuries(entity_id, active_only=True)
+        if not injuries:
+            return ""
+
+        # Map injuries to descriptions
+        descriptions = []
+        for injury in injuries:
+            desc = self._injury_to_description(injury, visible_only)
+            if desc:
+                descriptions.append(desc)
+
+        # Limit to 3 most severe
+        return ", ".join(descriptions[:3])
+
+    def _injury_to_description(self, injury: BodyInjury, visible_only: bool) -> str:
+        """Convert injury to human-readable description."""
+        from src.database.models.enums import BodyPart, InjurySeverity, InjuryType
+
+        # Visible injuries (observable by others)
+        visible_body_parts = {
+            BodyPart.HEAD, BodyPart.LEFT_ARM, BodyPart.RIGHT_ARM,
+            BodyPart.LEFT_HAND, BodyPart.RIGHT_HAND, BodyPart.LEFT_LEG,
+            BodyPart.RIGHT_LEG, BodyPart.LEFT_FOOT, BodyPart.RIGHT_FOOT,
+        }
+
+        visible_injury_types = {
+            InjuryType.CUT, InjuryType.LACERATION, InjuryType.BURN,
+            InjuryType.BRUISE, InjuryType.FRACTURE, InjuryType.DISLOCATION,
+        }
+
+        if visible_only:
+            if injury.body_part not in visible_body_parts:
+                return ""
+            if injury.injury_type not in visible_injury_types:
+                return ""
+
+        # Build description
+        part_name = injury.body_part.value.replace("_", " ")
+
+        if injury.injury_type == InjuryType.FRACTURE:
+            if injury.body_part in (BodyPart.LEFT_LEG, BodyPart.RIGHT_LEG):
+                return "limping heavily"
+            elif injury.body_part in (BodyPart.LEFT_ARM, BodyPart.RIGHT_ARM):
+                return f"arm in a sling"
+            else:
+                return f"broken {part_name}"
+        elif injury.injury_type == InjuryType.SPRAIN:
+            if injury.body_part in (BodyPart.LEFT_LEG, BodyPart.RIGHT_LEG):
+                return "limping"
+            else:
+                return f"favoring {part_name}"
+        elif injury.injury_type == InjuryType.CUT:
+            if injury.severity == InjurySeverity.MINOR:
+                return f"small cut on {part_name}"
+            else:
+                return f"bandaged {part_name}"
+        elif injury.injury_type == InjuryType.BURN:
+            return f"burn marks on {part_name}"
+        elif injury.injury_type == InjuryType.BRUISE:
+            return f"bruised {part_name}"
+        elif injury.injury_type == InjuryType.CONCUSSION:
+            return "dazed, moving carefully"
+
+        # Generic fallback
+        if injury.severity in (InjurySeverity.SEVERE, InjurySeverity.CRITICAL):
+            return f"seriously injured {part_name}"
+        return f"injured {part_name}"
+
+    def _format_appearance(self, appearance: dict) -> str:
+        """Format appearance dict into readable string."""
+        parts = []
+
+        if appearance.get("height"):
+            parts.append(appearance["height"])
+        if appearance.get("build"):
+            parts.append(appearance["build"])
+        if appearance.get("hair"):
+            parts.append(f"{appearance['hair']} hair")
+        if appearance.get("eyes"):
+            parts.append(f"{appearance['eyes']} eyes")
+        if appearance.get("distinguishing"):
+            parts.append(appearance["distinguishing"])
+
+        return ", ".join(parts)
+
+    def _get_tasks_context(self, player_id: int) -> str:
+        """Get active tasks/quests context."""
+        # TODO: Query Task model when implemented
+        return ""
+
+    def _get_recent_events(self, limit: int = 5) -> str:
+        """Get recent world events for context."""
+        events = (
+            self.db.query(WorldEvent)
+            .filter(
+                WorldEvent.session_id == self.session_id,
+                WorldEvent.is_processed == True,
+            )
+            .order_by(WorldEvent.game_day.desc(), WorldEvent.id.desc())
+            .limit(limit)
+            .all()
+        )
+
+        if not events:
+            return ""
+
+        lines = ["## Recent Events"]
+        for event in events:
+            time_str = f"Day {event.game_day}"
+            if event.game_time:
+                time_str += f" {event.game_time}"
+            lines.append(f"- [{time_str}] {event.summary}")
+
+        return "\n".join(lines)
+
+    def _get_secrets_context(self, location_key: str) -> str:
+        """Get GM-only secrets for this scene."""
+        # Get secret facts about entities at this location
+        secrets = (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.session_id,
+                Fact.is_secret == True,
+            )
+            .limit(10)
+            .all()
+        )
+
+        if not secrets:
+            return ""
+
+        lines = ["## GM Secrets (hidden from player)"]
+        for fact in secrets:
+            lines.append(f"- {fact.subject_key}: {fact.predicate} = {fact.value}")
+
+        # Get foreshadowing hints that should be planted
+        foreshadowing = (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.session_id,
+                Fact.is_foreshadowing == True,
+                Fact.times_mentioned < 3,  # Not yet fully planted
+            )
+            .limit(3)
+            .all()
+        )
+
+        if foreshadowing:
+            lines.append("\n### Foreshadowing to Plant")
+            for hint in foreshadowing:
+                lines.append(
+                    f"- {hint.foreshadow_target or hint.value} "
+                    f"(mentioned {hint.times_mentioned}/3 times)"
+                )
+
+        return "\n".join(lines)
+
+    def get_quick_context(self, player_id: int, location_key: str) -> str:
+        """Get minimal context for quick updates.
+
+        Useful for EntityExtractor or brief checks.
+        """
+        time_state = (
+            self.db.query(TimeState)
+            .filter(TimeState.session_id == self.session_id)
+            .first()
+        )
+
+        player = (
+            self.db.query(Entity)
+            .filter(Entity.id == player_id)
+            .first()
+        )
+
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+
+        parts = []
+        if time_state:
+            parts.append(f"Day {time_state.current_day}, {time_state.current_time}")
+        if location:
+            parts.append(f"at {location.display_name}")
+        if player:
+            condition = self._get_condition_summary(player_id)
+            if condition:
+                parts.append(f"({condition})")
+
+        return " ".join(parts)
