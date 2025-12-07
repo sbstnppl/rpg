@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Structured AI character creation with field tracking** - Complete redesign of character creation
+  - `CharacterCreationState` dataclass tracks all required fields across 5 groups:
+    - Name, Attributes, Appearance, Background, Personality
+  - `hidden_backstory` field on Entity for secret GM content
+  - AI parses `field_updates` JSON to populate state incrementally
+  - AI parses `hidden_content` JSON for secret backstory elements
+  - Delegation support ("make this up", "you decide") for AI-generated values
+  - Character summary display before confirmation
+  - AI inference system for gameplay-relevant fields:
+    - `_infer_gameplay_fields()` analyzes background/personality
+    - Creates `EntitySkill` records from inferred skills
+    - Creates `CharacterPreferences` record with inferred traits
+    - Creates `NeedModifier` records for trait-based modifiers
+  - New prompt templates:
+    - `data/templates/character_creator.md` - Field-based character creation
+    - `data/templates/character_inference.md` - Gameplay field inference
+  - Alembic migration `543ae419033d_add_hidden_backstory_to_entities.py`
+  - 18 new tests for CharacterCreationState, field parsing, and application
+
 - **Character preferences and need modifiers system** - Comprehensive preference tracking
   - `CharacterPreferences` model replacing narrow `IntimacyProfile`
     - Food preferences: favorite_foods, disliked_foods, is_vegetarian, is_vegan, food_allergies

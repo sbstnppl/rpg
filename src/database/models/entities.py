@@ -134,6 +134,11 @@ class Entity(Base, TimestampMixin):
         nullable=True,
         comment="Personality traits and quirks",
     )
+    hidden_backstory: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Secret backstory elements (destiny, hidden powers) - never shown to player",
+    )
 
     # Status
     is_alive: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

@@ -4,6 +4,7 @@ import json
 import random
 import re
 import unicodedata
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -28,7 +29,7 @@ from src.cli.display import (
     prompt_background,
     prompt_character_name,
 )
-from src.cli.commands.session import get_db_session
+from src.database.connection import get_db_session
 from src.database.models.character_state import (
     CharacterNeeds,
     IntimacyProfile,
@@ -54,6 +55,136 @@ from src.schemas.settings import (
 
 app = typer.Typer(help="Character commands")
 console = Console()
+
+
+@dataclass
+class CharacterCreationState:
+    """Tracks the state of character creation across conversation turns.
+
+    All required fields must be filled before character creation can complete.
+    Hidden fields are set by AI and never shown to the player.
+    """
+
+    # Group 1: Name
+    name: str | None = None
+
+    # Group 2: Attributes (must have all 6)
+    attributes: dict[str, int] | None = None
+
+    # Group 3: Appearance
+    age: int | None = None
+    gender: str | None = None
+    build: str | None = None
+    hair_color: str | None = None
+    hair_style: str | None = None
+    eye_color: str | None = None
+    skin_tone: str | None = None
+    species: str | None = None
+
+    # Group 4: Background
+    background: str | None = None
+
+    # Group 5: Personality
+    personality_notes: str | None = None
+
+    # Hidden data (AI generates, player doesn't see)
+    hidden_backstory: str | None = None
+
+    # AI-inferred fields (generated after player confirms)
+    inferred_skills: list[dict] = field(default_factory=list)
+    inferred_preferences: dict = field(default_factory=dict)
+    inferred_need_modifiers: list[dict] = field(default_factory=list)
+
+    # Conversation history for context
+    conversation_history: list[str] = field(default_factory=list)
+
+    def get_missing_groups(self) -> list[str]:
+        """Return list of incomplete group names.
+
+        Returns:
+            List of group names that still need to be filled.
+        """
+        missing = []
+        if not self.name:
+            missing.append("name")
+        if not self.attributes:
+            missing.append("attributes")
+        if not all([self.age, self.gender, self.build, self.hair_color, self.eye_color]):
+            missing.append("appearance")
+        if not self.background:
+            missing.append("background")
+        if not self.personality_notes:
+            missing.append("personality")
+        return missing
+
+    def is_complete(self) -> bool:
+        """Check if all required groups are filled.
+
+        Returns:
+            True if character creation can proceed.
+        """
+        return len(self.get_missing_groups()) == 0
+
+    def get_current_state_summary(self) -> str:
+        """Generate a summary of current state for the AI prompt.
+
+        Returns:
+            Formatted string showing filled and missing fields.
+        """
+        lines = ["## Current Character State"]
+
+        # Name
+        if self.name:
+            lines.append(f"- Name: {self.name} ✓")
+        else:
+            lines.append("- Name: [not set]")
+
+        # Attributes
+        if self.attributes:
+            attrs = ", ".join(f"{k}={v}" for k, v in self.attributes.items())
+            lines.append(f"- Attributes: {attrs} ✓")
+        else:
+            lines.append("- Attributes: [not set]")
+
+        # Appearance
+        appearance_fields = {
+            "age": self.age,
+            "gender": self.gender,
+            "build": self.build,
+            "hair_color": self.hair_color,
+            "eye_color": self.eye_color,
+            "skin_tone": self.skin_tone,
+            "species": self.species,
+        }
+        filled = [f"{k}={v}" for k, v in appearance_fields.items() if v]
+        missing = [k for k, v in appearance_fields.items() if not v]
+        if filled:
+            lines.append(f"- Appearance: {', '.join(filled)}")
+        if missing:
+            lines.append(f"  (missing: {', '.join(missing)})")
+
+        # Background
+        if self.background:
+            preview = self.background[:50] + "..." if len(self.background) > 50 else self.background
+            lines.append(f"- Background: {preview} ✓")
+        else:
+            lines.append("- Background: [not set]")
+
+        # Personality
+        if self.personality_notes:
+            preview = self.personality_notes[:50] + "..." if len(self.personality_notes) > 50 else self.personality_notes
+            lines.append(f"- Personality: {preview} ✓")
+        else:
+            lines.append("- Personality: [not set]")
+
+        # Missing groups
+        missing_groups = self.get_missing_groups()
+        if missing_groups:
+            lines.append(f"\n**Still needed:** {', '.join(missing_groups)}")
+        else:
+            lines.append("\n**All required fields complete!**")
+
+        return "\n".join(lines)
 
 
 def _get_active_session(db) -> GameSession | None:
@@ -83,9 +214,7 @@ def status(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
 ) -> None:
     """Show player character status."""
-    db = get_db_session()
-
-    try:
+    with get_db_session() as db:
         if session_id:
             game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
         else:
@@ -133,18 +262,13 @@ def status(
             conditions=conditions if conditions else None,
         )
 
-    finally:
-        db.close()
-
 
 @app.command()
 def inventory(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
 ) -> None:
     """Show player inventory."""
-    db = get_db_session()
-
-    try:
+    with get_db_session() as db:
         if session_id:
             game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
         else:
@@ -183,18 +307,13 @@ def inventory(
 
         display_inventory(item_dicts)
 
-    finally:
-        db.close()
-
 
 @app.command()
 def equipment(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
 ) -> None:
     """Show equipped items."""
-    db = get_db_session()
-
-    try:
+    with get_db_session() as db:
         if session_id:
             game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
         else:
@@ -240,9 +359,6 @@ def equipment(
 
         display_inventory(item_dicts)
 
-    finally:
-        db.close()
-
 
 @app.command()
 def outfit(
@@ -260,9 +376,7 @@ def outfit(
 
     from src.managers.item_manager import ItemManager, BODY_SLOTS
 
-    db = get_db_session()
-
-    try:
+    with get_db_session() as db:
         if session_id:
             game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
         else:
@@ -339,9 +453,6 @@ def outfit(
         if visible_items:
             console.print(f"\n[bold]Visible:[/bold] {', '.join(visible_items)}")
 
-    finally:
-        db.close()
-
 
 def slugify(name: str) -> str:
     """Convert a name to a valid entity_key.
@@ -369,6 +480,7 @@ def _create_character_records(
     name: str,
     attributes: dict[str, int],
     background: str = "",
+    creation_state: CharacterCreationState | None = None,
 ) -> Entity:
     """Create all database records for a new character.
 
@@ -378,6 +490,7 @@ def _create_character_records(
         name: Character display name.
         attributes: Dict of attribute_key to value.
         background: Optional background text.
+        creation_state: Optional full state from AI-assisted creation.
 
     Returns:
         Created Entity.
@@ -397,7 +510,7 @@ def _create_character_records(
     if existing:
         raise ValueError(f"Session already has a player: {existing.display_name}")
 
-    # Create entity
+    # Create entity with all fields from state if available
     entity = Entity(
         session_id=game_session.id,
         entity_key=slugify(name),
@@ -407,6 +520,30 @@ def _create_character_records(
         is_active=True,
         background=background or None,
     )
+
+    # Apply appearance and other fields from creation state
+    if creation_state:
+        if creation_state.age:
+            entity.age = creation_state.age
+        if creation_state.gender:
+            entity.gender = creation_state.gender
+        if creation_state.build:
+            entity.build = creation_state.build
+        if creation_state.hair_color:
+            entity.hair_color = creation_state.hair_color
+        if creation_state.hair_style:
+            entity.hair_style = creation_state.hair_style
+        if creation_state.eye_color:
+            entity.eye_color = creation_state.eye_color
+        if creation_state.skin_tone:
+            entity.skin_tone = creation_state.skin_tone
+        if creation_state.species:
+            entity.species = creation_state.species
+        if creation_state.personality_notes:
+            entity.personality_notes = creation_state.personality_notes
+        if creation_state.hidden_backstory:
+            entity.hidden_backstory = creation_state.hidden_backstory
+
     db.add(entity)
     db.flush()
 
@@ -630,6 +767,243 @@ def _load_world_extraction_template() -> str:
     if template_path.exists():
         return template_path.read_text()
     return ""
+
+
+def _load_inference_template() -> str:
+    """Load the character inference prompt template.
+
+    Returns:
+        Template string.
+    """
+    template_path = Path(__file__).parent.parent.parent.parent / "data" / "templates" / "character_inference.md"
+    if template_path.exists():
+        return template_path.read_text()
+    return ""
+
+
+async def _infer_gameplay_fields(
+    state: CharacterCreationState,
+) -> dict | None:
+    """Infer gameplay-relevant fields from character background and personality.
+
+    Uses AI to analyze the character's background and personality to determine:
+    - Starting skills (based on background experiences)
+    - Character preferences (social tendency, food preferences, etc.)
+    - Need modifiers (how traits affect game needs)
+
+    Args:
+        state: Character creation state with background and personality.
+
+    Returns:
+        Dict with inferred_skills, inferred_preferences, inferred_need_modifiers,
+        or None if inference fails.
+    """
+    try:
+        from src.llm.factory import get_extraction_provider
+        from src.llm.message_types import Message, MessageRole
+    except ImportError:
+        return None
+
+    template = _load_inference_template()
+    if not template:
+        return None
+
+    prompt = template.format(
+        character_name=state.name or "Unknown",
+        age=state.age or "Unknown",
+        background=state.background or "No background provided",
+        personality=state.personality_notes or "No personality notes provided",
+    )
+
+    try:
+        provider = get_extraction_provider()
+        messages = [Message(role=MessageRole.USER, content=prompt)]
+        response = await provider.complete(messages)
+
+        # Parse JSON from response - look for the outermost JSON object
+        json_match = re.search(r'\{[\s\S]*\}', response.content)
+        if json_match:
+            result = json.loads(json_match.group())
+            return result
+    except Exception as e:
+        console.print(f"[dim]Inference warning: {e}[/dim]")
+
+    return None
+
+
+def _create_inferred_records(
+    db: Session,
+    game_session: GameSession,
+    entity: Entity,
+    inference: dict,
+) -> None:
+    """Create database records from AI inference results.
+
+    Creates:
+    - EntitySkill records for inferred skills
+    - CharacterPreferences record with inferred preferences
+    - NeedModifier records for inferred modifiers
+
+    Args:
+        db: Database session.
+        game_session: Game session.
+        entity: Player entity.
+        inference: Dict with inferred_skills, inferred_preferences, inferred_need_modifiers.
+    """
+    from src.database.models.character_preferences import (
+        CharacterPreferences,
+        NeedModifier,
+    )
+    from src.database.models.entities import EntitySkill
+    from src.database.models.enums import (
+        AlcoholTolerance,
+        DriveLevel,
+        IntimacyStyle,
+        ModifierSource,
+        SocialTendency,
+    )
+
+    # Create skills
+    skills_created = 0
+    for skill_data in inference.get("inferred_skills", []):
+        skill_key = skill_data.get("skill_key")
+        proficiency = skill_data.get("proficiency", 20)
+
+        if not skill_key:
+            continue
+
+        # Check for duplicate
+        existing = db.query(EntitySkill).filter(
+            EntitySkill.entity_id == entity.id,
+            EntitySkill.skill_key == skill_key,
+        ).first()
+        if existing:
+            continue
+
+        skill = EntitySkill(
+            entity_id=entity.id,
+            skill_key=skill_key,
+            proficiency_level=min(100, max(1, proficiency)),
+            experience_points=0,
+        )
+        db.add(skill)
+        skills_created += 1
+
+    # Create preferences
+    prefs_data = inference.get("inferred_preferences", {})
+    if prefs_data:
+        # Check for existing preferences
+        existing_prefs = db.query(CharacterPreferences).filter(
+            CharacterPreferences.entity_id == entity.id,
+        ).first()
+
+        if not existing_prefs:
+            # Map string enums to actual enum values
+            social_tendency = SocialTendency.AMBIVERT
+            if prefs_data.get("social_tendency"):
+                try:
+                    social_tendency = SocialTendency(prefs_data["social_tendency"].lower())
+                except ValueError:
+                    pass
+
+            drive_level = DriveLevel.MODERATE
+            if prefs_data.get("drive_level"):
+                try:
+                    drive_level = DriveLevel(prefs_data["drive_level"].lower())
+                except ValueError:
+                    pass
+
+            intimacy_style = IntimacyStyle.EMOTIONAL
+            if prefs_data.get("intimacy_style"):
+                try:
+                    intimacy_style = IntimacyStyle(prefs_data["intimacy_style"].lower())
+                except ValueError:
+                    pass
+
+            alcohol_tolerance = AlcoholTolerance.MODERATE
+            if prefs_data.get("alcohol_tolerance"):
+                try:
+                    alcohol_tolerance = AlcoholTolerance(prefs_data["alcohol_tolerance"].lower())
+                except ValueError:
+                    pass
+
+            prefs = CharacterPreferences(
+                entity_id=entity.id,
+                session_id=game_session.id,
+                # Food preferences
+                favorite_foods=prefs_data.get("favorite_foods"),
+                disliked_foods=prefs_data.get("disliked_foods"),
+                is_vegetarian=prefs_data.get("is_vegetarian", False),
+                is_vegan=prefs_data.get("is_vegan", False),
+                food_allergies=prefs_data.get("food_allergies"),
+                is_greedy_eater=prefs_data.get("is_greedy_eater", False),
+                is_picky_eater=prefs_data.get("is_picky_eater", False),
+                # Drink preferences
+                favorite_drinks=prefs_data.get("favorite_drinks"),
+                disliked_drinks=prefs_data.get("disliked_drinks"),
+                alcohol_tolerance=alcohol_tolerance,
+                is_alcoholic=prefs_data.get("is_alcoholic", False),
+                is_teetotaler=prefs_data.get("is_teetotaler", False),
+                # Intimacy (age-appropriate defaults)
+                drive_level=drive_level,
+                intimacy_style=intimacy_style,
+                attraction_preferences=prefs_data.get("attraction_preferences"),
+                # Social
+                social_tendency=social_tendency,
+                preferred_group_size=prefs_data.get("preferred_group_size", 3),
+                is_social_butterfly=prefs_data.get("is_social_butterfly", False),
+                is_loner=prefs_data.get("is_loner", False),
+                # Stamina
+                has_high_stamina=prefs_data.get("has_high_stamina", False),
+                has_low_stamina=prefs_data.get("has_low_stamina", False),
+                is_insomniac=prefs_data.get("is_insomniac", False),
+                is_heavy_sleeper=prefs_data.get("is_heavy_sleeper", False),
+                # Extra
+                extra_preferences=prefs_data.get("extra_preferences"),
+            )
+            db.add(prefs)
+
+    # Create need modifiers
+    modifiers_created = 0
+    for mod_data in inference.get("inferred_need_modifiers", []):
+        need_name = mod_data.get("need_name")
+        if not need_name:
+            continue
+
+        # Check for duplicate modifier from trait source
+        source_detail = mod_data.get("reason", "character_creation")[:100]
+        existing = db.query(NeedModifier).filter(
+            NeedModifier.entity_id == entity.id,
+            NeedModifier.need_name == need_name,
+            NeedModifier.modifier_source == ModifierSource.TRAIT,
+            NeedModifier.source_detail == source_detail,
+        ).first()
+        if existing:
+            continue
+
+        modifier = NeedModifier(
+            entity_id=entity.id,
+            session_id=game_session.id,
+            need_name=need_name,
+            modifier_source=ModifierSource.TRAIT,
+            source_detail=source_detail,
+            decay_rate_multiplier=mod_data.get("decay_rate_multiplier", 1.0),
+            satisfaction_multiplier=mod_data.get("satisfaction_multiplier", 1.0),
+            max_intensity_cap=mod_data.get("max_intensity_cap"),
+            threshold_adjustment=mod_data.get("threshold_adjustment", 0),
+            is_active=True,
+        )
+        db.add(modifier)
+        modifiers_created += 1
+
+    db.flush()
+
+    # Log results
+    if skills_created or modifiers_created:
+        console.print(
+            f"[dim]Inferred {skills_created} skills, "
+            f"{modifiers_created} need modifiers[/dim]"
+        )
 
 
 async def _extract_world_data(
@@ -857,6 +1231,116 @@ def _parse_character_complete(response: str) -> dict | None:
     return None
 
 
+def _parse_field_updates(response: str) -> dict | None:
+    """Parse field updates from AI response.
+
+    Looks for JSON blocks with field_updates key containing character data.
+
+    Args:
+        response: LLM response text.
+
+    Returns:
+        Dict with field updates if found, else None.
+
+    Example response format:
+        {"field_updates": {"name": "Finn", "age": 12, "gender": "male"}}
+    """
+    try:
+        # Look for field_updates JSON in markdown code blocks
+        code_block_match = re.search(
+            r'```json\s*(\{[^`]*"field_updates"[^`]*\})\s*```',
+            response,
+            re.DOTALL
+        )
+        if code_block_match:
+            data = json.loads(code_block_match.group(1))
+            if "field_updates" in data:
+                return data["field_updates"]
+
+        # Look for inline field_updates JSON
+        inline_match = re.search(
+            r'\{"field_updates":\s*(\{[^}]+\})\s*\}',
+            response,
+            re.DOTALL
+        )
+        if inline_match:
+            return json.loads(inline_match.group(1))
+
+    except json.JSONDecodeError:
+        pass
+    return None
+
+
+def _parse_hidden_content(response: str) -> dict | None:
+    """Parse hidden content from AI response.
+
+    Looks for JSON blocks with hidden_content key containing secret data.
+
+    Args:
+        response: LLM response text.
+
+    Returns:
+        Dict with hidden content if found, else None.
+
+    Example response format:
+        {"hidden_content": {"backstory": "Unknown to the character...", "traits": ["destiny-touched"]}}
+    """
+    try:
+        # Look for hidden_content JSON in markdown code blocks
+        code_block_match = re.search(
+            r'```json\s*(\{[^`]*"hidden_content"[^`]*\})\s*```',
+            response,
+            re.DOTALL
+        )
+        if code_block_match:
+            data = json.loads(code_block_match.group(1))
+            if "hidden_content" in data:
+                return data["hidden_content"]
+
+        # Look for inline hidden_content JSON
+        inline_match = re.search(
+            r'\{"hidden_content":\s*\{([^}]+)\}\s*\}',
+            response,
+            re.DOTALL
+        )
+        if inline_match:
+            return json.loads("{" + inline_match.group(1) + "}")
+
+    except json.JSONDecodeError:
+        pass
+    return None
+
+
+def _apply_field_updates(state: CharacterCreationState, updates: dict) -> None:
+    """Apply field updates to character creation state.
+
+    Args:
+        state: Current character creation state.
+        updates: Dict of field updates from AI.
+    """
+    # Map update keys to state attributes
+    field_mapping = {
+        "name": "name",
+        "display_name": "name",
+        "age": "age",
+        "gender": "gender",
+        "build": "build",
+        "hair_color": "hair_color",
+        "hair_style": "hair_style",
+        "eye_color": "eye_color",
+        "skin_tone": "skin_tone",
+        "species": "species",
+        "background": "background",
+        "personality": "personality_notes",
+        "personality_notes": "personality_notes",
+        "attributes": "attributes",
+    }
+
+    for key, value in updates.items():
+        if key in field_mapping:
+            setattr(state, field_mapping[key], value)
+
+
 def _strip_json_blocks(text: str) -> str:
     """Remove JSON blocks from AI response before displaying to user.
 
@@ -874,9 +1358,86 @@ def _strip_json_blocks(text: str) -> str:
     # Strip inline JSON blocks with our special keys
     text = re.sub(r'\{[^{}]*"suggested_attributes"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
     text = re.sub(r'\{[^{}]*"character_complete"[^{}]*\}', '', text)
+    text = re.sub(r'\{[^{}]*"field_updates"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
+    text = re.sub(r'\{[^{}]*"hidden_content"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
     # Clean up extra whitespace left behind
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
+
+
+def _detect_game_start_intent(player_input: str) -> bool:
+    """Detect if player wants to start the game.
+
+    Args:
+        player_input: The player's message.
+
+    Returns:
+        True if input indicates desire to start playing.
+    """
+    input_lower = player_input.lower()
+
+    # Direct game-start phrases
+    game_start_phrases = [
+        "start playing",
+        "let's start",
+        "let's play",
+        "let's go",
+        "let's begin",
+        "start the game",
+        "begin the game",
+        "ready to play",
+        "ready to start",
+        "good to go",
+        "i'm ready",
+        "im ready",
+        "done",
+        "i'm done",
+        "im done",
+        "all done",
+        "that's it",
+        "thats it",
+        "that's all",
+        "thats all",
+    ]
+
+    return any(phrase in input_lower for phrase in game_start_phrases)
+
+
+def _extract_name_from_history(conversation_history: list[str]) -> str | None:
+    """Extract character name from conversation history.
+
+    Looks for patterns where the AI refers to the character by name.
+
+    Args:
+        conversation_history: List of conversation messages.
+
+    Returns:
+        Extracted name or None.
+    """
+    # Join history and look for common name patterns from AI responses
+    history_text = "\n".join(conversation_history)
+
+    # Patterns like "Finn is a...", "name is Finn", "called Finn", "character Finn"
+    patterns = [
+        r"(?:name is|named|called|character)\s+([A-Z][a-z]+)",
+        r"([A-Z][a-z]+)\s+is\s+(?:a\s+)?(?:\d+[- ]year[- ]old|young|an?\s+)",
+        r"([A-Z][a-z]+)'s\s+(?:character|attributes|background|stats)",
+        r"for\s+([A-Z][a-z]+)(?:\s+are)?:",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, history_text)
+        if match:
+            name = match.group(1)
+            # Filter out common false positives
+            if name.lower() not in (
+                "the", "this", "that", "here", "there", "what", "would",
+                "strength", "dexterity", "constitution", "intelligence",
+                "wisdom", "charisma", "player", "character", "assistant",
+            ):
+                return name
+
+    return None
 
 
 def _validate_ai_attributes(
@@ -912,14 +1473,14 @@ def _validate_ai_attributes(
 
 def _ai_character_creation(
     schema: SettingSchema,
-) -> tuple[str, dict[str, int], str, str]:
+) -> CharacterCreationState:
     """Run AI-assisted character creation.
 
     Args:
         schema: Setting schema.
 
     Returns:
-        Tuple of (name, attributes, background, conversation_history).
+        CharacterCreationState with all fields populated.
 
     Raises:
         typer.Exit: If creation is cancelled.
@@ -930,14 +1491,17 @@ def _ai_character_creation(
 
 async def _ai_character_creation_async(
     schema: SettingSchema,
-) -> tuple[str, dict[str, int], str, str]:
+) -> CharacterCreationState:
     """Async implementation of AI-assisted character creation.
+
+    Uses CharacterCreationState to track all required fields and ensures
+    character is complete before allowing creation.
 
     Args:
         schema: Setting schema.
 
     Returns:
-        Tuple of (name, attributes, background, conversation_history).
+        CharacterCreationState with all fields populated.
 
     Raises:
         typer.Exit: If creation is cancelled.
@@ -957,20 +1521,8 @@ async def _ai_character_creation_async(
         for attr in schema.attributes
     )
 
-    conversation_history = []
-    stage = "concept"
-    stage_descriptions = {
-        "concept": "Ask about their character concept and playstyle",
-        "name": "Help choose a fitting character name",
-        "attributes": "Suggest attribute allocation based on concept",
-        "background": "Develop the character's backstory",
-        "review": "Confirm the final character",
-    }
-
-    # Collected data
-    character_name = ""
-    character_attributes: dict[str, int] = {}
-    character_background = ""
+    # Initialize state
+    state = CharacterCreationState()
 
     console.print("\n[bold magenta]═══ AI-Assisted Character Creation ═══[/bold magenta]\n")
     console.print("[dim]Chat with the AI to create your character. Type 'quit' to cancel.[/dim]\n")
@@ -982,15 +1534,18 @@ Setting: {schema.name}
 Attributes available: {attributes_list}
 Point-buy rules: {schema.point_buy_total} points, values {schema.point_buy_min}-{schema.point_buy_max}
 
-Start by greeting the player and asking what kind of character they want to create."""
+Required field groups: name, attributes, appearance, background, personality.
+
+Start by greeting the player and asking what kind of character they want to create.
+When they provide information, output field_updates JSON to record it."""
 
     try:
         from src.llm.message_types import Message, MessageRole
 
         messages = [Message(role=MessageRole.USER, content=initial_prompt)]
         response = await provider.complete(messages)
-        display_ai_message(response.content)
-        conversation_history.append(f"Assistant: {response.content}")
+        display_ai_message(_strip_json_blocks(response.content))
+        state.conversation_history.append(f"Assistant: {response.content}")
 
     except Exception as e:
         display_error(f"Failed to connect to AI: {e}")
@@ -998,7 +1553,7 @@ Start by greeting the player and asking what kind of character they want to crea
         raise typer.Exit(1)
 
     # Conversation loop
-    max_turns = 20
+    max_turns = 30  # Increased for more field groups
     for turn in range(max_turns):
         player_input = prompt_ai_input()
 
@@ -1006,9 +1561,39 @@ Start by greeting the player and asking what kind of character they want to crea
             display_info("Character creation cancelled.")
             raise typer.Exit(0)
 
-        conversation_history.append(f"Player: {player_input}")
+        # Check for game-start intent
+        if _detect_game_start_intent(player_input):
+            # Try to extract name from history if missing
+            if not state.name:
+                extracted_name = _extract_name_from_history(state.conversation_history)
+                if extracted_name:
+                    state.name = extracted_name
 
-        # Build prompt
+            if state.is_complete():
+                # All fields filled - show summary and confirm
+                _display_state_summary(state)
+
+                confirm = (
+                    console.input("\n[bold cyan]Create this character? (y/n): [/bold cyan]")
+                    .strip()
+                    .lower()
+                )
+                if confirm in ("y", "yes"):
+                    return state
+                else:
+                    console.print("[dim]Let's continue refining...[/dim]")
+                    continue
+            else:
+                # Show what's missing
+                missing = state.get_missing_groups()
+                console.print(
+                    f"[yellow]Almost there! Still need: {', '.join(missing)}[/yellow]"
+                )
+                continue
+
+        state.conversation_history.append(f"Player: {player_input}")
+
+        # Build prompt with current state
         prompt = template.format(
             setting_name=schema.name,
             setting_description=f"{schema.name.title()} setting",
@@ -1016,9 +1601,8 @@ Start by greeting the player and asking what kind of character they want to crea
             point_buy_total=schema.point_buy_total,
             point_buy_min=schema.point_buy_min,
             point_buy_max=schema.point_buy_max,
-            conversation_history="\n".join(conversation_history[-10:]),  # Last 10 messages
-            stage=stage,
-            stage_description=stage_descriptions.get(stage, ""),
+            character_state=state.get_current_state_summary(),
+            conversation_history="\n".join(state.conversation_history[-10:]),
             player_input=player_input,
         )
 
@@ -1027,71 +1611,131 @@ Start by greeting the player and asking what kind of character they want to crea
             response = await provider.complete(messages)
             ai_response = response.content
 
-            conversation_history.append(f"Assistant: {ai_response}")
+            state.conversation_history.append(f"Assistant: {ai_response}")
 
-            # Check for suggested attributes
+            # Parse and apply field updates
+            field_updates = _parse_field_updates(ai_response)
+            if field_updates:
+                # Validate attributes if provided
+                if "attributes" in field_updates:
+                    is_valid, error = _validate_ai_attributes(field_updates["attributes"], schema)
+                    if not is_valid:
+                        console.print(f"[yellow]Note: Attributes invalid: {error}[/yellow]")
+                        del field_updates["attributes"]
+
+                _apply_field_updates(state, field_updates)
+
+            # Also check for old-style suggested_attributes (backward compatibility)
             suggested = _parse_attribute_suggestion(ai_response)
-            if suggested:
+            if suggested and not state.attributes:
                 is_valid, error = _validate_ai_attributes(suggested, schema)
                 if is_valid:
-                    character_attributes = suggested
-                    display_ai_message(_strip_json_blocks(ai_response))
+                    state.attributes = suggested
                     display_suggested_attributes(suggested)
-                    stage = "background" if character_name else "name"
+
+            # Parse hidden content
+            hidden = _parse_hidden_content(ai_response)
+            if hidden:
+                if "backstory" in hidden:
+                    state.hidden_backstory = hidden["backstory"]
+
+            # Display AI response (stripped of JSON)
+            display_ai_message(_strip_json_blocks(ai_response))
+
+            # Check if state is now complete
+            if state.is_complete():
+                console.print("\n[bold green]All fields complete![/bold green]")
+                _display_state_summary(state)
+
+                confirm = (
+                    console.input("\n[bold cyan]Create this character? (y/n): [/bold cyan]")
+                    .strip()
+                    .lower()
+                )
+                if confirm in ("y", "yes"):
+                    return state
                 else:
-                    display_ai_message(_strip_json_blocks(ai_response))
-                    console.print(f"[yellow]Note: Suggested attributes invalid: {error}[/yellow]")
-            else:
-                display_ai_message(_strip_json_blocks(ai_response))
-
-            # Check for completion
-            complete = _parse_character_complete(ai_response)
-            if complete:
-                character_name = complete.get("name", character_name)
-                if "attributes" in complete:
-                    character_attributes = complete["attributes"]
-                character_background = complete.get("background", character_background)
-
-                # Validate and confirm
-                if character_name and character_attributes:
-                    console.print("\n[bold green]Character creation complete![/bold green]\n")
-                    display_character_summary(character_name, character_attributes, character_background)
-
-                    confirm = console.input("\n[bold cyan]Create this character? (y/n): [/bold cyan]").strip().lower()
-                    if confirm in ("y", "yes"):
-                        history_text = "\n".join(conversation_history)
-                        return character_name, character_attributes, character_background, history_text
-                    else:
-                        console.print("[dim]Let's continue refining...[/dim]")
-                        stage = "concept"
-
-            # Detect name if mentioned
-            if not character_name and "name" in player_input.lower():
-                # Try to extract a name from the conversation
-                name_match = re.search(r'(?:name is|called|named)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)', player_input)
-                if name_match:
-                    character_name = name_match.group(1)
-                    stage = "attributes" if not character_attributes else "background"
+                    console.print("[dim]Let's continue refining...[/dim]")
 
         except Exception as e:
             display_error(f"AI error: {e}")
             continue
 
-    # If we reach max turns, offer manual completion
+    # If we reach max turns, offer manual completion for missing fields
     display_info("Let's wrap up character creation.")
 
-    if not character_name:
-        character_name = prompt_character_name()
+    if not state.name:
+        state.name = prompt_character_name()
 
-    if not character_attributes:
+    if not state.attributes:
         console.print("\n[dim]Falling back to point-buy for attributes...[/dim]")
-        character_attributes = _point_buy_interactive(schema)
+        state.attributes = _point_buy_interactive(schema)
 
-    if not character_background:
-        character_background = prompt_background()
+    if not state.background:
+        state.background = prompt_background()
 
-    history_text = "\n".join(conversation_history)
-    return character_name, character_attributes, character_background, history_text
+    # Fill in minimal defaults for appearance if missing
+    if not state.age:
+        state.age = 25  # Default age
+    if not state.gender:
+        state.gender = "unknown"
+    if not state.build:
+        state.build = "average"
+    if not state.hair_color:
+        state.hair_color = "brown"
+    if not state.eye_color:
+        state.eye_color = "brown"
+
+    if not state.personality_notes:
+        state.personality_notes = "A curious adventurer"
+
+    return state
+
+
+def _display_state_summary(state: CharacterCreationState) -> None:
+    """Display a summary of the character state.
+
+    Args:
+        state: Current character creation state.
+    """
+    from rich.panel import Panel
+    from rich.table import Table
+
+    # Build summary text
+    lines = []
+    lines.append(f"[bold]Name:[/bold] {state.name}")
+    lines.append(f"[bold]Age:[/bold] {state.age}  [bold]Gender:[/bold] {state.gender}  [bold]Species:[/bold] {state.species or 'Human'}")
+    lines.append("")
+    lines.append("[bold]Appearance:[/bold]")
+    lines.append(f"  Build: {state.build}")
+    lines.append(f"  Hair: {state.hair_color}" + (f" ({state.hair_style})" if state.hair_style else ""))
+    lines.append(f"  Eyes: {state.eye_color}")
+    if state.skin_tone:
+        lines.append(f"  Skin: {state.skin_tone}")
+    lines.append("")
+
+    if state.attributes:
+        lines.append("[bold]Attributes:[/bold]")
+        attr_line = "  " + "  ".join(
+            f"{k.upper()[:3]}: {v}" for k, v in state.attributes.items()
+        )
+        lines.append(attr_line)
+        lines.append("")
+
+    if state.background:
+        bg_preview = state.background[:100] + "..." if len(state.background) > 100 else state.background
+        lines.append(f"[bold]Background:[/bold] {bg_preview}")
+        lines.append("")
+
+    if state.personality_notes:
+        lines.append(f"[bold]Personality:[/bold] {state.personality_notes}")
+
+    panel = Panel(
+        "\n".join(lines),
+        title="Character Summary",
+        border_style="green",
+    )
+    console.print(panel)
 
 
 @app.command()
@@ -1104,9 +1748,7 @@ def create(
 
     Use --ai for conversational AI-assisted creation, or --random for dice rolls.
     """
-    db = get_db_session()
-
-    try:
+    with get_db_session() as db:
         # Get session
         if session_id:
             game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
@@ -1128,12 +1770,15 @@ def create(
         # Get attributes from schema
         schema = get_setting_schema(game_session.setting)
 
-        # Track conversation history for world extraction (AI mode only)
-        conversation_history = ""
+        # Track state for AI mode, simple values for other modes
+        creation_state: CharacterCreationState | None = None
 
         if ai_assisted:
-            # AI-assisted character creation
-            name, attributes, background, conversation_history = _ai_character_creation(schema)
+            # AI-assisted character creation - returns full state
+            creation_state = _ai_character_creation(schema)
+            name = creation_state.name
+            attributes = creation_state.attributes
+            background = creation_state.background
         elif random_stats:
             console.print("\n[bold cyan]═══ Character Creation ═══[/bold cyan]\n")
             name = prompt_character_name()
@@ -1166,6 +1811,7 @@ def create(
                 name=name,
                 attributes=attributes,
                 background=background,
+                creation_state=creation_state,  # Pass full state for AI mode
             )
 
             # Create starting equipment
@@ -1179,20 +1825,27 @@ def create(
             # Create intimacy profile with defaults
             _create_intimacy_profile(db, game_session, entity)
 
-            # If AI-assisted, extract world data and create shadow entities
-            if ai_assisted and conversation_history:
+            # If AI-assisted, extract world data and infer gameplay fields
+            if ai_assisted and creation_state:
                 import asyncio
+
+                # Extract world data (NPCs, locations from backstory)
+                conversation_history = "\n".join(creation_state.conversation_history)
                 console.print("[dim]Extracting world from backstory...[/dim]")
                 world_data = asyncio.run(_extract_world_data(
                     character_output=conversation_history,
                     character_name=name,
-                    character_background=background,
+                    character_background=background or "",
                     setting_name=game_session.setting,
                 ))
                 if world_data:
                     _create_world_from_extraction(db, game_session, entity, world_data)
 
-            db.commit()
+                # Infer gameplay-relevant fields (skills, preferences, modifiers)
+                console.print("[dim]Inferring skills and preferences...[/dim]")
+                inference = asyncio.run(_infer_gameplay_fields(creation_state))
+                if inference:
+                    _create_inferred_records(db, game_session, entity, inference)
 
             console.print()
             display_success(f"Character '{name}' created successfully!")
@@ -1214,6 +1867,3 @@ def create(
         except ValueError as e:
             display_error(str(e))
             raise typer.Exit(1)
-
-    finally:
-        db.close()
