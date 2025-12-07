@@ -504,3 +504,208 @@ class EntityManager(BaseManager):
         entity.is_active = False
         self.db.flush()
         return entity
+
+    # ==================== Appearance Methods ====================
+
+    def update_appearance(
+        self,
+        entity_key: str,
+        appearance_data: dict[str, str | int | None],
+    ) -> Entity:
+        """Update entity appearance fields and sync to JSON.
+
+        Args:
+            entity_key: Entity key.
+            appearance_data: Dict of appearance field values.
+                Valid keys: age, age_apparent, gender, height, build,
+                hair_color, hair_style, eye_color, skin_tone, species,
+                distinguishing_features, voice_description.
+
+        Returns:
+            Updated Entity.
+
+        Raises:
+            ValueError: If entity not found or invalid field name.
+        """
+        entity = self.get_entity(entity_key)
+        if entity is None:
+            raise ValueError(f"Entity not found: {entity_key}")
+
+        for field, value in appearance_data.items():
+            entity.set_appearance_field(field, value)
+
+        self.db.flush()
+        return entity
+
+    def get_entities_by_appearance(
+        self,
+        **kwargs,
+    ) -> list[Entity]:
+        """Find entities matching appearance criteria.
+
+        Args:
+            **kwargs: Appearance field filters (e.g., hair_color="red").
+                Supports: age, gender, height, build, hair_color, eye_color,
+                skin_tone, species.
+
+        Returns:
+            List of matching entities.
+        """
+        query = self.db.query(Entity).filter(
+            Entity.session_id == self.session_id,
+            Entity.is_alive == True,
+        )
+
+        valid_fields = Entity.APPEARANCE_FIELDS
+        for field, value in kwargs.items():
+            if field not in valid_fields:
+                raise ValueError(f"Invalid appearance field: {field}")
+            query = query.filter(getattr(Entity, field) == value)
+
+        return query.all()
+
+    def get_appearance_summary(self, entity_key: str) -> str:
+        """Get human-readable appearance summary for an entity.
+
+        Args:
+            entity_key: Entity key.
+
+        Returns:
+            Formatted appearance description.
+
+        Raises:
+            ValueError: If entity not found.
+        """
+        entity = self.get_entity(entity_key)
+        if entity is None:
+            raise ValueError(f"Entity not found: {entity_key}")
+
+        return entity.get_appearance_summary()
+
+    # ==================== Shadow Entity Methods ====================
+
+    def create_shadow_entity(
+        self,
+        entity_key: str,
+        display_name: str,
+        entity_type: EntityType = EntityType.NPC,
+        background: str | None = None,
+        **kwargs,
+    ) -> Entity:
+        """Create a shadow entity (mentioned but not yet appeared).
+
+        Shadow entities are created from backstory mentions and remain
+        inactive until they appear in the narrative. They have minimal
+        data that gets filled in on first appearance.
+
+        Args:
+            entity_key: Unique key for the entity.
+            display_name: Display name.
+            entity_type: Type of entity (default: NPC).
+            background: Brief description from backstory.
+            **kwargs: Additional fields (appearance, personality, etc.)
+
+        Returns:
+            Created shadow Entity.
+        """
+        entity = Entity(
+            session_id=self.session_id,
+            entity_key=entity_key,
+            display_name=display_name,
+            entity_type=entity_type,
+            is_alive=True,
+            is_active=False,  # Shadow entities start inactive
+            background=background,
+            first_appeared_turn=None,  # Not yet appeared
+            **kwargs,
+        )
+        self.db.add(entity)
+        self.db.flush()
+        return entity
+
+    def activate_shadow_entity(
+        self,
+        entity_key: str,
+        current_turn: int,
+        appearance_data: dict[str, str | int | None] | None = None,
+    ) -> Entity:
+        """Activate a shadow entity when it first appears in the narrative.
+
+        This locks in the entity's appearance and marks the first appearance turn.
+
+        Args:
+            entity_key: Entity key.
+            current_turn: Current game turn number.
+            appearance_data: Appearance details extracted from GM description.
+
+        Returns:
+            Activated Entity.
+
+        Raises:
+            ValueError: If entity not found or already active.
+        """
+        entity = self.get_entity(entity_key)
+        if entity is None:
+            raise ValueError(f"Entity not found: {entity_key}")
+
+        if entity.is_active and entity.first_appeared_turn is not None:
+            raise ValueError(f"Entity already activated: {entity_key}")
+
+        # Mark first appearance
+        entity.is_active = True
+        entity.first_appeared_turn = current_turn
+
+        # Lock in appearance if provided
+        if appearance_data:
+            for field, value in appearance_data.items():
+                if field in Entity.APPEARANCE_FIELDS:
+                    entity.set_appearance_field(field, value)
+
+        self.db.flush()
+        return entity
+
+    def get_shadow_entities(self) -> list[Entity]:
+        """Get all shadow entities (mentioned but not appeared).
+
+        Returns:
+            List of inactive entities with no first_appeared_turn.
+        """
+        return (
+            self.db.query(Entity)
+            .filter(
+                Entity.session_id == self.session_id,
+                Entity.is_active == False,
+                Entity.first_appeared_turn.is_(None),
+            )
+            .all()
+        )
+
+    def get_or_create_entity(
+        self,
+        entity_key: str,
+        display_name: str,
+        entity_type: EntityType,
+        **kwargs,
+    ) -> tuple[Entity, bool]:
+        """Get existing entity or create new one.
+
+        Args:
+            entity_key: Entity key.
+            display_name: Display name (used if creating).
+            entity_type: Entity type.
+            **kwargs: Additional fields for creation.
+
+        Returns:
+            Tuple of (Entity, created: bool).
+        """
+        entity = self.get_entity(entity_key)
+        if entity is not None:
+            return entity, False
+
+        entity = self.create_entity(
+            entity_key=entity_key,
+            display_name=display_name,
+            entity_type=entity_type,
+            **kwargs,
+        )
+        return entity, True

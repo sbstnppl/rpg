@@ -67,20 +67,55 @@
     }
   },
   "equipment_slots": [
-    {"key": "head", "display_name": "Head", "layers": 1},
-    {"key": "neck", "display_name": "Neck", "layers": 1},
-    {"key": "torso", "display_name": "Torso", "layers": 3},
-    {"key": "back", "display_name": "Back", "layers": 1},
-    {"key": "waist", "display_name": "Waist", "layers": 1},
-    {"key": "hands", "display_name": "Hands", "layers": 2},
-    {"key": "legs", "display_name": "Legs", "layers": 2},
-    {"key": "feet", "display_name": "Feet", "layers": 2},
-    {"key": "main_hand", "display_name": "Main Hand", "layers": 1},
-    {"key": "off_hand", "display_name": "Off Hand", "layers": 1},
-    {"key": "ring_left", "display_name": "Ring (Left)", "layers": 1},
-    {"key": "ring_right", "display_name": "Ring (Right)", "layers": 1}
+    {"key": "head", "display_name": "Head", "max_layers": 2},
+    {"key": "face", "display_name": "Face", "max_layers": 1},
+    {"key": "ear_left", "display_name": "Left Ear", "max_layers": 2},
+    {"key": "ear_right", "display_name": "Right Ear", "max_layers": 2},
+    {"key": "neck", "display_name": "Neck", "max_layers": 2},
+    {"key": "torso", "display_name": "Torso", "max_layers": 4},
+    {"key": "legs", "display_name": "Legs", "max_layers": 3},
+    {"key": "full_body", "display_name": "Full Body", "max_layers": 1, "covers": ["torso", "legs"]},
+    {"key": "back", "display_name": "Back", "max_layers": 2},
+    {"key": "waist", "display_name": "Waist", "max_layers": 2},
+    {"key": "forearm_left", "display_name": "Left Wrist", "max_layers": 2},
+    {"key": "forearm_right", "display_name": "Right Wrist", "max_layers": 2},
+    {"key": "hand_left", "display_name": "Left Hand", "max_layers": 2},
+    {"key": "hand_right", "display_name": "Right Hand", "max_layers": 2},
+    {"key": "main_hand", "display_name": "Main Hand", "max_layers": 1},
+    {"key": "off_hand", "display_name": "Off Hand", "max_layers": 1},
+    {"key": "thumb_left", "display_name": "Left Thumb", "max_layers": 1},
+    {"key": "index_left", "display_name": "Left Index", "max_layers": 1},
+    {"key": "middle_left", "display_name": "Left Middle", "max_layers": 1},
+    {"key": "ring_left", "display_name": "Left Ring Finger", "max_layers": 1},
+    {"key": "pinky_left", "display_name": "Left Pinky", "max_layers": 1},
+    {"key": "thumb_right", "display_name": "Right Thumb", "max_layers": 1},
+    {"key": "index_right", "display_name": "Right Index", "max_layers": 1},
+    {"key": "middle_right", "display_name": "Right Middle", "max_layers": 1},
+    {"key": "ring_right", "display_name": "Right Ring Finger", "max_layers": 1},
+    {"key": "pinky_right", "display_name": "Right Pinky", "max_layers": 1},
+    {"key": "feet_socks", "display_name": "Feet (Socks)", "max_layers": 1},
+    {"key": "feet_shoes", "display_name": "Feet (Shoes)", "max_layers": 1}
+  ],
+  "bonus_slots": [
+    {"key": "pocket_left", "display_name": "Left Pocket", "max_layers": 1},
+    {"key": "pocket_right", "display_name": "Right Pocket", "max_layers": 1},
+    {"key": "back_pocket_left", "display_name": "Left Back Pocket", "max_layers": 1},
+    {"key": "back_pocket_right", "display_name": "Right Back Pocket", "max_layers": 1},
+    {"key": "belt_pouch_1", "display_name": "Belt Pouch 1", "max_layers": 1},
+    {"key": "belt_pouch_2", "display_name": "Belt Pouch 2", "max_layers": 1},
+    {"key": "belt_pouch_3", "display_name": "Belt Pouch 3", "max_layers": 1},
+    {"key": "backpack_main", "display_name": "Backpack (Main)", "max_layers": 1},
+    {"key": "backpack_side", "display_name": "Backpack (Side)", "max_layers": 1}
   ],
   "starting_equipment": [
+    {
+      "item_key": "wool_socks",
+      "display_name": "Wool Socks",
+      "item_type": "clothing",
+      "body_slot": "feet_socks",
+      "body_layer": 0,
+      "description": "Simple wool socks for warmth"
+    },
     {
       "item_key": "simple_tunic",
       "display_name": "Simple Tunic",
@@ -95,21 +130,31 @@
       "item_type": "clothing",
       "body_slot": "legs",
       "body_layer": 0,
-      "description": "Simple cloth trousers"
+      "description": "Simple cloth trousers",
+      "provides_slots": ["pocket_left", "pocket_right"]
     },
     {
       "item_key": "leather_boots",
       "display_name": "Leather Boots",
       "item_type": "clothing",
-      "body_slot": "feet",
+      "body_slot": "feet_shoes",
       "body_layer": 0,
       "description": "Sturdy leather boots for traveling"
+    },
+    {
+      "item_key": "leather_belt",
+      "display_name": "Leather Belt",
+      "item_type": "clothing",
+      "body_slot": "waist",
+      "body_layer": 0,
+      "description": "A sturdy leather belt with loops for pouches",
+      "provides_slots": ["belt_pouch_1", "belt_pouch_2"]
     },
     {
       "item_key": "belt_pouch",
       "display_name": "Belt Pouch",
       "item_type": "container",
-      "body_slot": "waist",
+      "body_slot": "belt_pouch_1",
       "body_layer": 0,
       "description": "A small leather pouch worn on the belt"
     },

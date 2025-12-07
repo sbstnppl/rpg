@@ -53,11 +53,74 @@ class Entity(Base, TimestampMixin):
         nullable=False,
     )
 
-    # Appearance (persistent)
+    # Appearance JSON (for extras and image generation cache)
     appearance: Mapped[dict | None] = mapped_column(
         JSON,
         nullable=True,
-        comment="Physical description: height, build, hair, eyes, etc.",
+        comment="Extended appearance data and setting-specific extras",
+    )
+
+    # Dedicated appearance columns (for queryability and type safety)
+    # These are synced to appearance JSON via property setters
+    age: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Numeric age in years",
+    )
+    age_apparent: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Apparent age description (e.g., 'early 20s', 'elderly')",
+    )
+    gender: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Gender identity (free-text for inclusivity)",
+    )
+    height: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Height (e.g., '5\\'10\"', 'tall', 'short')",
+    )
+    build: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Body build (e.g., 'athletic', 'slim', 'stocky')",
+    )
+    hair_color: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Hair color (e.g., 'blonde', 'dark brown')",
+    )
+    hair_style: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Hair style (e.g., 'long wavy', 'buzz cut', 'ponytail')",
+    )
+    eye_color: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Eye color (e.g., 'blue', 'brown', 'heterochromatic')",
+    )
+    skin_tone: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Skin tone (e.g., 'fair', 'tan', 'dark', 'olive')",
+    )
+    species: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Species/race (e.g., 'human', 'half-elf', 'android')",
+    )
+    distinguishing_features: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Notable features (scars, tattoos, birthmarks, etc.)",
+    )
+    voice_description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Voice characteristics (e.g., 'deep and gravelly', 'melodic')",
     )
 
     # Background/personality
@@ -116,8 +179,100 @@ class Entity(Base, TimestampMixin):
         UniqueConstraint("session_id", "entity_key", name="uq_entity_session_key"),
     )
 
+    # List of appearance fields that sync to JSON
+    APPEARANCE_FIELDS = [
+        "age", "age_apparent", "gender", "height", "build",
+        "hair_color", "hair_style", "eye_color", "skin_tone",
+        "species", "distinguishing_features", "voice_description",
+    ]
+
     def __repr__(self) -> str:
         return f"<Entity {self.entity_key} ({self.entity_type.value})>"
+
+    def sync_appearance_to_json(self) -> None:
+        """Sync all dedicated appearance columns to the JSON appearance field.
+
+        Call this after bulk updates to ensure JSON stays in sync.
+        The JSON field contains both the synced columns AND any extras.
+        """
+        if self.appearance is None:
+            self.appearance = {}
+
+        for field in self.APPEARANCE_FIELDS:
+            value = getattr(self, field)
+            if value is not None:
+                self.appearance[field] = value
+            elif field in self.appearance:
+                # Remove from JSON if column is None
+                del self.appearance[field]
+
+    def set_appearance_field(self, field: str, value: str | int | None) -> None:
+        """Set an appearance field and sync to JSON.
+
+        Args:
+            field: Field name (must be in APPEARANCE_FIELDS)
+            value: Value to set (or None to clear)
+
+        Raises:
+            ValueError: If field is not a valid appearance field
+        """
+        if field not in self.APPEARANCE_FIELDS:
+            raise ValueError(f"Unknown appearance field: {field}")
+
+        setattr(self, field, value)
+
+        # Sync to JSON
+        if self.appearance is None:
+            self.appearance = {}
+
+        if value is not None:
+            self.appearance[field] = value
+        elif field in self.appearance:
+            del self.appearance[field]
+
+    def get_appearance_summary(self) -> str:
+        """Generate a readable appearance summary for GM context.
+
+        Returns:
+            Human-readable description of the entity's appearance.
+        """
+        parts = []
+
+        # Demographics
+        if self.age:
+            parts.append(f"{self.age} years old")
+        elif self.age_apparent:
+            parts.append(self.age_apparent)
+
+        if self.gender:
+            parts.append(self.gender)
+
+        if self.species and self.species.lower() != "human":
+            parts.append(self.species)
+
+        # Physical
+        if self.height:
+            parts.append(self.height)
+        if self.build:
+            parts.append(f"{self.build} build")
+
+        # Features
+        features = []
+        if self.hair_color or self.hair_style:
+            hair = " ".join(filter(None, [self.hair_color, self.hair_style, "hair"]))
+            features.append(hair)
+        if self.eye_color:
+            features.append(f"{self.eye_color} eyes")
+        if self.skin_tone:
+            features.append(f"{self.skin_tone} skin")
+
+        if features:
+            parts.append(", ".join(features))
+
+        if self.distinguishing_features:
+            parts.append(self.distinguishing_features)
+
+        return ". ".join(parts) if parts else "No appearance description available."
 
 
 class EntityAttribute(Base):

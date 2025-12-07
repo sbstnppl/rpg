@@ -70,20 +70,60 @@
     }
   },
   "equipment_slots": [
-    {"key": "head", "display_name": "Head", "layers": 1},
-    {"key": "neck", "display_name": "Neck", "layers": 1},
-    {"key": "torso", "display_name": "Torso", "layers": 3},
-    {"key": "jacket", "display_name": "Jacket/Coat", "layers": 1},
-    {"key": "waist", "display_name": "Waist/Belt", "layers": 1},
-    {"key": "hands", "display_name": "Hands", "layers": 1},
-    {"key": "legs", "display_name": "Legs", "layers": 2},
-    {"key": "feet", "display_name": "Feet", "layers": 2},
-    {"key": "wrist_left", "display_name": "Wrist (Left)", "layers": 1},
-    {"key": "wrist_right", "display_name": "Wrist (Right)", "layers": 1},
-    {"key": "bag", "display_name": "Bag/Backpack", "layers": 1},
-    {"key": "holster", "display_name": "Holster", "layers": 1}
+    {"key": "head", "display_name": "Head", "max_layers": 2},
+    {"key": "face", "display_name": "Face", "max_layers": 1},
+    {"key": "ear_left", "display_name": "Left Ear", "max_layers": 2},
+    {"key": "ear_right", "display_name": "Right Ear", "max_layers": 2},
+    {"key": "neck", "display_name": "Neck", "max_layers": 2},
+    {"key": "torso", "display_name": "Torso", "max_layers": 4},
+    {"key": "legs", "display_name": "Legs", "max_layers": 3},
+    {"key": "full_body", "display_name": "Full Body", "max_layers": 1, "covers": ["torso", "legs"]},
+    {"key": "back", "display_name": "Back", "max_layers": 2},
+    {"key": "waist", "display_name": "Waist", "max_layers": 2},
+    {"key": "forearm_left", "display_name": "Left Wrist", "max_layers": 2},
+    {"key": "forearm_right", "display_name": "Right Wrist", "max_layers": 2},
+    {"key": "hand_left", "display_name": "Left Hand", "max_layers": 2},
+    {"key": "hand_right", "display_name": "Right Hand", "max_layers": 2},
+    {"key": "thumb_left", "display_name": "Left Thumb", "max_layers": 1},
+    {"key": "index_left", "display_name": "Left Index", "max_layers": 1},
+    {"key": "middle_left", "display_name": "Left Middle", "max_layers": 1},
+    {"key": "ring_left", "display_name": "Left Ring Finger", "max_layers": 1},
+    {"key": "pinky_left", "display_name": "Left Pinky", "max_layers": 1},
+    {"key": "thumb_right", "display_name": "Right Thumb", "max_layers": 1},
+    {"key": "index_right", "display_name": "Right Index", "max_layers": 1},
+    {"key": "middle_right", "display_name": "Right Middle", "max_layers": 1},
+    {"key": "ring_right", "display_name": "Right Ring Finger", "max_layers": 1},
+    {"key": "pinky_right", "display_name": "Right Pinky", "max_layers": 1},
+    {"key": "feet_socks", "display_name": "Feet (Socks)", "max_layers": 1},
+    {"key": "feet_shoes", "display_name": "Feet (Shoes)", "max_layers": 1}
+  ],
+  "bonus_slots": [
+    {"key": "pocket_left", "display_name": "Left Pocket", "max_layers": 1},
+    {"key": "pocket_right", "display_name": "Right Pocket", "max_layers": 1},
+    {"key": "back_pocket_left", "display_name": "Left Back Pocket", "max_layers": 1},
+    {"key": "back_pocket_right", "display_name": "Right Back Pocket", "max_layers": 1},
+    {"key": "jacket_pocket_left", "display_name": "Left Jacket Pocket", "max_layers": 1},
+    {"key": "jacket_pocket_right", "display_name": "Right Jacket Pocket", "max_layers": 1},
+    {"key": "backpack_main", "display_name": "Backpack (Main)", "max_layers": 1},
+    {"key": "backpack_side", "display_name": "Backpack (Side)", "max_layers": 1}
   ],
   "starting_equipment": [
+    {
+      "item_key": "crew_socks",
+      "display_name": "Crew Socks",
+      "item_type": "clothing",
+      "body_slot": "feet_socks",
+      "body_layer": 0,
+      "description": "Plain white crew socks"
+    },
+    {
+      "item_key": "underwear",
+      "display_name": "Underwear",
+      "item_type": "clothing",
+      "body_slot": "legs",
+      "body_layer": 0,
+      "description": "Basic undergarments"
+    },
     {
       "item_key": "casual_shirt",
       "display_name": "Casual Shirt",
@@ -97,21 +137,32 @@
       "display_name": "Jeans",
       "item_type": "clothing",
       "body_slot": "legs",
-      "body_layer": 0,
-      "description": "Classic denim jeans"
+      "body_layer": 1,
+      "description": "Classic denim jeans",
+      "provides_slots": ["pocket_left", "pocket_right", "back_pocket_left", "back_pocket_right"]
     },
     {
       "item_key": "sneakers",
       "display_name": "Sneakers",
       "item_type": "clothing",
-      "body_slot": "feet",
+      "body_slot": "feet_shoes",
       "body_layer": 0,
       "description": "Comfortable athletic shoes"
+    },
+    {
+      "item_key": "leather_belt",
+      "display_name": "Leather Belt",
+      "item_type": "clothing",
+      "body_slot": "waist",
+      "body_layer": 0,
+      "description": "A casual leather belt"
     },
     {
       "item_key": "wallet",
       "display_name": "Wallet",
       "item_type": "container",
+      "body_slot": "back_pocket_right",
+      "body_layer": 0,
       "description": "A leather wallet with ID and cards",
       "properties": {"value": 50, "currency": "dollars"}
     },
@@ -119,12 +170,16 @@
       "item_key": "smartphone",
       "display_name": "Smartphone",
       "item_type": "tool",
+      "body_slot": "pocket_right",
+      "body_layer": 0,
       "description": "A modern smartphone with various apps"
     },
     {
       "item_key": "keys",
       "display_name": "Keys",
       "item_type": "misc",
+      "body_slot": "pocket_left",
+      "body_layer": 0,
       "description": "House and car keys on a keyring"
     }
   ]

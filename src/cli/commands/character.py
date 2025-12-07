@@ -29,13 +29,21 @@ from src.cli.display import (
     prompt_character_name,
 )
 from src.cli.commands.session import get_db_session
-from src.database.models.character_state import CharacterNeeds
+from src.database.models.character_state import (
+    CharacterNeeds,
+    IntimacyProfile,
+    DriveLevel,
+    IntimacyStyle,
+)
 from src.database.models.entities import Entity, EntityAttribute
 from src.database.models.enums import EntityType, VitalStatus
 from src.database.models.items import Item
+from src.database.models.relationships import Relationship
 from src.database.models.session import GameSession
 from src.database.models.vital_state import EntityVitalState
+from src.managers.entity_manager import EntityManager
 from src.managers.needs import NeedsManager
+from src.managers.relationship_manager import RelationshipManager
 from src.schemas.settings import (
     SettingSchema,
     get_setting_schema,
@@ -231,6 +239,105 @@ def equipment(
         ]
 
         display_inventory(item_dicts)
+
+    finally:
+        db.close()
+
+
+@app.command()
+def outfit(
+    session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
+) -> None:
+    """Show current outfit with layers and visibility.
+
+    Displays all equipped items organized by body slot, showing:
+    - Layer ordering (innermost to outermost)
+    - Visibility status (hidden items are dimmed)
+    - Bonus slots provided by worn items (e.g., belt provides pouch slots)
+    """
+    from rich.panel import Panel
+    from rich.text import Text
+
+    from src.managers.item_manager import ItemManager, BODY_SLOTS
+
+    db = get_db_session()
+
+    try:
+        if session_id:
+            game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
+        else:
+            game_session = _get_active_session(db)
+
+        if not game_session:
+            display_error("No active session found")
+            raise typer.Exit(1)
+
+        player = _get_player(db, game_session)
+
+        if not player:
+            display_error("No player character found")
+            raise typer.Exit(1)
+
+        item_manager = ItemManager(db, game_session)
+        outfit_by_slot = item_manager.get_outfit_by_slot(player.id)
+        available_slots = item_manager.get_available_slots(player.id)
+
+        if not outfit_by_slot:
+            display_info("No items equipped")
+            return
+
+        # Build outfit display
+        output = Text()
+
+        # Define slot display order
+        slot_order = [
+            "head", "face", "ear_left", "ear_right",
+            "neck", "torso", "full_body", "legs",
+            "back", "waist",
+            "forearm_left", "forearm_right",
+            "hand_left", "hand_right", "main_hand", "off_hand",
+            "thumb_left", "index_left", "middle_left", "ring_left", "pinky_left",
+            "thumb_right", "index_right", "middle_right", "ring_right", "pinky_right",
+            "feet_socks", "feet_shoes",
+        ]
+
+        # Add bonus slots at the end
+        bonus_slots = [s for s in available_slots if s not in BODY_SLOTS]
+        slot_order.extend(sorted(bonus_slots))
+
+        visible_items = []
+
+        for slot in slot_order:
+            if slot not in outfit_by_slot:
+                continue
+
+            items = outfit_by_slot[slot]
+            slot_info = available_slots.get(slot, {})
+            display_name = slot_info.get("desc", slot.replace("_", " ").title())
+
+            output.append(f"\n{slot.replace('_', ' ').title()}:\n", style="bold cyan")
+
+            for item in items:
+                layer_str = f"  L{item.body_layer}: "
+                if item.is_visible:
+                    output.append(layer_str)
+                    output.append(f"{item.display_name}\n", style="white")
+                    visible_items.append(item.display_name)
+                else:
+                    output.append(layer_str, style="dim")
+                    output.append(f"{item.display_name} (hidden)\n", style="dim")
+
+            # Show if this item provides slots
+            for item in items:
+                if item.provides_slots:
+                    slots_str = ", ".join(item.provides_slots)
+                    output.append(f"  → Provides: {slots_str}\n", style="yellow")
+
+        console.print(Panel(output, title="[bold cyan]Outfit[/bold cyan]", border_style="cyan"))
+
+        # Show visible summary
+        if visible_items:
+            console.print(f"\n[bold]Visible:[/bold] {', '.join(visible_items)}")
 
     finally:
         db.close()
@@ -513,6 +620,191 @@ def _load_character_creator_template() -> str:
     return ""
 
 
+def _load_world_extraction_template() -> str:
+    """Load the world extraction prompt template.
+
+    Returns:
+        Template string.
+    """
+    template_path = Path(__file__).parent.parent.parent.parent / "data" / "templates" / "world_extraction.md"
+    if template_path.exists():
+        return template_path.read_text()
+    return ""
+
+
+async def _extract_world_data(
+    character_output: str,
+    character_name: str,
+    character_background: str,
+    setting_name: str,
+) -> dict | None:
+    """Extract world data from character creation output using LLM.
+
+    Args:
+        character_output: Full conversation from character creation.
+        character_name: Character's name.
+        character_background: Character's background story.
+        setting_name: Game setting name.
+
+    Returns:
+        Extracted world data dict or None if extraction fails.
+    """
+    try:
+        from src.llm.factory import get_extraction_provider
+        from src.llm.message_types import Message, MessageRole
+    except ImportError:
+        return None
+
+    template = _load_world_extraction_template()
+    if not template:
+        return None
+
+    prompt = template.format(
+        character_output=character_output,
+        character_name=character_name,
+        character_background=character_background,
+        setting_name=setting_name,
+    )
+
+    try:
+        provider = get_extraction_provider()
+        messages = [Message(role=MessageRole.USER, content=prompt)]
+        response = await provider.complete(messages)
+
+        # Parse JSON from response
+        json_match = re.search(r'\{[\s\S]*\}', response.content)
+        if json_match:
+            return json.loads(json_match.group())
+    except Exception as e:
+        console.print(f"[dim]World extraction warning: {e}[/dim]")
+
+    return None
+
+
+def _create_world_from_extraction(
+    db: Session,
+    game_session: GameSession,
+    player: Entity,
+    world_data: dict,
+) -> None:
+    """Create shadow entities and relationships from extracted world data.
+
+    Args:
+        db: Database session.
+        game_session: Game session.
+        player: Player entity.
+        world_data: Extracted world data dict.
+    """
+    entity_manager = EntityManager(db, game_session)
+    relationship_manager = RelationshipManager(db, game_session)
+
+    # Update player appearance from extraction
+    player_appearance = world_data.get("player_appearance", {})
+    if player_appearance:
+        for field, value in player_appearance.items():
+            if value is not None and field in Entity.APPEARANCE_FIELDS:
+                player.set_appearance_field(field, value)
+
+    # Create shadow entities from backstory
+    shadow_entities = world_data.get("shadow_entities", [])
+    created_entities = {}
+
+    for shadow in shadow_entities:
+        entity_key = shadow.get("entity_key")
+        if not entity_key:
+            continue
+
+        # Map entity type string to enum
+        entity_type_str = shadow.get("entity_type", "npc").upper()
+        try:
+            entity_type = EntityType[entity_type_str]
+        except KeyError:
+            entity_type = EntityType.NPC
+
+        # Create the shadow entity
+        entity = entity_manager.create_shadow_entity(
+            entity_key=entity_key,
+            display_name=shadow.get("display_name", entity_key.replace("_", " ").title()),
+            entity_type=entity_type,
+            background=shadow.get("brief_description"),
+        )
+
+        # Mark as alive or dead
+        if not shadow.get("is_alive", True):
+            entity.is_alive = False
+
+        created_entities[entity_key] = entity
+
+        # Create bidirectional relationship with player
+        rel_type = shadow.get("relationship_to_player", "acquaintance")
+        trust = shadow.get("trust", 50)
+        liking = shadow.get("liking", 50)
+        respect = shadow.get("respect", 50)
+
+        # Player's relationship TO the shadow entity
+        player_rel = Relationship(
+            session_id=game_session.id,
+            from_entity_id=player.id,
+            to_entity_id=entity.id,
+            knows=True,  # Player knows them from backstory
+            trust=trust,
+            liking=liking,
+            respect=respect,
+            familiarity=80 if rel_type == "family" else 60 if rel_type == "friend" else 30,
+            relationship_type=rel_type,
+        )
+        db.add(player_rel)
+
+        # Shadow entity's relationship TO player
+        shadow_rel = Relationship(
+            session_id=game_session.id,
+            from_entity_id=entity.id,
+            to_entity_id=player.id,
+            knows=True,
+            trust=trust,
+            liking=liking,
+            respect=respect,
+            familiarity=80 if rel_type == "family" else 60 if rel_type == "friend" else 30,
+            relationship_type=rel_type,
+        )
+        db.add(shadow_rel)
+
+    db.flush()
+
+    # Log results
+    if created_entities:
+        console.print(f"[dim]Created {len(created_entities)} backstory connections[/dim]")
+
+
+def _create_intimacy_profile(
+    db: Session,
+    game_session: GameSession,
+    entity: Entity,
+) -> IntimacyProfile:
+    """Create intimacy profile with default values.
+
+    Args:
+        db: Database session.
+        game_session: Game session.
+        entity: The entity to create profile for.
+
+    Returns:
+        Created IntimacyProfile.
+    """
+    profile = IntimacyProfile(
+        session_id=game_session.id,
+        entity_id=entity.id,
+        drive_level=DriveLevel.MODERATE,
+        drive_threshold=50,
+        intimacy_style=IntimacyStyle.EMOTIONAL,
+        has_regular_partner=False,
+        is_actively_seeking=False,
+    )
+    db.add(profile)
+    db.flush()
+    return profile
+
+
 def _parse_attribute_suggestion(response: str) -> dict[str, int] | None:
     """Extract suggested attributes from LLM response.
 
@@ -620,14 +912,14 @@ def _validate_ai_attributes(
 
 def _ai_character_creation(
     schema: SettingSchema,
-) -> tuple[str, dict[str, int], str]:
+) -> tuple[str, dict[str, int], str, str]:
     """Run AI-assisted character creation.
 
     Args:
         schema: Setting schema.
 
     Returns:
-        Tuple of (name, attributes, background).
+        Tuple of (name, attributes, background, conversation_history).
 
     Raises:
         typer.Exit: If creation is cancelled.
@@ -638,14 +930,14 @@ def _ai_character_creation(
 
 async def _ai_character_creation_async(
     schema: SettingSchema,
-) -> tuple[str, dict[str, int], str]:
+) -> tuple[str, dict[str, int], str, str]:
     """Async implementation of AI-assisted character creation.
 
     Args:
         schema: Setting schema.
 
     Returns:
-        Tuple of (name, attributes, background).
+        Tuple of (name, attributes, background, conversation_history).
 
     Raises:
         typer.Exit: If creation is cancelled.
@@ -767,7 +1059,8 @@ Start by greeting the player and asking what kind of character they want to crea
 
                     confirm = console.input("\n[bold cyan]Create this character? (y/n): [/bold cyan]").strip().lower()
                     if confirm in ("y", "yes"):
-                        return character_name, character_attributes, character_background
+                        history_text = "\n".join(conversation_history)
+                        return character_name, character_attributes, character_background, history_text
                     else:
                         console.print("[dim]Let's continue refining...[/dim]")
                         stage = "concept"
@@ -797,7 +1090,8 @@ Start by greeting the player and asking what kind of character they want to crea
     if not character_background:
         character_background = prompt_background()
 
-    return character_name, character_attributes, character_background
+    history_text = "\n".join(conversation_history)
+    return character_name, character_attributes, character_background, history_text
 
 
 @app.command()
@@ -834,9 +1128,12 @@ def create(
         # Get attributes from schema
         schema = get_setting_schema(game_session.setting)
 
+        # Track conversation history for world extraction (AI mode only)
+        conversation_history = ""
+
         if ai_assisted:
             # AI-assisted character creation
-            name, attributes, background = _ai_character_creation(schema)
+            name, attributes, background, conversation_history = _ai_character_creation(schema)
         elif random_stats:
             console.print("\n[bold cyan]═══ Character Creation ═══[/bold cyan]\n")
             name = prompt_character_name()
@@ -878,6 +1175,22 @@ def create(
                 entity=entity,
                 schema=schema,
             )
+
+            # Create intimacy profile with defaults
+            _create_intimacy_profile(db, game_session, entity)
+
+            # If AI-assisted, extract world data and create shadow entities
+            if ai_assisted and conversation_history:
+                import asyncio
+                console.print("[dim]Extracting world from backstory...[/dim]")
+                world_data = asyncio.run(_extract_world_data(
+                    character_output=conversation_history,
+                    character_name=name,
+                    character_background=background,
+                    setting_name=game_session.setting,
+                ))
+                if world_data:
+                    _create_world_from_extraction(db, game_session, entity, world_data)
 
             db.commit()
 

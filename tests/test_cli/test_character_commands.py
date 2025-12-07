@@ -296,19 +296,25 @@ class TestCharacterCreateAI:
         with patch.dict(os.environ, {"DATABASE_URL": db_url}):
             runner.invoke(app, ["session", "start"])
 
-        # Mock the AI creation function
+        # Mock the AI creation function and world extraction
         with patch.dict(os.environ, {"DATABASE_URL": db_url}):
             with patch(
                 "src.cli.commands.character._ai_character_creation"
             ) as mock_ai:
-                mock_ai.return_value = (
-                    "AI Hero",
-                    {"strength": 15, "dexterity": 14, "constitution": 13,
-                     "intelligence": 12, "wisdom": 10, "charisma": 8},
-                    "Created by AI",
-                )
+                with patch(
+                    "src.cli.commands.character._extract_world_data"
+                ) as mock_extract:
+                    mock_ai.return_value = (
+                        "AI Hero",
+                        {"strength": 15, "dexterity": 14, "constitution": 13,
+                         "intelligence": 12, "wisdom": 10, "charisma": 8},
+                        "Created by AI",
+                        "AI: Hello! User: Create me a character",
+                    )
+                    # Return None to skip world extraction
+                    mock_extract.return_value = None
 
-                result = runner.invoke(app, ["character", "create", "--ai"])
+                    result = runner.invoke(app, ["character", "create", "--ai"])
 
         # Should call the AI function
         mock_ai.assert_called_once()

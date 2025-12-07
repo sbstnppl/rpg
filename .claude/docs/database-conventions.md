@@ -78,6 +78,101 @@ appearance: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 properties: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 ```
 
+## Appearance Field Consistency
+
+The `entities` table uses a hybrid approach: dedicated columns for queryable
+appearance fields AND a JSON `appearance` field for flexibility.
+
+### Dedicated Columns (12 fields)
+```python
+age, age_apparent, gender, height, build,
+hair_color, hair_style, eye_color, skin_tone,
+species, distinguishing_features, voice_description
+```
+
+### Consistency Rules
+
+**Dedicated columns are the SOURCE OF TRUTH**. The JSON field mirrors and extends them.
+
+1. **Always use Entity methods to update appearance**:
+   ```python
+   # Good - uses sync method
+   entity.set_appearance_field("hair_color", "red")
+
+   # Bad - breaks sync
+   entity.hair_color = "red"  # JSON not updated!
+   ```
+
+2. **Bulk updates must call sync**:
+   ```python
+   entity.hair_color = "red"
+   entity.eye_color = "blue"
+   entity.sync_appearance_to_json()  # Required!
+   ```
+
+3. **EntityManager provides safe helpers**:
+   ```python
+   entity_manager.update_appearance(entity_key, {
+       "hair_color": "red",
+       "eye_color": "blue",
+   })  # Automatically synced
+   ```
+
+4. **Never write synced fields directly to JSON**:
+   ```python
+   # Bad - columns not updated
+   entity.appearance["hair_color"] = "red"
+
+   # Good - use the method
+   entity.set_appearance_field("hair_color", "red")
+   ```
+
+### Extended JSON Data
+
+The JSON `appearance` field can contain extra data beyond the synced columns:
+```python
+# Setting-specific extras (not in dedicated columns)
+entity.appearance["elf_ears"] = "pointed"
+entity.appearance["cybernetic_arm"] = True
+entity.appearance["tattoos"] = ["dragon on back", "rune on wrist"]
+```
+
+## Shadow Entity Pattern
+
+Shadow entities are NPCs mentioned in backstory but not yet appeared on-screen.
+
+### Creating Shadow Entities
+```python
+entity = entity_manager.create_shadow_entity(
+    entity_key="grandmother_elara",
+    display_name="Grandmother Elara",
+    entity_type=EntityType.NPC,
+    background="Player's grandmother, lives with player",
+)
+# is_active=False, first_appeared_turn=None
+```
+
+### Activating Shadow Entities
+When they appear in the narrative, lock in their appearance:
+```python
+entity_manager.activate_shadow_entity(
+    entity_key="grandmother_elara",
+    current_turn=5,
+    appearance_data={
+        "age": 68,
+        "hair_color": "silver",
+        "eye_color": "warm brown",
+    },
+)
+# is_active=True, first_appeared_turn=5, appearance locked
+```
+
+### Canonical Locking
+Once `first_appeared_turn` is set, appearance should only change through:
+- Player actions ("I dye my hair red")
+- Significant events (dragon scars face)
+- Time passage (natural aging)
+
 ## Timestamps
 
 Standard timestamp columns:

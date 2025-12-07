@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Rich character appearance system** - Dedicated columns for media generation
+  - 12 new appearance columns: age, age_apparent, gender, height, build, hair_color, hair_style, eye_color, skin_tone, species, distinguishing_features, voice_description
+  - `Entity.APPEARANCE_FIELDS` constant for iteration
+  - `Entity.set_appearance_field()` method with JSON sync
+  - `Entity.sync_appearance_to_json()` for bulk updates
+  - `Entity.get_appearance_summary()` for readable descriptions
+  - Alembic migration `002_add_appearance_columns.py`
+- **Shadow Entity pattern** - Backstory NPCs tracked before first appearance
+  - `EntityManager.create_shadow_entity()` - Creates inactive entity from backstory
+  - `EntityManager.activate_shadow_entity()` - Activates on first appearance with locked appearance
+  - `EntityManager.get_shadow_entities()` - List all shadow entities
+  - `EntityManager.get_or_create_entity()` - Idempotent entity creation
+- **World extraction from character creation** - Automatic backstory persistence
+  - `data/templates/world_extraction.md` - LLM prompt for extracting entities, locations, relationships
+  - `_extract_world_data()` async function in character.py
+  - `_create_world_from_extraction()` creates shadow entities and relationships
+  - Bidirectional relationships between player and backstory NPCs
+- **Appearance query methods** in EntityManager
+  - `update_appearance()` - Update multiple appearance fields with sync
+  - `get_entities_by_appearance()` - Query entities by appearance criteria
+  - `get_appearance_summary()` - Get readable appearance for entity
+- **Intimacy profile defaults** - Silent creation during character creation
+  - `_create_intimacy_profile()` function with MODERATE drive, EMOTIONAL style defaults
+  - Created automatically on character creation
 - **Comprehensive CLI test coverage** - 64 new tests for previously untested areas
   - `tests/test_config.py` - Config validation tests (15 tests)
   - `tests/test_cli/test_session_commands.py` - Session CLI tests (12 tests)
@@ -61,6 +85,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Display helpers in `src/cli/display.py`
 - Mandatory documentation requirements in CLAUDE.md
 - 32 new tests for starting equipment and display functions (1226 total)
+- **Enhanced body slot system** - Granular equipment slots matching story-learning
+  - 26 base body slots including individual finger slots (10), ear slots, feet_socks/feet_shoes
+  - `BODY_SLOTS` constant with max_layers and descriptions
+  - `BONUS_SLOTS` for dynamic slots (pockets, belt pouches, backpack compartments)
+  - `SLOT_COVERS` system - full_body covers torso and legs
+  - `ItemManager.get_available_slots()` - Returns base + bonus slots for entity
+  - `ItemManager.get_outfit_by_slot()` - Groups equipped items by slot
+  - `ItemManager.get_visible_by_slot()` - Gets only visible items per slot
+  - `ItemManager.format_outfit_description()` - Human-readable outfit for GM context
+  - Updated `ItemManager.update_visibility()` with covering system
+- **Outfit CLI command** - `rpg character outfit` shows layered clothing
+  - Groups items by body slot with layer display
+  - Shows hidden items (dimmed) vs visible items
+  - Displays bonus slots provided by items
+  - Visible items summary at bottom
+- **Updated setting JSON files** with new equipment slots
+  - All settings now have 26+ base slots
+  - Added `bonus_slots` section for dynamic slots
+  - Starting equipment uses new slots (feet_shoes, belt pouches, etc.)
+  - Items can now have `provides_slots` array
 
 ### Changed
 - Game loop uses `progress_spinner` instead of `console.status()`

@@ -72,35 +72,72 @@
     }
   },
   "equipment_slots": [
-    {"key": "head", "display_name": "Head/Helmet", "layers": 1},
-    {"key": "visor", "display_name": "Visor/HUD", "layers": 1},
-    {"key": "torso", "display_name": "Torso", "layers": 3},
-    {"key": "exosuit", "display_name": "Exosuit", "layers": 1},
-    {"key": "back", "display_name": "Back Mount", "layers": 1},
-    {"key": "waist", "display_name": "Utility Belt", "layers": 1},
-    {"key": "hands", "display_name": "Hands/Gloves", "layers": 1},
-    {"key": "legs", "display_name": "Legs", "layers": 2},
-    {"key": "feet", "display_name": "Feet/Boots", "layers": 1},
-    {"key": "main_hand", "display_name": "Main Hand", "layers": 1},
-    {"key": "off_hand", "display_name": "Off Hand", "layers": 1},
-    {"key": "implant_neural", "display_name": "Neural Implant", "layers": 1},
-    {"key": "implant_ocular", "display_name": "Ocular Implant", "layers": 1},
-    {"key": "implant_arm", "display_name": "Arm Augment", "layers": 1}
+    {"key": "head", "display_name": "Head/Helmet", "max_layers": 2},
+    {"key": "face", "display_name": "Face/Visor", "max_layers": 1},
+    {"key": "ear_left", "display_name": "Left Ear", "max_layers": 2},
+    {"key": "ear_right", "display_name": "Right Ear", "max_layers": 2},
+    {"key": "neck", "display_name": "Neck", "max_layers": 2},
+    {"key": "torso", "display_name": "Torso", "max_layers": 4},
+    {"key": "legs", "display_name": "Legs", "max_layers": 3},
+    {"key": "full_body", "display_name": "Full Body/Exosuit", "max_layers": 1, "covers": ["torso", "legs"]},
+    {"key": "back", "display_name": "Back Mount", "max_layers": 2},
+    {"key": "waist", "display_name": "Utility Belt", "max_layers": 2},
+    {"key": "forearm_left", "display_name": "Left Wrist", "max_layers": 2},
+    {"key": "forearm_right", "display_name": "Right Wrist", "max_layers": 2},
+    {"key": "hand_left", "display_name": "Left Hand", "max_layers": 2},
+    {"key": "hand_right", "display_name": "Right Hand", "max_layers": 2},
+    {"key": "main_hand", "display_name": "Main Hand", "max_layers": 1},
+    {"key": "off_hand", "display_name": "Off Hand", "max_layers": 1},
+    {"key": "thumb_left", "display_name": "Left Thumb", "max_layers": 1},
+    {"key": "index_left", "display_name": "Left Index", "max_layers": 1},
+    {"key": "middle_left", "display_name": "Left Middle", "max_layers": 1},
+    {"key": "ring_left", "display_name": "Left Ring Finger", "max_layers": 1},
+    {"key": "pinky_left", "display_name": "Left Pinky", "max_layers": 1},
+    {"key": "thumb_right", "display_name": "Right Thumb", "max_layers": 1},
+    {"key": "index_right", "display_name": "Right Index", "max_layers": 1},
+    {"key": "middle_right", "display_name": "Right Middle", "max_layers": 1},
+    {"key": "ring_right", "display_name": "Right Ring Finger", "max_layers": 1},
+    {"key": "pinky_right", "display_name": "Right Pinky", "max_layers": 1},
+    {"key": "feet_socks", "display_name": "Feet (Socks)", "max_layers": 1},
+    {"key": "feet_shoes", "display_name": "Feet (Boots)", "max_layers": 1},
+    {"key": "implant_neural", "display_name": "Neural Implant", "max_layers": 1},
+    {"key": "implant_ocular", "display_name": "Ocular Implant", "max_layers": 1},
+    {"key": "implant_arm_left", "display_name": "Left Arm Augment", "max_layers": 1},
+    {"key": "implant_arm_right", "display_name": "Right Arm Augment", "max_layers": 1}
+  ],
+  "bonus_slots": [
+    {"key": "pocket_left", "display_name": "Left Pocket", "max_layers": 1},
+    {"key": "pocket_right", "display_name": "Right Pocket", "max_layers": 1},
+    {"key": "belt_pouch_1", "display_name": "Belt Pouch 1", "max_layers": 1},
+    {"key": "belt_pouch_2", "display_name": "Belt Pouch 2", "max_layers": 1},
+    {"key": "belt_pouch_3", "display_name": "Belt Pouch 3", "max_layers": 1},
+    {"key": "backpack_main", "display_name": "Backpack (Main)", "max_layers": 1},
+    {"key": "backpack_side", "display_name": "Backpack (Side)", "max_layers": 1},
+    {"key": "mag_holster", "display_name": "Mag Holster", "max_layers": 1}
   ],
   "starting_equipment": [
+    {
+      "item_key": "thermal_socks",
+      "display_name": "Thermal Socks",
+      "item_type": "clothing",
+      "body_slot": "feet_socks",
+      "body_layer": 0,
+      "description": "Temperature-regulating socks"
+    },
     {
       "item_key": "jumpsuit",
       "display_name": "Standard Jumpsuit",
       "item_type": "clothing",
-      "body_slot": "torso",
+      "body_slot": "full_body",
       "body_layer": 0,
-      "description": "A functional one-piece jumpsuit with utility pockets"
+      "description": "A functional one-piece jumpsuit with utility pockets",
+      "provides_slots": ["pocket_left", "pocket_right"]
     },
     {
       "item_key": "utility_boots",
       "display_name": "Utility Boots",
       "item_type": "clothing",
-      "body_slot": "feet",
+      "body_slot": "feet_shoes",
       "body_layer": 0,
       "description": "Mag-lock boots suitable for low-gravity environments"
     },
@@ -108,7 +145,8 @@
       "item_key": "wrist_comm",
       "display_name": "Wrist Communicator",
       "item_type": "tool",
-      "body_slot": "wrist_left",
+      "body_slot": "forearm_left",
+      "body_layer": 0,
       "description": "Personal communication and data device"
     },
     {
@@ -117,12 +155,15 @@
       "item_type": "container",
       "body_slot": "waist",
       "body_layer": 0,
-      "description": "Standard issue belt with multiple pouches"
+      "description": "Standard issue belt with multiple pouches",
+      "provides_slots": ["belt_pouch_1", "belt_pouch_2", "belt_pouch_3"]
     },
     {
       "item_key": "credit_chip",
       "display_name": "Credit Chip",
       "item_type": "misc",
+      "body_slot": "pocket_left",
+      "body_layer": 0,
       "description": "Universal credit storage device",
       "properties": {"value": 100, "currency": "credits"}
     },
@@ -130,6 +171,8 @@
       "item_key": "id_card",
       "display_name": "ID Card",
       "item_type": "misc",
+      "body_slot": "pocket_right",
+      "body_layer": 0,
       "description": "Personal identification and access card"
     }
   ]
