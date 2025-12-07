@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Comprehensive CLI test coverage** - 64 new tests for previously untested areas
+  - `tests/test_config.py` - Config validation tests (15 tests)
+  - `tests/test_cli/test_session_commands.py` - Session CLI tests (12 tests)
+  - `tests/test_cli/test_character_commands.py` - Character CLI tests (11 tests)
+  - `tests/test_cli/test_ai_character_creation.py` - AI creation tests (19 tests)
+  - `tests/test_e2e/test_game_flow.py` - End-to-end smoke tests (7 tests)
+- **First-turn character introduction** - Game now introduces the player character at start
+  - ContextCompiler includes player equipment in scene context
+  - `_get_equipment_description()` method in ContextCompiler
+  - `_format_appearance()` now includes age if set
+  - GM template includes first-turn instructions for character introduction
+  - Initial scene prompt requests character introduction with appearance, clothing, and feelings
 - **Starting equipment** - Characters now receive starting equipment on creation
   - `StartingItem` dataclass in `src/schemas/settings.py`
   - Starting equipment definitions in all setting JSON files
@@ -55,6 +67,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `display_character_status()` now uses Rich Table instead of Panel
 
 ### Fixed
+- **AI character creation JSON hidden from users** - JSON blocks no longer shown in dialogue
+  - Added `_strip_json_blocks()` function to remove `suggested_attributes` and `character_complete` JSON
+  - Users now see clean conversational text without machine-readable markup
+- **AI character creation preserves mystery** - No more spoilers about hidden character aspects
+  - Added "Character Creation Philosophy" section to template
+  - AI only reveals what the character knows about themselves
+  - Secret backstory elements (hidden powers, mysterious origins) are created but never mentioned
+- **AI character creation asks for confirmation** - Final check before completing
+  - Added "Before Completing Character" section to template
+  - AI now asks "Is there anything else you'd like to add or change?" before finishing
+  - Gives players a chance to tweak details before committing
+- **AI character creation "surprise me" behavior** - AI now respects user delegation phrases
+  - Added "Detecting User Delegation" section to `character_creator.md` template
+  - Handles full delegation ("surprise me", "it's up to you", "dealer's choice")
+  - Handles partial delegation ("I like Eldrin, you decide the rest")
+  - AI now generates complete character immediately instead of asking more questions
+- **Play without character prompts for creation** - `rpg play` no longer silently creates empty character
+  - Now prompts "Create a character now? (y/n)" when no character exists
+  - If yes, launches AI-assisted character creation
+  - If no, exits with helpful message to use `rpg character create`
+  - Removed `_get_or_create_player` in favor of `_get_player` (no silent creation)
+- **Async AI character creation** - `_ai_character_creation()` now properly awaits async LLM calls
+  - Added wrapper function with `asyncio.run()` to call async `_ai_character_creation_async()`
+- **Invalid model name** - Fixed `cheap_model` from `claude-haiku-3` to `claude-3-5-haiku-20241022`
+- **SQLite foreign key enforcement** - `get_db_session()` now enables `PRAGMA foreign_keys=ON`
+- **Character status command** - Fixed iteration over `player.attributes` relationship
+  - Was calling `.items()` on SQLAlchemy relationship list, now iterates properly
+- **NeedsManager method name** - Fixed `get_needs_state()` to `get_needs()` in status command
 - `is_equipped` bug in character.py - was referencing non-existent field
   - Now correctly uses `body_slot is not None` to check equipped status
   - Fixed both inventory and equipment commands

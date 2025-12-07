@@ -29,8 +29,19 @@ def get_db_session() -> Session:
     """
     # TODO: Use proper connection management
     import os
+    from sqlalchemy import event
+
     database_url = os.environ.get("DATABASE_URL", "sqlite:///rpg_game.db")
     engine = create_engine(database_url)
+
+    # Enable foreign key constraints for SQLite
+    if database_url.startswith("sqlite"):
+        @event.listens_for(engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
     Base.metadata.create_all(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
     return SessionLocal()

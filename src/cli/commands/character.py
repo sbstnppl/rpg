@@ -95,17 +95,16 @@ def status(
             display_info("Character creation not yet implemented")
             raise typer.Exit(1)
 
-        # Get stats from attributes JSON
+        # Get stats from entity attributes relationship
         stats = {}
         if player.attributes:
-            for key, value in player.attributes.items():
-                if isinstance(value, (int, float)):
-                    stats[key.replace("_", " ").title()] = value
+            for attr in player.attributes:
+                stats[attr.attribute_key.replace("_", " ").title()] = attr.value
 
         # Get needs
         needs = None
         needs_manager = NeedsManager(db, game_session)
-        needs_state = needs_manager.get_needs_state(player.id)
+        needs_state = needs_manager.get_needs(player.id)
         if needs_state:
             needs = {
                 "Hunger": int(needs_state.hunger),
@@ -566,6 +565,28 @@ def _parse_character_complete(response: str) -> dict | None:
     return None
 
 
+def _strip_json_blocks(text: str) -> str:
+    """Remove JSON blocks from AI response before displaying to user.
+
+    Strips both markdown code blocks containing JSON and inline JSON blocks
+    that are meant for machine parsing, not human reading.
+
+    Args:
+        text: AI response text that may contain JSON blocks.
+
+    Returns:
+        Text with JSON blocks removed.
+    """
+    # Strip markdown code blocks containing JSON (```json ... ```)
+    text = re.sub(r'```json\s*\{[\s\S]*?\}\s*```', '', text)
+    # Strip inline JSON blocks with our special keys
+    text = re.sub(r'\{[^{}]*"suggested_attributes"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
+    text = re.sub(r'\{[^{}]*"character_complete"[^{}]*\}', '', text)
+    # Clean up extra whitespace left behind
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
 def _validate_ai_attributes(
     attributes: dict[str, int],
     schema: SettingSchema,
@@ -601,6 +622,24 @@ def _ai_character_creation(
     schema: SettingSchema,
 ) -> tuple[str, dict[str, int], str]:
     """Run AI-assisted character creation.
+
+    Args:
+        schema: Setting schema.
+
+    Returns:
+        Tuple of (name, attributes, background).
+
+    Raises:
+        typer.Exit: If creation is cancelled.
+    """
+    import asyncio
+    return asyncio.run(_ai_character_creation_async(schema))
+
+
+async def _ai_character_creation_async(
+    schema: SettingSchema,
+) -> tuple[str, dict[str, int], str]:
+    """Async implementation of AI-assisted character creation.
 
     Args:
         schema: Setting schema.
@@ -657,7 +696,7 @@ Start by greeting the player and asking what kind of character they want to crea
         from src.llm.message_types import Message, MessageRole
 
         messages = [Message(role=MessageRole.USER, content=initial_prompt)]
-        response = provider.complete(messages)
+        response = await provider.complete(messages)
         display_ai_message(response.content)
         conversation_history.append(f"Assistant: {response.content}")
 
@@ -693,7 +732,7 @@ Start by greeting the player and asking what kind of character they want to crea
 
         try:
             messages = [Message(role=MessageRole.USER, content=prompt)]
-            response = provider.complete(messages)
+            response = await provider.complete(messages)
             ai_response = response.content
 
             conversation_history.append(f"Assistant: {ai_response}")
@@ -704,14 +743,14 @@ Start by greeting the player and asking what kind of character they want to crea
                 is_valid, error = _validate_ai_attributes(suggested, schema)
                 if is_valid:
                     character_attributes = suggested
-                    display_ai_message(ai_response)
+                    display_ai_message(_strip_json_blocks(ai_response))
                     display_suggested_attributes(suggested)
                     stage = "background" if character_name else "name"
                 else:
-                    display_ai_message(ai_response)
+                    display_ai_message(_strip_json_blocks(ai_response))
                     console.print(f"[yellow]Note: Suggested attributes invalid: {error}[/yellow]")
             else:
-                display_ai_message(ai_response)
+                display_ai_message(_strip_json_blocks(ai_response))
 
             # Check for completion
             complete = _parse_character_complete(ai_response)

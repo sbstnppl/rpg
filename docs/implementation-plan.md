@@ -116,6 +116,8 @@
   - Aggregates data from all managers
   - Returns formatted context for GM
   - Includes needs/injury summaries for NPCs
+  - `_get_equipment_description()` - visible equipment context
+  - `_format_appearance()` - includes age support
 
 ### 2.12 Realism Managers (NEW)
 - [x] Create `src/managers/needs.py` - NeedsManager

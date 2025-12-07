@@ -13,6 +13,7 @@ from src.database.models.session import GameSession
 from src.database.models.world import Fact, Location, TimeState, WorldEvent
 from src.managers.base import BaseManager
 from src.managers.injuries import InjuryManager
+from src.managers.item_manager import ItemManager
 from src.managers.needs import NeedsManager
 from src.managers.relationship_manager import RelationshipManager
 
@@ -60,6 +61,7 @@ class ContextCompiler(BaseManager):
         needs_manager: NeedsManager | None = None,
         injury_manager: InjuryManager | None = None,
         relationship_manager: RelationshipManager | None = None,
+        item_manager: ItemManager | None = None,
     ) -> None:
         """Initialize with optional manager references.
 
@@ -69,6 +71,7 @@ class ContextCompiler(BaseManager):
         self._needs_manager = needs_manager
         self._injury_manager = injury_manager
         self._relationship_manager = relationship_manager
+        self._item_manager = item_manager
 
     @property
     def needs_manager(self) -> NeedsManager:
@@ -87,6 +90,12 @@ class ContextCompiler(BaseManager):
         if self._relationship_manager is None:
             self._relationship_manager = RelationshipManager(self.db, self.game_session)
         return self._relationship_manager
+
+    @property
+    def item_manager(self) -> ItemManager:
+        if self._item_manager is None:
+            self._item_manager = ItemManager(self.db, self.game_session)
+        return self._item_manager
 
     def compile_scene(
         self,
@@ -164,7 +173,7 @@ class ContextCompiler(BaseManager):
         return "\n".join(lines)
 
     def _get_player_context(self, player_id: int) -> str:
-        """Get player character context including needs and injuries."""
+        """Get player character context including needs, injuries, and equipment."""
         player = (
             self.db.query(Entity)
             .filter(Entity.id == player_id)
@@ -177,20 +186,43 @@ class ContextCompiler(BaseManager):
         lines = ["## Player Character"]
         lines.append(f"- Name: {player.display_name}")
 
-        # Appearance
+        # Appearance (includes age if set)
         if player.appearance:
             appearance_desc = self._format_appearance(player.appearance)
             if appearance_desc:
                 lines.append(f"- Appearance: {appearance_desc}")
+
+        # Equipment/clothing
+        equipment_desc = self._get_equipment_description(player_id)
+        if equipment_desc:
+            lines.append(f"- Wearing: {equipment_desc}")
 
         # Condition (needs + injuries)
         condition = self._get_condition_summary(player_id)
         if condition:
             lines.append(f"- Condition: {condition}")
 
-        # TODO: Add equipment/held items when ItemManager is available
-
         return "\n".join(lines)
+
+    def _get_equipment_description(self, entity_id: int) -> str:
+        """Get human-readable description of visible equipment/clothing.
+
+        Args:
+            entity_id: Entity to describe.
+
+        Returns:
+            Comma-separated list of visible equipment.
+        """
+        visible_items = self.item_manager.get_visible_equipment(entity_id)
+        if not visible_items:
+            return ""
+
+        # Group by slot for natural description
+        descriptions = []
+        for item in visible_items:
+            descriptions.append(item.display_name.lower())
+
+        return ", ".join(descriptions)
 
     def _get_npcs_context(self, location_key: str, player_id: int) -> str:
         """Get context for all NPCs at the current location."""
@@ -432,6 +464,12 @@ class ContextCompiler(BaseManager):
         """Format appearance dict into readable string."""
         parts = []
 
+        if appearance.get("age"):
+            age = appearance["age"]
+            if isinstance(age, int):
+                parts.append(f"{age} years old")
+            else:
+                parts.append(str(age))
         if appearance.get("height"):
             parts.append(appearance["height"])
         if appearance.get("build"):

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # Model Selection
     gm_model: str = "claude-sonnet-4-20250514"  # Primary narrative model
     extraction_model: str = "claude-sonnet-4-20250514"  # Entity extraction
-    cheap_model: str = "claude-haiku-3"  # For quick/cheap operations
+    cheap_model: str = "claude-3-5-haiku-20241022"  # For quick/cheap operations
 
     # Game Settings
     default_setting: str = "fantasy"

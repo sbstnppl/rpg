@@ -148,7 +148,7 @@ tests/
 
 ### Commands
 ```bash
-# Run all tests (1194 tests, ~3 seconds)
+# Run all tests (1290 tests, ~3 seconds)
 pytest
 
 # Run specific test file

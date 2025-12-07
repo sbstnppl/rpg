@@ -34,9 +34,9 @@ def _get_active_session(db) -> GameSession | None:
     )
 
 
-def _get_or_create_player(db, game_session: GameSession) -> Entity:
-    """Get or create a player entity for the session."""
-    player = (
+def _get_player(db, game_session: GameSession) -> Entity | None:
+    """Get the player entity for the session, or None if not created."""
+    return (
         db.query(Entity)
         .filter(
             Entity.session_id == game_session.id,
@@ -44,20 +44,6 @@ def _get_or_create_player(db, game_session: GameSession) -> Entity:
         )
         .first()
     )
-
-    if not player:
-        player = Entity(
-            session_id=game_session.id,
-            entity_key="player",
-            display_name="Adventurer",
-            entity_type=EntityType.PLAYER,
-            is_alive=True,
-            is_active=True,
-        )
-        db.add(player)
-        db.flush()
-
-    return player
 
 
 @app.command()
@@ -78,8 +64,28 @@ def play(
             display_info("Use 'rpg session start' to create one")
             raise typer.Exit(1)
 
-        player = _get_or_create_player(db, game_session)
-        db.commit()
+        player = _get_player(db, game_session)
+
+        if not player:
+            # No character exists - prompt user to create one
+            display_info("No character found for this session.")
+            choice = console.input("[bold cyan]Create a character now? (y/n): [/bold cyan]").strip().lower()
+
+            if choice in ("y", "yes"):
+                # Import and run character creation
+                from src.cli.commands.character import create as create_character
+                db.close()  # Close before calling create (it opens its own session)
+                create_character(session_id=game_session.id, random_stats=False, ai_assisted=True)
+                # Re-open db and get the player
+                db = get_db_session()
+                game_session = db.query(GameSession).filter(GameSession.id == game_session.id).first()
+                player = _get_player(db, game_session)
+                if not player:
+                    display_error("Character creation was cancelled or failed")
+                    raise typer.Exit(1)
+            else:
+                display_info("Use 'rpg character create' to create a character first")
+                raise typer.Exit(0)
 
         # Run the async game loop
         asyncio.run(_game_loop(db, game_session, player))
@@ -113,12 +119,12 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
     display_info("Type your actions. Use /quit to exit, /help for commands.")
     console.print()
 
-    # Initial scene description
+    # Initial scene description - introduce the character and scene
     initial_state = create_initial_state(
         session_id=game_session.id,
         player_id=player.id,
         player_location=player_location,
-        player_input="[Looking around at the starting scene]",
+        player_input="[FIRST TURN: Introduce the player character - describe who they are, what they look like, what they're wearing, and how they feel. Then describe the scene they find themselves in.]",
         turn_number=game_session.total_turns + 1,
     )
     initial_state["_db"] = db
