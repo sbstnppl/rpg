@@ -7,6 +7,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from src.database.models.enums import (
+    AlcoholTolerance,
     AppointmentStatus,
     BodyPart,
     DayOfWeek,
@@ -20,7 +21,9 @@ from src.database.models.enums import (
     ItemCondition,
     ItemType,
     MentalConditionType,
+    ModifierSource,
     QuestStatus,
+    SocialTendency,
     StorageLocationType,
     TaskCategory,
     VitalStatus,
@@ -38,6 +41,11 @@ from src.database.models.items import Item, StorageLocation
 from src.database.models.world import Fact, Location, Schedule, TimeState, WorldEvent
 from src.database.models.tasks import Appointment, Quest, QuestStage, Task
 from src.database.models.character_state import CharacterNeeds, IntimacyProfile
+from src.database.models.character_preferences import (
+    CharacterPreferences,
+    NeedAdaptation,
+    NeedModifier,
+)
 from src.database.models.injuries import ActivityRestriction, BodyInjury
 from src.database.models.vital_state import EntityVitalState
 from src.database.models.mental_state import GriefCondition, MentalCondition
@@ -686,3 +694,99 @@ def create_grief_condition(
     db.add(condition)
     db.flush()
     return condition
+
+
+# =============================================================================
+# Character Preferences Factories
+# =============================================================================
+
+
+def create_character_preferences(
+    db: Session,
+    game_session: GameSession,
+    entity: Entity,
+    **overrides: Any,
+) -> CharacterPreferences:
+    """Create CharacterPreferences with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "entity_id": entity.id,
+        # Food defaults
+        "is_vegetarian": False,
+        "is_vegan": False,
+        "is_greedy_eater": False,
+        "is_picky_eater": False,
+        # Drink defaults
+        "alcohol_tolerance": AlcoholTolerance.MODERATE,
+        "is_alcoholic": False,
+        "is_teetotaler": False,
+        # Intimacy defaults
+        "drive_level": DriveLevel.MODERATE,
+        "drive_threshold": 50,
+        "intimacy_style": IntimacyStyle.EMOTIONAL,
+        "has_regular_partner": False,
+        "is_actively_seeking": False,
+        # Social defaults
+        "social_tendency": SocialTendency.AMBIVERT,
+        "preferred_group_size": 3,
+        "is_social_butterfly": False,
+        "is_loner": False,
+        # Stamina defaults
+        "has_high_stamina": False,
+        "has_low_stamina": False,
+        "is_insomniac": False,
+        "is_heavy_sleeper": False,
+    }
+    defaults.update(overrides)
+    prefs = CharacterPreferences(**defaults)
+    db.add(prefs)
+    db.flush()
+    return prefs
+
+
+def create_need_modifier(
+    db: Session,
+    game_session: GameSession,
+    entity: Entity,
+    **overrides: Any,
+) -> NeedModifier:
+    """Create a NeedModifier with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "entity_id": entity.id,
+        "need_name": "hunger",
+        "modifier_source": ModifierSource.TRAIT,
+        "decay_rate_multiplier": 1.0,
+        "satisfaction_multiplier": 1.0,
+        "threshold_adjustment": 0,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    modifier = NeedModifier(**defaults)
+    db.add(modifier)
+    db.flush()
+    return modifier
+
+
+def create_need_adaptation(
+    db: Session,
+    game_session: GameSession,
+    entity: Entity,
+    **overrides: Any,
+) -> NeedAdaptation:
+    """Create a NeedAdaptation with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "entity_id": entity.id,
+        "need_name": "social_connection",
+        "adaptation_delta": -10,
+        "reason": "Extended time in isolation",
+        "started_turn": 1,
+        "is_gradual": True,
+        "is_reversible": True,
+    }
+    defaults.update(overrides)
+    adaptation = NeedAdaptation(**defaults)
+    db.add(adaptation)
+    db.flush()
+    return adaptation

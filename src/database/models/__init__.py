@@ -2,6 +2,7 @@
 
 from src.database.models.base import Base, SoftDeleteMixin, TimestampMixin
 from src.database.models.enums import (
+    AlcoholTolerance,
     AppointmentStatus,
     BodyPart,
     DayOfWeek,
@@ -15,8 +16,10 @@ from src.database.models.enums import (
     ItemCondition,
     ItemType,
     MentalConditionType,
+    ModifierSource,
     QuestStatus,
     RelationshipDimension,
+    SocialTendency,
     StorageLocationType,
     TaskCategory,
     VitalStatus,
@@ -36,6 +39,11 @@ from src.database.models.world import Fact, Location, Schedule, TimeState, World
 
 # New models for realism system
 from src.database.models.character_state import CharacterNeeds, IntimacyProfile
+from src.database.models.character_preferences import (
+    CharacterPreferences,
+    NeedAdaptation,
+    NeedModifier,
+)
 from src.database.models.injuries import ActivityRestriction, BodyInjury
 from src.database.models.mental_state import GriefCondition, MentalCondition
 from src.database.models.vital_state import EntityVitalState
@@ -65,6 +73,10 @@ __all__ = [
     "IntimacyStyle",
     "DriveLevel",
     "MentalConditionType",
+    # Character preferences enums
+    "AlcoholTolerance",
+    "SocialTendency",
+    "ModifierSource",
     # Session
     "GameSession",
     "Turn",
@@ -94,6 +106,10 @@ __all__ = [
     # Character state (new)
     "CharacterNeeds",
     "IntimacyProfile",
+    # Character preferences (new)
+    "CharacterPreferences",
+    "NeedModifier",
+    "NeedAdaptation",
     # Injuries (new)
     "BodyInjury",
     "ActivityRestriction",

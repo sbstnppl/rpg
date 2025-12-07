@@ -7,10 +7,14 @@ from src.database.models.character_state import CharacterNeeds, IntimacyProfile
 from src.database.models.enums import DriveLevel
 from src.database.models.session import GameSession
 from src.managers.needs import ActivityType, NeedsManager, DECAY_RATES
+from src.database.models.character_preferences import NeedAdaptation, NeedModifier
+from src.database.models.enums import ModifierSource
 from tests.factories import (
     create_character_needs,
     create_entity,
     create_intimacy_profile,
+    create_need_modifier,
+    create_need_adaptation,
 )
 
 
@@ -464,3 +468,331 @@ class TestNPCUrgency:
 
         assert need_name == "fatigue"
         assert urgency == 95
+
+
+class TestModifierMethods:
+    """Tests for NeedModifier-aware methods."""
+
+    def test_get_decay_multiplier_no_modifiers(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify returns 1.0 when no modifiers exist."""
+        entity = create_entity(db_session, game_session)
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_decay_multiplier(entity.id, "hunger")
+
+        assert result == 1.0
+
+    def test_get_decay_multiplier_single_modifier(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify returns modifier value when one exists."""
+        entity = create_entity(db_session, game_session)
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="hunger",
+            modifier_source=ModifierSource.TRAIT,
+            decay_rate_multiplier=1.35,
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_decay_multiplier(entity.id, "hunger")
+
+        assert result == 1.35
+
+    def test_get_decay_multiplier_multiple_modifiers_multiply(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify multiple modifiers are multiplied together."""
+        entity = create_entity(db_session, game_session)
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="fatigue",
+            modifier_source=ModifierSource.TRAIT,
+            decay_rate_multiplier=0.8,
+        )
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="fatigue",
+            modifier_source=ModifierSource.AGE,
+            source_detail="age_25",
+            decay_rate_multiplier=0.7,
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_decay_multiplier(entity.id, "fatigue")
+
+        # 0.8 * 0.7 = 0.56
+        assert abs(result - 0.56) < 0.001
+
+    def test_get_decay_multiplier_ignores_inactive(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify inactive modifiers are ignored."""
+        entity = create_entity(db_session, game_session)
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="hunger",
+            modifier_source=ModifierSource.TRAIT,
+            decay_rate_multiplier=1.5,
+            is_active=False,
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_decay_multiplier(entity.id, "hunger")
+
+        assert result == 1.0
+
+    def test_get_satisfaction_multiplier_no_modifiers(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify returns 1.0 when no modifiers exist."""
+        entity = create_entity(db_session, game_session)
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_satisfaction_multiplier(entity.id, "hunger")
+
+        assert result == 1.0
+
+    def test_get_satisfaction_multiplier_with_modifier(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify returns modifier value when one exists."""
+        entity = create_entity(db_session, game_session)
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="hunger",
+            modifier_source=ModifierSource.TRAIT,
+            satisfaction_multiplier=0.8,  # Gets less satisfaction from food
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_satisfaction_multiplier(entity.id, "hunger")
+
+        assert result == 0.8
+
+    def test_get_max_intensity_no_cap(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify returns 100 when no cap exists."""
+        entity = create_entity(db_session, game_session)
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_max_intensity(entity.id, "intimacy")
+
+        assert result == 100
+
+    def test_get_max_intensity_with_age_cap(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify returns lowest cap from modifiers."""
+        entity = create_entity(db_session, game_session)
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="intimacy",
+            modifier_source=ModifierSource.AGE,
+            source_detail="age_10",
+            max_intensity_cap=20,
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_max_intensity(entity.id, "intimacy")
+
+        assert result == 20
+
+    def test_get_max_intensity_multiple_caps_returns_lowest(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify returns the lowest cap when multiple exist."""
+        entity = create_entity(db_session, game_session)
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="intimacy",
+            modifier_source=ModifierSource.AGE,
+            source_detail="age_50",
+            max_intensity_cap=60,
+        )
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="intimacy",
+            modifier_source=ModifierSource.CUSTOM,
+            source_detail="trauma",
+            max_intensity_cap=40,
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_max_intensity(entity.id, "intimacy")
+
+        assert result == 40
+
+
+class TestAdaptationMethods:
+    """Tests for need adaptation tracking."""
+
+    def test_get_total_adaptation_no_adaptations(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify returns 0 when no adaptations exist."""
+        entity = create_entity(db_session, game_session)
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_total_adaptation(entity.id, "social_connection")
+
+        assert result == 0
+
+    def test_get_total_adaptation_single_adaptation(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify returns single adaptation delta."""
+        entity = create_entity(db_session, game_session)
+        create_need_adaptation(
+            db_session, game_session, entity,
+            need_name="social_connection",
+            adaptation_delta=-15,
+            reason="Months of isolation",
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_total_adaptation(entity.id, "social_connection")
+
+        assert result == -15
+
+    def test_get_total_adaptation_sums_multiple(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify sums multiple adaptation deltas."""
+        entity = create_entity(db_session, game_session)
+        create_need_adaptation(
+            db_session, game_session, entity,
+            need_name="hunger",
+            adaptation_delta=-10,
+            reason="Fasting practice",
+        )
+        create_need_adaptation(
+            db_session, game_session, entity,
+            need_name="hunger",
+            adaptation_delta=-5,
+            reason="Continued discipline",
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.get_total_adaptation(entity.id, "hunger")
+
+        assert result == -15
+
+    def test_create_adaptation_creates_record(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify create_adaptation creates an adaptation record."""
+        entity = create_entity(db_session, game_session)
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.create_adaptation(
+            entity_id=entity.id,
+            need_name="social_connection",
+            delta=-10,
+            reason="Prolonged isolation",
+        )
+
+        assert result is not None
+        assert result.entity_id == entity.id
+        assert result.need_name == "social_connection"
+        assert result.adaptation_delta == -10
+        assert result.reason == "Prolonged isolation"
+
+    def test_create_adaptation_with_optional_fields(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify create_adaptation accepts optional fields."""
+        entity = create_entity(db_session, game_session)
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.create_adaptation(
+            entity_id=entity.id,
+            need_name="hunger",
+            delta=-20,
+            reason="Strict diet training",
+            trigger_event="monastery_training",
+            is_gradual=True,
+            duration_days=30,
+            is_reversible=True,
+            reversal_trigger="Return to normal eating",
+        )
+
+        assert result.trigger_event == "monastery_training"
+        assert result.is_gradual is True
+        assert result.duration_days == 30
+        assert result.is_reversible is True
+        assert result.reversal_trigger == "Return to normal eating"
+
+
+class TestDecayWithModifiers:
+    """Tests for decay calculation using modifiers."""
+
+    def test_apply_time_decay_uses_decay_multiplier(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify apply_time_decay applies decay rate multiplier."""
+        entity = create_entity(db_session, game_session)
+        create_character_needs(db_session, game_session, entity, hunger=50)
+        # Greedy eater - 1.5x hunger decay
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="hunger",
+            modifier_source=ModifierSource.TRAIT,
+            source_detail="greedy_eater",
+            decay_rate_multiplier=1.5,
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.apply_time_decay(entity.id, hours=1, activity=ActivityType.ACTIVE)
+
+        # Base decay is -6 per hour, with 1.5x = -9
+        assert result.hunger == 41  # 50 - 9 = 41
+
+    def test_apply_time_decay_uses_max_intensity_cap(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify apply_time_decay respects max intensity cap."""
+        entity = create_entity(db_session, game_session)
+        create_character_needs(db_session, game_session, entity, intimacy=30)
+        # Age-based cap on intimacy
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="intimacy",
+            modifier_source=ModifierSource.AGE,
+            source_detail="age_10",
+            max_intensity_cap=20,
+        )
+        create_intimacy_profile(
+            db_session, game_session, entity, drive_level=DriveLevel.HIGH
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.apply_time_decay(entity.id, hours=24)
+
+        # intimacy should be capped at 20, not increase beyond
+        assert result.intimacy <= 20
+
+    def test_apply_time_decay_reduces_fatigue_with_high_stamina(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify high stamina trait reduces fatigue buildup."""
+        entity = create_entity(db_session, game_session)
+        create_character_needs(db_session, game_session, entity, fatigue=20)
+        # High stamina - 0.7x fatigue decay
+        create_need_modifier(
+            db_session, game_session, entity,
+            need_name="fatigue",
+            modifier_source=ModifierSource.TRAIT,
+            source_detail="high_stamina",
+            decay_rate_multiplier=0.7,
+        )
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.apply_time_decay(entity.id, hours=1, activity=ActivityType.ACTIVE)
+
+        # Base decay is +12 per hour, with 0.7x = +8.4
+        # 20 + 8.4 = 28.4, rounds to 28
+        assert result.fatigue == 28  # Instead of 32 without modifier

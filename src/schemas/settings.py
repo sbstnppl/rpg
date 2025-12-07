@@ -45,6 +45,71 @@ class StartingItem:
     properties: dict | None = None
 
 
+# =============================================================================
+# Need Modifier Settings (Age Curves and Trait Effects)
+# =============================================================================
+
+
+@dataclass
+class AsymmetricDistribution:
+    """Asymmetric normal distribution parameters for age-based modifiers.
+
+    Used to model how needs change with age. For example, intimacy drive
+    peaks around age 18 and gradually declines with age, but drops sharply
+    for very young ages.
+
+    The distribution uses different standard deviations for ages below
+    and above the peak age, allowing for asymmetric curves.
+    """
+
+    peak_age: int  # Age where the value is highest (e.g., 18 for intimacy)
+    peak_value: float  # Expected value at peak age (e.g., 90)
+    std_dev_lower: float  # Standard deviation for ages below peak (sharper curve)
+    std_dev_upper: float  # Standard deviation for ages above peak (gradual decline)
+    min_value: float = 0.0  # Minimum possible value
+    max_value: float = 100.0  # Maximum possible value
+
+
+@dataclass
+class NeedAgeCurve:
+    """Age curve configuration for a specific need.
+
+    Defines how a need's baseline (decay rate and max intensity) varies
+    with age using a two-stage calculation:
+
+    Stage 1: Age -> Expected value using asymmetric distribution
+    Stage 2: Individual variance applied around expected value
+    """
+
+    need_name: str  # Which need this applies to (hunger, intimacy, etc.)
+    distribution: AsymmetricDistribution  # Age-based distribution parameters
+    individual_variance_std: float = 15.0  # Standard deviation for Stage 2
+    affects_decay: bool = True  # Whether age affects decay rate
+    affects_max_intensity: bool = True  # Whether age caps max intensity
+
+
+@dataclass
+class TraitEffect:
+    """Effect of a trait on a specific need.
+
+    Defines how a character trait (e.g., greedy_eater) modifies
+    the decay rate or satisfaction for a specific need.
+    """
+
+    decay_rate_multiplier: float = 1.0  # Multiplier for decay rate
+    satisfaction_multiplier: float = 1.0  # Multiplier for satisfaction
+    creates_need: str | None = None  # Optional: creates a new need (e.g., alcohol_craving)
+
+
+@dataclass
+class NeedModifierSettings:
+    """Settings for need modifiers including age curves and trait effects."""
+
+    age_curves: list[NeedAgeCurve] = field(default_factory=list)
+    trait_effects: dict[str, dict[str, TraitEffect]] = field(default_factory=dict)
+    recalculate_on_aging: bool = False  # Whether to recalculate when character ages
+
+
 @dataclass
 class SettingSchema:
     """Complete schema for a game setting."""
@@ -57,6 +122,7 @@ class SettingSchema:
     point_buy_max: int = 15
     equipment_slots: list[EquipmentSlot] = field(default_factory=list)
     starting_equipment: list[StartingItem] = field(default_factory=list)
+    need_modifiers: NeedModifierSettings = field(default_factory=NeedModifierSettings)
 
 
 def get_settings_dir() -> Path:
@@ -144,6 +210,9 @@ def _parse_setting_json(data: dict[str, Any]) -> SettingSchema:
             )
         )
 
+    # Parse need modifiers (age curves and trait effects)
+    need_modifiers = _parse_need_modifiers(data.get("need_modifiers", {}))
+
     return SettingSchema(
         name=data["name"],
         description=data.get("description", ""),
@@ -153,6 +222,59 @@ def _parse_setting_json(data: dict[str, Any]) -> SettingSchema:
         point_buy_max=point_buy.get("max_value", 15),
         equipment_slots=equipment_slots,
         starting_equipment=starting_equipment,
+        need_modifiers=need_modifiers,
+    )
+
+
+def _parse_need_modifiers(data: dict[str, Any]) -> NeedModifierSettings:
+    """Parse need modifier settings from JSON.
+
+    Args:
+        data: The need_modifiers section of the settings JSON.
+
+    Returns:
+        NeedModifierSettings instance.
+    """
+    if not data:
+        return NeedModifierSettings()
+
+    # Parse age curves
+    age_curves = []
+    for curve_data in data.get("age_curves", []):
+        dist_data = curve_data.get("distribution", {})
+        distribution = AsymmetricDistribution(
+            peak_age=dist_data.get("peak_age", 25),
+            peak_value=dist_data.get("peak_value", 50.0),
+            std_dev_lower=dist_data.get("std_dev_lower", 10.0),
+            std_dev_upper=dist_data.get("std_dev_upper", 30.0),
+            min_value=dist_data.get("min_value", 0.0),
+            max_value=dist_data.get("max_value", 100.0),
+        )
+        age_curves.append(
+            NeedAgeCurve(
+                need_name=curve_data["need_name"],
+                distribution=distribution,
+                individual_variance_std=curve_data.get("individual_variance_std", 15.0),
+                affects_decay=curve_data.get("affects_decay", True),
+                affects_max_intensity=curve_data.get("affects_max_intensity", True),
+            )
+        )
+
+    # Parse trait effects: trait_name -> {need_name -> TraitEffect}
+    trait_effects: dict[str, dict[str, TraitEffect]] = {}
+    for trait_name, needs in data.get("trait_effects", {}).items():
+        trait_effects[trait_name] = {}
+        for need_name, effect_data in needs.items():
+            trait_effects[trait_name][need_name] = TraitEffect(
+                decay_rate_multiplier=effect_data.get("decay_rate_multiplier", 1.0),
+                satisfaction_multiplier=effect_data.get("satisfaction_multiplier", 1.0),
+                creates_need=effect_data.get("creates_need"),
+            )
+
+    return NeedModifierSettings(
+        age_curves=age_curves,
+        trait_effects=trait_effects,
+        recalculate_on_aging=data.get("recalculate_on_aging", False),
     )
 
 

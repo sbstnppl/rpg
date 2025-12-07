@@ -6,9 +6,10 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
+from src.database.models.character_preferences import NeedAdaptation, NeedModifier
 from src.database.models.character_state import CharacterNeeds, IntimacyProfile
 from src.database.models.entities import Entity
-from src.database.models.enums import DriveLevel
+from src.database.models.enums import DriveLevel, ModifierSource
 from src.database.models.session import GameSession
 from src.managers.base import BaseManager
 
@@ -153,18 +154,29 @@ class NeedsManager(BaseManager):
                 elif activity == ActivityType.SOCIALIZING:
                     rate = 5
 
+            # Apply decay rate multiplier from modifiers
+            decay_multiplier = self.get_decay_multiplier(entity_id, need_name)
+            rate = rate * decay_multiplier
+
             current_value = getattr(needs, need_name)
             new_value = current_value + (rate * hours)
 
-            # Clamp to 0-100
-            setattr(needs, need_name, self._clamp(new_value))
+            # Get max intensity cap and clamp
+            max_intensity = self.get_max_intensity(entity_id, need_name)
+            setattr(needs, need_name, self._clamp(new_value, max_val=max_intensity))
 
         # Handle intimacy separately (daily decay based on drive)
         profile = self.get_intimacy_profile(entity_id)
         if profile:
             daily_rate = INTIMACY_DAILY_DECAY.get(profile.drive_level, 5)
-            hourly_rate = daily_rate / 24
-            needs.intimacy = self._clamp(needs.intimacy + (hourly_rate * hours))
+            # Apply decay multiplier for intimacy too
+            decay_multiplier = self.get_decay_multiplier(entity_id, "intimacy")
+            hourly_rate = (daily_rate / 24) * decay_multiplier
+            # Apply max intensity cap for intimacy
+            intimacy_max = self.get_max_intensity(entity_id, "intimacy")
+            needs.intimacy = self._clamp(
+                needs.intimacy + (hourly_rate * hours), max_val=intimacy_max
+            )
 
         # Update morale based on other needs
         self._update_morale(needs)
@@ -467,3 +479,172 @@ class NeedsManager(BaseManager):
 
         most_urgent = max(urgencies.items(), key=lambda x: x[1])
         return most_urgent[0], most_urgent[1]
+
+    # =========================================================================
+    # Modifier Methods
+    # =========================================================================
+
+    def get_decay_multiplier(self, entity_id: int, need_name: str) -> float:
+        """Get combined decay rate multiplier for a need.
+
+        Multiplies all active modifiers for this need.
+
+        Args:
+            entity_id: Entity to get multiplier for.
+            need_name: Name of the need.
+
+        Returns:
+            Combined multiplier (1.0 if no modifiers).
+        """
+        modifiers = (
+            self.db.query(NeedModifier)
+            .filter(
+                NeedModifier.entity_id == entity_id,
+                NeedModifier.session_id == self.session_id,
+                NeedModifier.need_name == need_name,
+                NeedModifier.is_active == True,
+            )
+            .all()
+        )
+
+        result = 1.0
+        for mod in modifiers:
+            result *= mod.decay_rate_multiplier
+        return result
+
+    def get_satisfaction_multiplier(self, entity_id: int, need_name: str) -> float:
+        """Get combined satisfaction multiplier for a need.
+
+        Multiplies all active modifiers for this need.
+
+        Args:
+            entity_id: Entity to get multiplier for.
+            need_name: Name of the need.
+
+        Returns:
+            Combined multiplier (1.0 if no modifiers).
+        """
+        modifiers = (
+            self.db.query(NeedModifier)
+            .filter(
+                NeedModifier.entity_id == entity_id,
+                NeedModifier.session_id == self.session_id,
+                NeedModifier.need_name == need_name,
+                NeedModifier.is_active == True,
+            )
+            .all()
+        )
+
+        result = 1.0
+        for mod in modifiers:
+            result *= mod.satisfaction_multiplier
+        return result
+
+    def get_max_intensity(self, entity_id: int, need_name: str) -> int:
+        """Get maximum intensity cap for a need.
+
+        Returns the lowest cap from all active modifiers.
+
+        Args:
+            entity_id: Entity to get cap for.
+            need_name: Name of the need.
+
+        Returns:
+            Lowest cap value, or 100 if no caps exist.
+        """
+        modifiers = (
+            self.db.query(NeedModifier)
+            .filter(
+                NeedModifier.entity_id == entity_id,
+                NeedModifier.session_id == self.session_id,
+                NeedModifier.need_name == need_name,
+                NeedModifier.is_active == True,
+                NeedModifier.max_intensity_cap.isnot(None),
+            )
+            .all()
+        )
+
+        if not modifiers:
+            return 100
+
+        return min(mod.max_intensity_cap for mod in modifiers)
+
+    # =========================================================================
+    # Adaptation Methods
+    # =========================================================================
+
+    def get_total_adaptation(self, entity_id: int, need_name: str) -> int:
+        """Get total adaptation delta for a need.
+
+        Sums all adaptation deltas for this need.
+
+        Args:
+            entity_id: Entity to get adaptation for.
+            need_name: Name of the need.
+
+        Returns:
+            Sum of all adaptation deltas (0 if none).
+        """
+        from sqlalchemy import func
+
+        result = (
+            self.db.query(func.sum(NeedAdaptation.adaptation_delta))
+            .filter(
+                NeedAdaptation.entity_id == entity_id,
+                NeedAdaptation.session_id == self.session_id,
+                NeedAdaptation.need_name == need_name,
+            )
+            .scalar()
+        )
+
+        return result or 0
+
+    def create_adaptation(
+        self,
+        entity_id: int,
+        need_name: str,
+        delta: int,
+        reason: str,
+        trigger_event: str | None = None,
+        started_turn: int | None = None,
+        is_gradual: bool = False,
+        duration_days: int | None = None,
+        is_reversible: bool = False,
+        reversal_trigger: str | None = None,
+    ) -> NeedAdaptation:
+        """Create a need adaptation record.
+
+        Args:
+            entity_id: Entity to create adaptation for.
+            need_name: Name of the need being adapted.
+            delta: Change to baseline (positive or negative).
+            reason: Why this adaptation occurred.
+            trigger_event: Optional event that triggered this.
+            started_turn: Turn when adaptation started (defaults to current turn).
+            is_gradual: Whether this adaptation happens gradually.
+            duration_days: Days for gradual adaptation.
+            is_reversible: Whether this can be reversed.
+            reversal_trigger: What would reverse this adaptation.
+
+        Returns:
+            Created NeedAdaptation record.
+        """
+        if started_turn is None:
+            started_turn = self.current_turn
+
+        adaptation = NeedAdaptation(
+            entity_id=entity_id,
+            session_id=self.session_id,
+            need_name=need_name,
+            adaptation_delta=delta,
+            reason=reason,
+            trigger_event=trigger_event,
+            started_turn=started_turn,
+            is_gradual=is_gradual,
+            duration_days=duration_days,
+            is_reversible=is_reversible,
+            reversal_trigger=reversal_trigger,
+        )
+        self.db.add(adaptation)
+        self.db.flush()
+        return adaptation

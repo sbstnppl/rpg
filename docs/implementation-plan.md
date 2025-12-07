@@ -121,9 +121,21 @@
 
 ### 2.12 Realism Managers (NEW)
 - [x] Create `src/managers/needs.py` - NeedsManager
-  - `apply_time_decay()` - activity-based need changes
+  - `apply_time_decay()` - activity-based need changes with modifier support
   - `get_active_effects()` - stat penalties from unmet needs
   - `get_npc_urgency()` - for schedule overrides
+  - `get_decay_multiplier()` - combined decay rate from modifiers
+  - `get_satisfaction_multiplier()` - combined satisfaction rate from modifiers
+  - `get_max_intensity()` - lowest intensity cap from age/trait modifiers
+  - `get_total_adaptation()` - sum of adaptation deltas for a need
+  - `create_adaptation()` - create adaptation record for need changes
+- [x] Create `src/managers/preferences_manager.py` - PreferencesManager
+  - `get_preferences()`, `get_or_create_preferences()`, `create_preferences()`
+  - `get_trait_flags()`, `set_trait()` - trait flag management
+  - `sync_trait_modifiers()` - sync traits to NeedModifier records
+  - `calculate_age_modifier()` - asymmetric normal distribution
+  - `generate_individual_variance()` - stage 2 per-character variance
+  - `generate_age_modifiers()` - two-stage age-based modifier generation
 - [x] Create `src/managers/injuries.py` - InjuryManager
   - `add_injury()`, `get_injuries()`
   - `get_activity_impact()` - penalties for walking/running/etc

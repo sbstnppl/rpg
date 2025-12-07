@@ -8,6 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Character preferences and need modifiers system** - Comprehensive preference tracking
+  - `CharacterPreferences` model replacing narrow `IntimacyProfile`
+    - Food preferences: favorite_foods, disliked_foods, is_vegetarian, is_vegan, food_allergies
+    - Food traits: is_greedy_eater, is_picky_eater
+    - Drink preferences: favorite_drinks, alcohol_tolerance, is_alcoholic, is_teetotaler
+    - Intimacy preferences: migrated from IntimacyProfile (drive_level, intimacy_style, etc.)
+    - Social preferences: social_tendency, preferred_group_size, is_social_butterfly, is_loner
+    - Stamina traits: has_high_stamina, has_low_stamina, is_insomniac, is_heavy_sleeper
+    - Flexible JSON extra_preferences for setting-specific data
+  - `NeedModifier` model for per-entity need decay/satisfaction modifiers
+    - Supports trait-based, age-based, adaptation, and custom modifiers
+    - decay_rate_multiplier, satisfaction_multiplier, max_intensity_cap
+    - Unique constraint on (entity_id, need_name, modifier_source, source_detail)
+  - `NeedAdaptation` model for tracking need baseline changes over time
+    - adaptation_delta, reason, trigger_event
+    - is_gradual, duration_days, is_reversible, reversal_trigger
+  - New enums: AlcoholTolerance, SocialTendency, ModifierSource
+  - Age curve settings in fantasy.json for age-based modifiers
+    - AsymmetricDistribution dataclass for two-stage normal distribution
+    - NeedAgeCurve for per-need age curves (intimacy peaks at 18, etc.)
+    - TraitEffect for trait-based modifier mappings
+  - Alembic migration `003_add_character_preferences.py`
+  - `PreferencesManager` for managing character preferences
+    - CRUD operations for `CharacterPreferences`
+    - Trait flag management with automatic modifier syncing
+    - Age-based modifier generation using two-stage normal distribution
+    - `calculate_age_modifier()` for asymmetric distribution calculation
+    - `generate_individual_variance()` for per-character variance
+    - `sync_trait_modifiers()` to sync trait flags to NeedModifier records
+  - `NeedsManager` modifier-aware methods
+    - `get_decay_multiplier()` - combined decay rate from all active modifiers
+    - `get_satisfaction_multiplier()` - combined satisfaction rate from modifiers
+    - `get_max_intensity()` - lowest intensity cap from age/trait modifiers
+    - `get_total_adaptation()` - sum of adaptation deltas for a need
+    - `create_adaptation()` - create adaptation record for need baseline changes
+    - `apply_time_decay()` now uses decay multipliers and max intensity caps
+  - 71 new tests for preferences manager and needs manager modifiers
 - **Rich character appearance system** - Dedicated columns for media generation
   - 12 new appearance columns: age, age_apparent, gender, height, build, hair_color, hair_style, eye_color, skin_tone, species, distinguishing_features, voice_description
   - `Entity.APPEARANCE_FIELDS` constant for iteration

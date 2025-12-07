@@ -142,3 +142,80 @@ class TestGetSettingSchemaWithJson:
         """get_setting_schema should fallback to fantasy for unknown settings."""
         schema = get_setting_schema("unknown_setting")
         assert schema.name == "fantasy"
+
+
+class TestNeedModifiersFromJson:
+    """Tests for need modifiers parsing from JSON."""
+
+    def test_fantasy_has_need_modifiers(self):
+        """Fantasy setting should have need modifiers defined."""
+        schema = load_setting_from_json("fantasy")
+        assert hasattr(schema, "need_modifiers")
+        assert schema.need_modifiers is not None
+
+    def test_need_modifiers_has_age_curves(self):
+        """Need modifiers should include age curves."""
+        schema = load_setting_from_json("fantasy")
+        assert hasattr(schema.need_modifiers, "age_curves")
+        assert isinstance(schema.need_modifiers.age_curves, list)
+        assert len(schema.need_modifiers.age_curves) > 0
+
+    def test_age_curve_has_required_fields(self):
+        """Each age curve should have required fields."""
+        schema = load_setting_from_json("fantasy")
+        for curve in schema.need_modifiers.age_curves:
+            assert hasattr(curve, "need_name")
+            assert hasattr(curve, "distribution")
+            assert hasattr(curve, "individual_variance_std")
+            assert isinstance(curve.need_name, str)
+
+    def test_age_curve_distribution_has_fields(self):
+        """Age curve distribution should have required fields."""
+        schema = load_setting_from_json("fantasy")
+        for curve in schema.need_modifiers.age_curves:
+            dist = curve.distribution
+            assert hasattr(dist, "peak_age")
+            assert hasattr(dist, "peak_value")
+            assert hasattr(dist, "std_dev_lower")
+            assert hasattr(dist, "std_dev_upper")
+            assert dist.min_value <= dist.max_value
+
+    def test_intimacy_age_curve_peaks_at_18(self):
+        """Intimacy age curve should peak at age 18."""
+        schema = load_setting_from_json("fantasy")
+        intimacy_curves = [c for c in schema.need_modifiers.age_curves if c.need_name == "intimacy"]
+        assert len(intimacy_curves) == 1
+        assert intimacy_curves[0].distribution.peak_age == 18
+        assert intimacy_curves[0].distribution.peak_value == 90
+
+    def test_need_modifiers_has_trait_effects(self):
+        """Need modifiers should include trait effects."""
+        schema = load_setting_from_json("fantasy")
+        assert hasattr(schema.need_modifiers, "trait_effects")
+        assert isinstance(schema.need_modifiers.trait_effects, dict)
+        assert len(schema.need_modifiers.trait_effects) > 0
+
+    def test_greedy_eater_trait_effect(self):
+        """Greedy eater trait should affect hunger decay."""
+        schema = load_setting_from_json("fantasy")
+        assert "greedy_eater" in schema.need_modifiers.trait_effects
+        greedy_effect = schema.need_modifiers.trait_effects["greedy_eater"]
+        assert "hunger" in greedy_effect
+        assert greedy_effect["hunger"].decay_rate_multiplier > 1.0
+
+    def test_high_stamina_trait_effect(self):
+        """High stamina trait should reduce fatigue decay."""
+        schema = load_setting_from_json("fantasy")
+        assert "high_stamina" in schema.need_modifiers.trait_effects
+        stamina_effect = schema.need_modifiers.trait_effects["high_stamina"]
+        assert "fatigue" in stamina_effect
+        assert stamina_effect["fatigue"].decay_rate_multiplier < 1.0
+
+    def test_settings_without_need_modifiers_get_defaults(self):
+        """Settings without need_modifiers should get defaults."""
+        # Test by parsing empty data
+        from src.schemas.settings import _parse_need_modifiers, NeedModifierSettings
+        result = _parse_need_modifiers({})
+        assert isinstance(result, NeedModifierSettings)
+        assert len(result.age_curves) == 0
+        assert len(result.trait_effects) == 0

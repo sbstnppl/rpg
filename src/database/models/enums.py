@@ -231,3 +231,36 @@ class MentalConditionType(str, Enum):
     DEATH_ANXIETY = "death_anxiety"
     SURVIVORS_GUILT = "survivors_guilt"
     EXISTENTIAL_CRISIS = "existential_crisis"  # From revival in sci-fi
+
+
+# =============================================================================
+# Character Preferences Enums
+# =============================================================================
+
+
+class AlcoholTolerance(str, Enum):
+    """Alcohol tolerance levels."""
+
+    NONE = "none"  # Cannot drink
+    LOW = "low"  # Gets drunk easily
+    MODERATE = "moderate"  # Average tolerance
+    HIGH = "high"  # Can hold their liquor
+    VERY_HIGH = "very_high"  # Barely affected
+
+
+class SocialTendency(str, Enum):
+    """Social preference tendencies."""
+
+    INTROVERT = "introvert"  # Prefers solitude, drains from social
+    AMBIVERT = "ambivert"  # Balanced
+    EXTROVERT = "extrovert"  # Gains energy from social
+
+
+class ModifierSource(str, Enum):
+    """Source of a need modifier."""
+
+    TRAIT = "trait"  # From character trait (e.g., greedy_eater)
+    AGE = "age"  # From age-based calculation
+    ADAPTATION = "adaptation"  # From adaptation to circumstances
+    CUSTOM = "custom"  # Manually set
+    TEMPORARY = "temporary"  # Temporary effect (spell, drug, etc.)
