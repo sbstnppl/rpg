@@ -48,6 +48,17 @@ from src.llm.factory import (
 # Retry utilities
 from src.llm.retry import RetryConfig, with_retry
 
+# Audit logging
+from src.llm.audit_logger import (
+    set_audit_context,
+    get_audit_context,
+    get_audit_logger,
+    LLMAuditContext,
+    LLMAuditEntry,
+    LLMAuditLogger,
+)
+from src.llm.logging_provider import LoggingProvider
+
 # Exceptions
 from src.llm.exceptions import (
     LLMError,
@@ -85,6 +96,14 @@ __all__ = [
     # Retry
     "RetryConfig",
     "with_retry",
+    # Audit logging
+    "set_audit_context",
+    "get_audit_context",
+    "get_audit_logger",
+    "LLMAuditContext",
+    "LLMAuditEntry",
+    "LLMAuditLogger",
+    "LoggingProvider",
     # Exceptions
     "LLMError",
     "ProviderError",

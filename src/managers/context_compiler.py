@@ -8,20 +8,24 @@ from src.database.models.character_state import CharacterNeeds
 from src.database.models.entities import Entity, NPCExtension
 from src.database.models.enums import EntityType
 from src.database.models.injuries import BodyInjury
+from src.database.models.navigation import ZoneDiscovery
 from src.database.models.relationships import Relationship
-from src.database.models.session import GameSession
+from src.database.models.session import GameSession, Turn
 from src.database.models.world import Fact, Location, TimeState, WorldEvent
 from src.managers.base import BaseManager
+from src.managers.discovery_manager import DiscoveryManager
 from src.managers.injuries import InjuryManager
 from src.managers.item_manager import ItemManager
 from src.managers.needs import NeedsManager
 from src.managers.relationship_manager import RelationshipManager
+from src.managers.zone_manager import ZoneManager
 
 
 @dataclass
 class SceneContext:
     """Compiled scene context for GM."""
 
+    turn_context: str  # Turn number and recent history
     time_context: str
     location_context: str
     player_context: str
@@ -29,15 +33,20 @@ class SceneContext:
     tasks_context: str
     recent_events_context: str
     secrets_context: str  # GM-only info
+    navigation_context: str = ""  # Current zone and navigation info
 
     def to_prompt(self, include_secrets: bool = True) -> str:
         """Format as prompt string for GM."""
         sections = [
+            self.turn_context,
             self.time_context,
             self.location_context,
             self.player_context,
             self.npcs_context,
         ]
+
+        if self.navigation_context:
+            sections.append(self.navigation_context)
 
         if self.tasks_context:
             sections.append(self.tasks_context)
@@ -62,6 +71,8 @@ class ContextCompiler(BaseManager):
         injury_manager: InjuryManager | None = None,
         relationship_manager: RelationshipManager | None = None,
         item_manager: ItemManager | None = None,
+        zone_manager: ZoneManager | None = None,
+        discovery_manager: DiscoveryManager | None = None,
     ) -> None:
         """Initialize with optional manager references.
 
@@ -72,6 +83,8 @@ class ContextCompiler(BaseManager):
         self._injury_manager = injury_manager
         self._relationship_manager = relationship_manager
         self._item_manager = item_manager
+        self._zone_manager = zone_manager
+        self._discovery_manager = discovery_manager
 
     @property
     def needs_manager(self) -> NeedsManager:
@@ -97,23 +110,40 @@ class ContextCompiler(BaseManager):
             self._item_manager = ItemManager(self.db, self.game_session)
         return self._item_manager
 
+    @property
+    def zone_manager(self) -> ZoneManager:
+        if self._zone_manager is None:
+            self._zone_manager = ZoneManager(self.db, self.game_session)
+        return self._zone_manager
+
+    @property
+    def discovery_manager(self) -> DiscoveryManager:
+        if self._discovery_manager is None:
+            self._discovery_manager = DiscoveryManager(self.db, self.game_session)
+        return self._discovery_manager
+
     def compile_scene(
         self,
         player_id: int,
         location_key: str,
+        turn_number: int = 1,
         include_secrets: bool = True,
+        current_zone_key: str | None = None,
     ) -> SceneContext:
         """Compile full scene context for GM.
 
         Args:
             player_id: Player entity ID
             location_key: Current location key
+            turn_number: Current turn number (1 = first turn)
             include_secrets: Whether to include GM-only secrets
+            current_zone_key: Current terrain zone key (if using zone navigation)
 
         Returns:
             SceneContext with all compiled sections
         """
         return SceneContext(
+            turn_context=self._get_turn_context(turn_number),
             time_context=self._get_time_context(),
             location_context=self._get_location_context(location_key),
             player_context=self._get_player_context(player_id),
@@ -121,7 +151,59 @@ class ContextCompiler(BaseManager):
             tasks_context=self._get_tasks_context(player_id),
             recent_events_context=self._get_recent_events(limit=5),
             secrets_context=self._get_secrets_context(location_key) if include_secrets else "",
+            navigation_context=self._get_navigation_context(current_zone_key),
         )
+
+    def _get_turn_context(self, turn_number: int, history_limit: int = 3) -> str:
+        """Get turn number and recent conversation history.
+
+        Args:
+            turn_number: Current turn number (1 = first turn).
+            history_limit: Number of recent turns to include.
+
+        Returns:
+            Formatted turn context string.
+        """
+        lines = [f"## Turn {turn_number}"]
+
+        if turn_number == 1:
+            lines.append("This is the FIRST TURN. Introduce the player character.")
+        else:
+            lines.append("This is a CONTINUATION. Do NOT re-introduce the character.")
+
+            # Get recent turns for context
+            recent_turns = (
+                self.db.query(Turn)
+                .filter(Turn.session_id == self.session_id)
+                .order_by(Turn.turn_number.desc())
+                .limit(history_limit)
+                .all()
+            )
+
+            if recent_turns:
+                lines.append("\n### Recent History")
+                # Reverse to show oldest first
+                reversed_turns = list(reversed(recent_turns))
+                for i, turn in enumerate(reversed_turns):
+                    # More context for recent turns, less for older ones
+                    is_most_recent = (i == len(reversed_turns) - 1)
+
+                    # Player input usually short, but allow more space
+                    player_input = turn.player_input[:200]
+                    if len(turn.player_input) > 200:
+                        player_input += "..."
+
+                    # Most recent turn gets full context, older turns abbreviated
+                    max_gm_len = 1000 if is_most_recent else 400
+                    gm_summary = turn.gm_response[:max_gm_len]
+                    if len(turn.gm_response) > max_gm_len:
+                        gm_summary += "..."
+
+                    lines.append(f"\n**Turn {turn.turn_number}**")
+                    lines.append(f"Player: {player_input}")
+                    lines.append(f"GM: {gm_summary}")
+
+        return "\n".join(lines)
 
     def _get_time_context(self) -> str:
         """Get current time/date/weather context."""
@@ -355,9 +437,10 @@ class ContextCompiler(BaseManager):
         descriptions = []
 
         # Visible conditions (someone else could observe)
-        if needs.fatigue > 80:
+        # All needs: 0 = bad, 100 = good
+        if needs.energy < 20:
             descriptions.append("exhausted")
-        elif needs.fatigue > 60:
+        elif needs.energy < 40:
             descriptions.append("tired")
 
         if needs.hunger < 15:
@@ -370,9 +453,9 @@ class ContextCompiler(BaseManager):
         elif needs.hygiene < 40:
             descriptions.append("disheveled")
 
-        if needs.pain > 60:
+        if needs.wellness < 40:
             descriptions.append("in obvious pain")
-        elif needs.pain > 40:
+        elif needs.wellness < 60:
             descriptions.append("uncomfortable")
 
         # Less visible (only for player/self)
@@ -385,7 +468,7 @@ class ContextCompiler(BaseManager):
             if needs.social_connection < 20:
                 descriptions.append("lonely")
 
-            if needs.intimacy > 80:
+            if needs.intimacy < 20:
                 descriptions.append("restless")
 
         return ", ".join(descriptions)
@@ -592,3 +675,70 @@ class ContextCompiler(BaseManager):
                 parts.append(f"({condition})")
 
         return " ".join(parts)
+
+    def _get_navigation_context(self, current_zone_key: str | None) -> str:
+        """Get navigation context including current zone and accessible areas.
+
+        Args:
+            current_zone_key: Current terrain zone key, or None if not in a zone.
+
+        Returns:
+            Formatted navigation context string.
+        """
+        if current_zone_key is None:
+            return ""
+
+        zone = self.zone_manager.get_zone(current_zone_key)
+        if zone is None:
+            return ""
+
+        lines = ["## Navigation"]
+
+        # Current zone info
+        terrain_name = zone.terrain_type.value if zone.terrain_type else "unknown"
+        lines.append(f"### Current Zone: {zone.display_name}")
+        lines.append(f"- Terrain: {terrain_name}")
+
+        if zone.description:
+            lines.append(f"- {zone.description[:150]}...")
+
+        # Hazard warning for current zone
+        if zone.requires_skill:
+            dc_text = f" (DC {zone.skill_difficulty})" if zone.skill_difficulty else ""
+            lines.append(f"- Requires: {zone.requires_skill} skill{dc_text}")
+
+        # Get adjacent zones with directions
+        adjacent_data = self.zone_manager.get_adjacent_zones_with_directions(current_zone_key)
+
+        # Filter to only discovered zones
+        discovered_adjacent = []
+        for item in adjacent_data:
+            adj_zone = item["zone"]
+            direction = item["direction"]
+            if self.discovery_manager.is_zone_discovered(adj_zone.zone_key):
+                discovered_adjacent.append((adj_zone, direction))
+
+        if discovered_adjacent:
+            lines.append("\n### Known Adjacent Areas")
+            for adj_zone, direction in discovered_adjacent:
+                dir_str = f"({direction}) " if direction else ""
+                terrain = adj_zone.terrain_type.value if adj_zone.terrain_type else ""
+
+                # Add hazard indicator
+                hazard = ""
+                if adj_zone.requires_skill:
+                    hazard = f" [requires {adj_zone.requires_skill}]"
+
+                lines.append(f"- {dir_str}{adj_zone.display_name} ({terrain}){hazard}")
+
+        # Get discovered locations in current zone
+        discovered_locations = self.discovery_manager.get_known_locations(
+            zone_key=current_zone_key
+        )
+
+        if discovered_locations:
+            lines.append("\n### Known Locations Here")
+            for loc in discovered_locations[:5]:  # Limit to 5
+                lines.append(f"- {loc.display_name}")
+
+        return "\n".join(lines)

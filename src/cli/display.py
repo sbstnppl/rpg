@@ -141,16 +141,19 @@ def display_character_status(
         console.print(attr_table)
         console.print()
 
-    # Needs with progress bars
+    # Needs with progress bars and status descriptions
     if needs:
         needs_table = Table(title="Needs", box=box.ROUNDED)
-        needs_table.add_column("Need", style="white", width=12)
-        needs_table.add_column("Level", width=25)
-        needs_table.add_column("Value", justify="right", width=8)
+        needs_table.add_column("Need", style="white", width=10)
+        needs_table.add_column("Level", width=22)
+        needs_table.add_column("", justify="right", width=4)
+        needs_table.add_column("Status", width=18)
 
         for need_name, value in needs.items():
             bar = _create_progress_bar(value, 100)
-            needs_table.add_row(need_name, bar, f"{value}/100")
+            description, color = _get_need_description(need_name, value)
+            styled_desc = f"[{color}]{description}[/{color}]"
+            needs_table.add_row(need_name, bar, str(value), styled_desc)
 
         console.print(needs_table)
         console.print()
@@ -235,6 +238,109 @@ def display_location_info(
 
     panel = Panel("\n".join(lines), title="Location", border_style="green")
     console.print(panel)
+
+
+def _get_need_description(need_name: str, value: int) -> tuple[str, str]:
+    """Return human-readable description and color for a need value.
+
+    All needs follow the same semantics: 0 = bad (red), 100 = good (green).
+
+    Args:
+        need_name: Name of the need (lowercase).
+        value: Current value (0-100).
+
+    Returns:
+        Tuple of (description, color) for the need state.
+    """
+    # Each need has thresholds: (max_value, description, color)
+    # Listed from lowest to highest threshold
+    # All needs: low value = red/yellow, high value = green
+    descriptions = {
+        "hunger": [
+            (15, "starving", "red"),
+            (30, "very hungry", "red"),
+            (50, "hungry", "yellow"),
+            (70, "satisfied", "green"),
+            (85, "full", "green"),
+            (100, "stuffed", "yellow"),
+        ],
+        "energy": [
+            (20, "exhausted", "red"),
+            (40, "very tired", "red"),
+            (60, "tired", "yellow"),
+            (80, "rested", "green"),
+            (100, "energized", "green"),
+        ],
+        "hygiene": [
+            (20, "filthy", "red"),
+            (40, "dirty", "yellow"),
+            (60, "passable", "yellow"),
+            (80, "clean", "green"),
+            (100, "spotless", "green"),
+        ],
+        "comfort": [
+            (20, "miserable", "red"),
+            (40, "uncomfortable", "yellow"),
+            (60, "okay", "yellow"),
+            (80, "comfortable", "green"),
+            (100, "luxurious", "green"),
+        ],
+        "wellness": [
+            (20, "agony", "red"),
+            (40, "severe pain", "red"),
+            (60, "moderate pain", "yellow"),
+            (80, "slight discomfort", "yellow"),
+            (100, "pain-free", "green"),
+        ],
+        "social": [
+            (20, "lonely", "red"),
+            (40, "isolated", "yellow"),
+            (60, "connected", "yellow"),
+            (80, "social", "green"),
+            (100, "fulfilled", "green"),
+        ],
+        "morale": [
+            (20, "depressed", "red"),
+            (40, "low spirits", "yellow"),
+            (60, "neutral", "yellow"),
+            (80, "good spirits", "green"),
+            (100, "elated", "green"),
+        ],
+        "purpose": [
+            (20, "aimless", "red"),
+            (40, "uncertain", "yellow"),
+            (60, "focused", "yellow"),
+            (80, "driven", "green"),
+            (100, "inspired", "green"),
+        ],
+        "intimacy": [
+            (20, "desperate", "red"),
+            (40, "yearning", "yellow"),
+            (60, "longing", "yellow"),
+            (80, "satisfied", "green"),
+            (100, "content", "green"),
+        ],
+    }
+
+    # Get thresholds for this need
+    thresholds = descriptions.get(need_name.lower(), [])
+    if not thresholds:
+        # Default fallback
+        if value < 30:
+            return ("low", "red")
+        elif value < 70:
+            return ("moderate", "yellow")
+        else:
+            return ("high", "green")
+
+    # Find the matching threshold
+    for threshold, desc, color in thresholds:
+        if value <= threshold:
+            return (desc, color)
+
+    # Shouldn't happen, but fallback to last entry
+    _, desc, color = thresholds[-1]
+    return (desc, color)
 
 
 def _create_progress_bar(value: int, max_value: int, width: int = 20) -> Text:

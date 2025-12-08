@@ -1,6 +1,6 @@
 """End-to-end tests for complete game flows."""
 
-import os
+from contextlib import contextmanager
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
@@ -36,7 +36,23 @@ def temp_db(tmp_path):
 
     Base.metadata.create_all(bind=engine)
 
-    yield db_url, engine
+    # Create a session factory for this test database
+    TestSessionLocal = sessionmaker(bind=engine)
+
+    @contextmanager
+    def mock_get_db_session():
+        """Mock get_db_session that uses the test database."""
+        session = TestSessionLocal()
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    yield engine, mock_get_db_session
 
     engine.dispose()
 
@@ -46,14 +62,15 @@ class TestGameFlowE2E:
 
     def test_session_start_to_character_create(self, temp_db):
         """Full flow: session start → character create → verify in DB."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             # Step 1: Create a session
             result = runner.invoke(app, ["session", "start", "--name", "E2E Test"])
             assert result.exit_code == 0
             assert "Created session" in result.output
 
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             # Step 2: Create a character (mocked interactive prompts)
             with patch("src.cli.commands.character.prompt_character_name") as mock_name:
                 with patch("src.cli.commands.character.prompt_background") as mock_bg:
@@ -82,12 +99,13 @@ class TestGameFlowE2E:
 
     def test_character_create_with_equipment(self, temp_db):
         """Verify starting equipment is created and equipped."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
-            # Create session and character
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
+            # Create session
             runner.invoke(app, ["session", "start"])
 
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             with patch("src.cli.commands.character.prompt_character_name") as mock_name:
                 with patch("src.cli.commands.character.prompt_background") as mock_bg:
                     with patch("src.cli.display.Console.input") as mock_input:
@@ -117,12 +135,13 @@ class TestGameFlowE2E:
 
     def test_full_character_status_flow(self, temp_db):
         """Verify character status shows all created data."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
-            # Setup
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
+            # Setup - create session
             runner.invoke(app, ["session", "start"])
 
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             with patch("src.cli.commands.character.prompt_character_name") as mock_name:
                 with patch("src.cli.commands.character.prompt_background") as mock_bg:
                     with patch("src.cli.display.Console.input") as mock_input:
@@ -144,12 +163,13 @@ class TestDatabaseIntegrity:
 
     def test_session_delete_cascades_all_data(self, temp_db):
         """Deleting session should cascade to all related data."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
-            # Create session with character
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
+            # Create session
             runner.invoke(app, ["session", "start"])
 
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             with patch("src.cli.commands.character.prompt_character_name") as mock_name:
                 with patch("src.cli.commands.character.prompt_background") as mock_bg:
                     with patch("src.cli.display.Console.input") as mock_input:
@@ -163,6 +183,7 @@ class TestDatabaseIntegrity:
         Session = sessionmaker(bind=engine)
         with Session() as db:
             session = db.query(GameSession).first()
+            assert session is not None, "Session should exist"
             session_id = session.id
 
             # Verify related data exists
@@ -182,7 +203,7 @@ class TestDatabaseIntegrity:
             assert len(items) > 0
 
         # Delete session
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             runner.invoke(app, ["session", "delete", str(session_id), "--force"])
 
         # Verify cascade
@@ -213,7 +234,7 @@ class TestDatabaseIntegrity:
 
     def test_duplicate_entity_key_prevented(self, temp_db):
         """Should prevent duplicate entity keys in same session."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
         Session = sessionmaker(bind=engine)
         with Session() as db:
@@ -251,7 +272,7 @@ class TestDatabaseIntegrity:
 
     def test_orphaned_records_not_created(self, temp_db):
         """Should not be able to create records without valid foreign keys."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
         Session = sessionmaker(bind=engine)
         with Session() as db:
@@ -273,12 +294,13 @@ class TestMultiSessionIsolation:
 
     def test_sessions_are_isolated(self, temp_db):
         """Entities in one session should not appear in another."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             # Create first session with character
             runner.invoke(app, ["session", "start", "--name", "Session 1"])
 
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             with patch("src.cli.commands.character.prompt_character_name") as mock_name:
                 with patch("src.cli.commands.character.prompt_background") as mock_bg:
                     with patch("src.cli.display.Console.input") as mock_input:
@@ -288,6 +310,7 @@ class TestMultiSessionIsolation:
 
                         runner.invoke(app, ["character", "create", "--random"])
 
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             # Create second session
             runner.invoke(app, ["session", "start", "--name", "Session 2"])
 

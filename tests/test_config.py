@@ -13,8 +13,19 @@ class TestSettingsDefaults:
 
     def test_default_database_url(self):
         """Default database URL should be PostgreSQL localhost."""
-        settings = Settings()
-        assert settings.database_url == "postgresql://localhost/rpg_game"
+        # Create settings without reading .env file or env vars
+        # by using _env_file=None and clearing DATABASE_URL from env
+        import os
+        env_backup = os.environ.get("DATABASE_URL")
+        try:
+            if "DATABASE_URL" in os.environ:
+                del os.environ["DATABASE_URL"]
+            # Create settings without .env file
+            settings = Settings(_env_file=None)
+            assert settings.database_url == "postgresql://localhost/rpg_game"
+        finally:
+            if env_backup is not None:
+                os.environ["DATABASE_URL"] = env_backup
 
     def test_default_llm_provider_is_anthropic(self):
         """Default LLM provider should be Anthropic."""

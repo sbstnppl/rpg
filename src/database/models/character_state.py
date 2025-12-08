@@ -47,10 +47,10 @@ class CharacterNeeds(Base, TimestampMixin):
         nullable=False,
         comment="0=starving, 50=satisfied, 100=stuffed. Optimal: 30-70",
     )
-    fatigue: Mapped[int] = mapped_column(
-        default=20,
+    energy: Mapped[int] = mapped_column(
+        default=80,
         nullable=False,
-        comment="0=fully rested, 50=tired, 100=exhausted. Optimal: 0-40",
+        comment="0=exhausted, 50=tired, 100=energized. Optimal: 60-100",
     )
 
     # === TIER 2: Comfort (normal mode) ===
@@ -64,10 +64,10 @@ class CharacterNeeds(Base, TimestampMixin):
         nullable=False,
         comment="0=miserable conditions, 100=luxurious (environmental)",
     )
-    pain: Mapped[int] = mapped_column(
-        default=0,
+    wellness: Mapped[int] = mapped_column(
+        default=100,
         nullable=False,
-        comment="0=no pain, 100=agony (from injuries)",
+        comment="0=agony (from injuries), 100=pain-free",
     )
 
     # === TIER 3: Psychological (realism mode) ===
@@ -87,9 +87,9 @@ class CharacterNeeds(Base, TimestampMixin):
         comment="0=aimless, 100=driven by clear goals",
     )
     intimacy: Mapped[int] = mapped_column(
-        default=30,
+        default=70,
         nullable=False,
-        comment="0=satisfied, 100=desperate. Intimacy need level.",
+        comment="0=desperate, 100=content. Intimacy fulfillment level.",
     )
 
     # Timestamps for decay calculation
@@ -110,7 +110,7 @@ class CharacterNeeds(Base, TimestampMixin):
     def __repr__(self) -> str:
         return (
             f"<CharacterNeeds entity={self.entity_id} "
-            f"H:{self.hunger} F:{self.fatigue} M:{self.morale}>"
+            f"H:{self.hunger} E:{self.energy} M:{self.morale}>"
         )
 
 

@@ -10,8 +10,11 @@ from src.database.models.enums import (
     AlcoholTolerance,
     AppointmentStatus,
     BodyPart,
+    ConnectionType,
     DayOfWeek,
+    DiscoveryMethod,
     DriveLevel,
+    EncounterFrequency,
     EntityType,
     FactCategory,
     GriefStage,
@@ -20,12 +23,17 @@ from src.database.models.enums import (
     IntimacyStyle,
     ItemCondition,
     ItemType,
+    MapType,
     MentalConditionType,
     ModifierSource,
+    PlacementType,
     QuestStatus,
     SocialTendency,
     StorageLocationType,
     TaskCategory,
+    TerrainType,
+    TransportType,
+    VisibilityRange,
     VitalStatus,
 )
 from src.database.models.session import GameSession, Turn
@@ -49,6 +57,16 @@ from src.database.models.character_preferences import (
 from src.database.models.injuries import ActivityRestriction, BodyInjury
 from src.database.models.vital_state import EntityVitalState
 from src.database.models.mental_state import GriefCondition, MentalCondition
+from src.database.models.navigation import (
+    DigitalMapAccess,
+    LocationDiscovery,
+    LocationZonePlacement,
+    MapItem,
+    TerrainZone,
+    TransportMode,
+    ZoneConnection,
+    ZoneDiscovery,
+)
 
 
 def _unique_key(prefix: str = "test") -> str:
@@ -512,19 +530,22 @@ def create_character_needs(
     entity: Entity,
     **overrides: Any,
 ) -> CharacterNeeds:
-    """Create CharacterNeeds with sensible defaults."""
+    """Create CharacterNeeds with sensible defaults.
+
+    All needs follow: 0 = bad (action required), 100 = good (no action needed).
+    """
     defaults = {
         "session_id": game_session.id,
         "entity_id": entity.id,
         "hunger": 80,
-        "fatigue": 20,
+        "energy": 80,
         "hygiene": 80,
         "comfort": 70,
-        "pain": 0,
+        "wellness": 100,
         "social_connection": 50,
         "morale": 70,
         "sense_of_purpose": 60,
-        "intimacy": 20,
+        "intimacy": 80,
     }
     defaults.update(overrides)
     needs = CharacterNeeds(**defaults)
@@ -790,3 +811,181 @@ def create_need_adaptation(
     db.add(adaptation)
     db.flush()
     return adaptation
+
+
+# =============================================================================
+# Navigation Factories
+# =============================================================================
+
+
+def create_terrain_zone(
+    db: Session,
+    game_session: GameSession,
+    **overrides: Any,
+) -> TerrainZone:
+    """Create a TerrainZone with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "zone_key": _unique_key("zone"),
+        "display_name": "Test Zone",
+        "terrain_type": TerrainType.PLAINS,
+        "description": "A test terrain zone.",
+        "base_travel_cost": 10,
+        "visibility_range": VisibilityRange.MEDIUM,
+        "encounter_frequency": EncounterFrequency.LOW,
+        "is_accessible": True,
+    }
+    defaults.update(overrides)
+    zone = TerrainZone(**defaults)
+    db.add(zone)
+    db.flush()
+    return zone
+
+
+def create_zone_connection(
+    db: Session,
+    game_session: GameSession,
+    from_zone: TerrainZone,
+    to_zone: TerrainZone,
+    **overrides: Any,
+) -> ZoneConnection:
+    """Create a ZoneConnection with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "from_zone_id": from_zone.id,
+        "to_zone_id": to_zone.id,
+        "connection_type": ConnectionType.OPEN,
+        "crossing_minutes": 5,
+        "is_bidirectional": True,
+        "is_passable": True,
+        "is_visible": True,
+    }
+    defaults.update(overrides)
+    connection = ZoneConnection(**defaults)
+    db.add(connection)
+    db.flush()
+    return connection
+
+
+def create_location_zone_placement(
+    db: Session,
+    game_session: GameSession,
+    location: Location,
+    zone: TerrainZone,
+    **overrides: Any,
+) -> LocationZonePlacement:
+    """Create a LocationZonePlacement with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "location_id": location.id,
+        "zone_id": zone.id,
+        "placement_type": PlacementType.WITHIN,
+        "visibility": "visible_from_zone",
+    }
+    defaults.update(overrides)
+    placement = LocationZonePlacement(**defaults)
+    db.add(placement)
+    db.flush()
+    return placement
+
+
+def create_transport_mode(
+    db: Session,
+    **overrides: Any,
+) -> TransportMode:
+    """Create a TransportMode with sensible defaults."""
+    defaults = {
+        "mode_key": _unique_key("transport"),
+        "display_name": "Test Transport",
+        "transport_type": TransportType.WALKING,
+        "terrain_costs": {"plains": 1.0, "forest": 2.0, "road": 0.8},
+        "fatigue_rate": 1.0,
+        "encounter_modifier": 1.0,
+    }
+    defaults.update(overrides)
+    mode = TransportMode(**defaults)
+    db.add(mode)
+    db.flush()
+    return mode
+
+
+def create_zone_discovery(
+    db: Session,
+    game_session: GameSession,
+    zone: TerrainZone,
+    **overrides: Any,
+) -> ZoneDiscovery:
+    """Create a ZoneDiscovery with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "zone_id": zone.id,
+        "discovered_turn": 1,
+        "discovery_method": DiscoveryMethod.VISITED,
+    }
+    defaults.update(overrides)
+    discovery = ZoneDiscovery(**defaults)
+    db.add(discovery)
+    db.flush()
+    return discovery
+
+
+def create_location_discovery(
+    db: Session,
+    game_session: GameSession,
+    location: Location,
+    **overrides: Any,
+) -> LocationDiscovery:
+    """Create a LocationDiscovery with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "location_id": location.id,
+        "discovered_turn": 1,
+        "discovery_method": DiscoveryMethod.VISITED,
+    }
+    defaults.update(overrides)
+    discovery = LocationDiscovery(**defaults)
+    db.add(discovery)
+    db.flush()
+    return discovery
+
+
+def create_map_item(
+    db: Session,
+    game_session: GameSession,
+    item: Item,
+    **overrides: Any,
+) -> MapItem:
+    """Create a MapItem with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "item_id": item.id,
+        "map_type": MapType.REGIONAL,
+        "is_complete": True,
+    }
+    defaults.update(overrides)
+    map_item = MapItem(**defaults)
+    db.add(map_item)
+    db.flush()
+    return map_item
+
+
+def create_digital_map_access(
+    db: Session,
+    game_session: GameSession,
+    **overrides: Any,
+) -> DigitalMapAccess:
+    """Create a DigitalMapAccess with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "service_key": _unique_key("service"),
+        "display_name": "Test Map Service",
+        "requires_device": True,
+        "requires_connection": True,
+        "coverage_map_type": MapType.REGIONAL,
+        "is_available": True,
+    }
+    defaults.update(overrides)
+    access = DigitalMapAccess(**defaults)
+    db.add(access)
+    db.flush()
+    return access

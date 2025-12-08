@@ -126,4 +126,4 @@ class TestWorldToolSchemas:
         )
         assert need_param.enum is not None
         assert "hunger" in need_param.enum
-        assert "fatigue" in need_param.enum
+        assert "energy" in need_param.enum

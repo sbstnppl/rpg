@@ -514,9 +514,9 @@ class TestPainCalculation:
     def test_sync_pain_to_needs(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify pain syncs to character needs."""
+        """Verify pain syncs to character needs as wellness (inverted)."""
         entity = create_entity(db_session, game_session)
-        create_character_needs(db_session, game_session, entity, pain=0)
+        create_character_needs(db_session, game_session, entity, wellness=100)
         create_body_injury(
             db_session, game_session, entity,
             current_pain_level=50,
@@ -527,7 +527,8 @@ class TestPainCalculation:
         injury_manager.sync_pain_to_needs(entity.id, needs_manager)
 
         needs = needs_manager.get_needs(entity.id)
-        assert needs.pain == 50
+        # wellness = 100 - pain, so 50 pain = 50 wellness
+        assert needs.wellness == 50
 
 
 class TestInjurySummary:

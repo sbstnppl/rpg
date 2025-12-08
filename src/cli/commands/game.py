@@ -15,7 +15,7 @@ from src.cli.display import (
     progress_spinner,
     prompt_input,
 )
-from src.cli.commands.session import get_db_session
+from src.database.connection import get_db_session
 from src.database.models.entities import Entity
 from src.database.models.enums import EntityType
 from src.database.models.session import GameSession
@@ -51,9 +51,11 @@ def play(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
 ) -> None:
     """Start the interactive game loop."""
-    db = get_db_session()
+    # First check for session and player
+    game_session_id = None
+    needs_character = False
 
-    try:
+    with get_db_session() as db:
         if session_id:
             game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
         else:
@@ -64,36 +66,39 @@ def play(
             display_info("Use 'rpg session start' to create one")
             raise typer.Exit(1)
 
+        game_session_id = game_session.id
         player = _get_player(db, game_session)
 
         if not player:
-            # No character exists - prompt user to create one
-            display_info("No character found for this session.")
-            choice = console.input("[bold cyan]Create a character now? (y/n): [/bold cyan]").strip().lower()
+            needs_character = True
 
-            if choice in ("y", "yes"):
-                # Import and run character creation
-                from src.cli.commands.character import create as create_character
-                db.close()  # Close before calling create (it opens its own session)
-                create_character(session_id=game_session.id, random_stats=False, ai_assisted=True)
-                # Re-open db and get the player
-                db = get_db_session()
-                game_session = db.query(GameSession).filter(GameSession.id == game_session.id).first()
-                player = _get_player(db, game_session)
-                if not player:
-                    display_error("Character creation was cancelled or failed")
-                    raise typer.Exit(1)
-            else:
-                display_info("Use 'rpg character create' to create a character first")
-                raise typer.Exit(0)
+    # Handle character creation outside the db context
+    if needs_character:
+        display_info("No character found for this session.")
+        choice = console.input("[bold cyan]Create a character now? (y/n): [/bold cyan]").strip().lower()
 
-        # Run the async game loop
-        asyncio.run(_game_loop(db, game_session, player))
+        if choice in ("y", "yes"):
+            from src.cli.commands.character import create as create_character
+            create_character(session_id=game_session_id, random_stats=False, ai_assisted=True)
+        else:
+            display_info("Use 'rpg character create' to create a character first")
+            raise typer.Exit(0)
+
+    # Now run the game loop with a fresh db session
+    try:
+        with get_db_session() as db:
+            game_session = db.query(GameSession).filter(GameSession.id == game_session_id).first()
+            player = _get_player(db, game_session)
+
+            if not player:
+                display_error("Character creation was cancelled or failed")
+                raise typer.Exit(1)
+
+            # Run the async game loop
+            asyncio.run(_game_loop(db, game_session, player))
 
     except KeyboardInterrupt:
         display_info("\nGame paused. Use 'rpg game play' to continue.")
-    finally:
-        db.close()
 
 
 async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
@@ -160,15 +165,15 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
                 continue
             elif cmd == "status":
                 from src.cli.commands.character import status
-                status()
+                status(session_id=game_session.id)
                 continue
             elif cmd == "inventory":
                 from src.cli.commands.character import inventory
-                inventory()
+                inventory(session_id=game_session.id)
                 continue
             elif cmd == "time":
                 from src.cli.commands.world import time
-                time()
+                time(session_id=game_session.id)
                 continue
             elif cmd == "save":
                 db.commit()
@@ -243,29 +248,25 @@ def turn(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
 ) -> None:
     """Execute a single turn (for testing)."""
-    db = get_db_session()
-
     try:
-        if session_id:
-            game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
-        else:
-            game_session = _get_active_session(db)
+        with get_db_session() as db:
+            if session_id:
+                game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
+            else:
+                game_session = _get_active_session(db)
 
-        if not game_session:
-            display_error("No active session found")
-            raise typer.Exit(1)
+            if not game_session:
+                display_error("No active session found")
+                raise typer.Exit(1)
 
-        player = _get_or_create_player(db, game_session)
-        db.commit()
+            player = _get_or_create_player(db, game_session)
 
-        # Run single turn
-        asyncio.run(_single_turn(db, game_session, player, player_input))
+            # Run single turn
+            asyncio.run(_single_turn(db, game_session, player, player_input))
 
     except Exception as e:
         display_error(f"Error: {e}")
         raise typer.Exit(1)
-    finally:
-        db.close()
 
 
 async def _single_turn(

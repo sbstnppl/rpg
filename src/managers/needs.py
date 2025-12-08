@@ -6,10 +6,14 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from src.database.models.character_preferences import NeedAdaptation, NeedModifier
+from src.database.models.character_preferences import (
+    CharacterPreferences,
+    NeedAdaptation,
+    NeedModifier,
+)
 from src.database.models.character_state import CharacterNeeds, IntimacyProfile
 from src.database.models.entities import Entity
-from src.database.models.enums import DriveLevel, ModifierSource
+from src.database.models.enums import DriveLevel, IntimacyStyle, ModifierSource, SocialTendency
 from src.database.models.session import GameSession
 from src.managers.base import BaseManager
 
@@ -47,25 +51,26 @@ class NeedDecayRates:
     combat: float
 
 
-# Decay rates per in-game hour (positive = need increases/worsens)
+# Decay rates per in-game hour (negative = need decreases toward 0)
+# All needs now follow: 0 = bad (action required), 100 = good (no action needed)
 DECAY_RATES: dict[str, NeedDecayRates] = {
     # Hunger: 0=starving, 100=stuffed. Decreases over time.
     "hunger": NeedDecayRates(active=-6, resting=-3, sleeping=-1, combat=-6),
-    # Fatigue: 0=rested, 100=exhausted. Increases with activity.
-    "fatigue": NeedDecayRates(active=12, resting=-5, sleeping=-15, combat=20),
-    # Hygiene: 100=clean, decreases over time
+    # Energy: 0=exhausted, 100=energized. Decreases with activity.
+    "energy": NeedDecayRates(active=-12, resting=5, sleeping=15, combat=-20),
+    # Hygiene: 0=filthy, 100=clean. Decreases over time.
     "hygiene": NeedDecayRates(active=-3, resting=-1, sleeping=0, combat=-8),
-    # Comfort: environmental, doesn't decay automatically
+    # Comfort: 0=miserable, 100=luxurious. Environmental, doesn't decay automatically.
     "comfort": NeedDecayRates(active=0, resting=0, sleeping=0, combat=-10),
-    # Pain: from injuries, doesn't decay (managed by InjuryManager)
-    "pain": NeedDecayRates(active=0, resting=-1, sleeping=-2, combat=0),
-    # Social: 100=fulfilled, decreases when alone
+    # Wellness: 0=agony, 100=pain-free. Recovers with rest (managed by InjuryManager).
+    "wellness": NeedDecayRates(active=0, resting=1, sleeping=2, combat=0),
+    # Social: 0=lonely, 100=fulfilled. Decreases when alone.
     "social_connection": NeedDecayRates(active=-2, resting=-2, sleeping=0, combat=0),
-    # Morale: 100=elated, affected by other needs
+    # Morale: 0=depressed, 100=elated. Affected by other needs.
     "morale": NeedDecayRates(active=0, resting=0, sleeping=0, combat=0),
-    # Purpose: 100=driven, slow decay
+    # Purpose: 0=aimless, 100=driven. Slow decay.
     "sense_of_purpose": NeedDecayRates(active=-0.5, resting=-0.5, sleeping=0, combat=0),
-    # Intimacy: 0=satisfied, 100=desperate. Increases based on drive level.
+    # Intimacy: 0=desperate, 100=content. Decreases based on drive level.
     "intimacy": NeedDecayRates(active=0, resting=0, sleeping=0, combat=0),
 }
 
@@ -78,6 +83,203 @@ INTIMACY_DAILY_DECAY: dict[DriveLevel, float] = {
     DriveLevel.HIGH: 7,
     DriveLevel.VERY_HIGH: 10,
 }
+
+# Action catalog with midpoint satisfaction values for each need
+# These represent typical satisfaction amounts before quality/preference modifiers
+# All needs: higher value = better, so satisfaction increases the need value
+ACTION_SATISFACTION_CATALOG: dict[str, dict[str, int]] = {
+    "hunger": {
+        "snack": 10, "nibble": 10, "bite": 10,
+        "light_meal": 22, "soup": 22, "half_portion": 22,
+        "full_meal": 40, "meal": 40, "dinner": 40,
+        "feast": 65, "gorge": 65, "banquet": 65,
+        "ration": 15, "trail_ration": 15,
+    },
+    "energy": {
+        "quick_nap": 15, "nap": 15, "doze": 15,
+        "short_rest": 28, "rest": 28, "break": 20,
+        "full_sleep": 75, "sleep": 75, "night_sleep": 75,
+        "long_sleep": 90, "extended_rest": 90,
+    },
+    "hygiene": {
+        "quick_wash": 15, "rinse": 15, "wipe": 10,
+        "partial_bath": 30, "wash": 30, "sponge_bath": 30,
+        "full_bath": 65, "bath": 65, "shower": 65,
+        "luxury_bath": 85, "spa": 85, "hot_spring": 85,
+    },
+    "social_connection": {
+        "chat": 10, "small_talk": 10, "greeting": 5,
+        "conversation": 22, "talk": 22, "discussion": 22,
+        "group_activity": 30, "gathering": 30, "party": 35,
+        "bonding": 45, "intimate_talk": 45, "deep_conversation": 45,
+        "romantic": 60,
+    },
+    "comfort": {
+        "change_clothes": 20, "dry_off": 15,
+        "warm_up": 20, "cool_down": 20,
+        "shelter": 30, "find_shelter": 30,
+        "luxury": 65, "comfortable_bed": 50,
+    },
+    "wellness": {
+        "minor_remedy": 10, "bandage": 10, "ice": 10,
+        "medicine": 30, "painkiller": 30, "potion": 30,
+        "treatment": 45, "healing": 45, "medical_care": 45,
+        "full_healing": 100, "magical_restoration": 100,
+    },
+    "morale": {
+        "minor_victory": 10, "compliment": 10, "small_success": 10,
+        "achievement": 22, "victory": 22, "accomplishment": 22,
+        "major_success": 45, "triumph": 45, "great_victory": 45,
+        "setback": -20, "failure": -20, "embarrassment": -15,
+        "tragedy": -60, "devastation": -60, "major_loss": -50,
+    },
+    "sense_of_purpose": {
+        "accept_quest": 17, "new_goal": 17, "mission": 17,
+        "progress": 10, "step_forward": 10, "advancement": 10,
+        "complete_quest": 35, "goal_achieved": 35, "mission_complete": 35,
+        "find_calling": 60, "life_purpose": 60,
+        "lose_purpose": -45, "goal_failed": -30,
+    },
+    "intimacy": {
+        "flirtation": 10, "flirt": 10,
+        "affection": 22, "kissing": 22, "cuddle": 20,
+        "intimate_encounter": 60, "intimacy": 60,
+        "emotional_intimacy": 30, "vulnerability": 30,
+    },
+}
+
+# Quality multipliers for satisfaction amounts
+QUALITY_MULTIPLIERS: dict[str, float] = {
+    "poor": 0.6,
+    "basic": 1.0,
+    "good": 1.3,
+    "excellent": 1.6,
+    "exceptional": 2.0,
+}
+
+
+def estimate_base_satisfaction(
+    need_name: str,
+    action_type: str,
+    quality: str = "basic",
+) -> int:
+    """Estimate base satisfaction amount from action type and quality.
+
+    Uses the action catalog to look up midpoint values and applies
+    quality multipliers.
+
+    Args:
+        need_name: Name of the need being satisfied.
+        action_type: Type of action performed (e.g., 'full_meal', 'quick_nap').
+        quality: Quality level ('poor', 'basic', 'good', 'excellent', 'exceptional').
+
+    Returns:
+        Estimated base satisfaction amount (before preference modifiers).
+    """
+    catalog = ACTION_SATISFACTION_CATALOG.get(need_name, {})
+    base = catalog.get(action_type.lower(), 20)  # Default to 20 if not found
+
+    quality_mult = QUALITY_MULTIPLIERS.get(quality.lower(), 1.0)
+
+    return int(base * quality_mult)
+
+
+def get_preference_multiplier(
+    prefs: CharacterPreferences | None,
+    need_name: str,
+    action_type: str,
+    quality: str = "basic",
+) -> float:
+    """Calculate preference-based multiplier for need satisfaction.
+
+    Uses CharacterPreferences traits to adjust satisfaction amounts.
+    For example, a greedy eater gets +30% hunger satisfaction.
+
+    Args:
+        prefs: CharacterPreferences for the entity (or None).
+        need_name: Name of the need being satisfied.
+        action_type: Type of action performed.
+        quality: Quality level of the action.
+
+    Returns:
+        Multiplier to apply to base satisfaction (0.0 to 2.0+).
+    """
+    if prefs is None:
+        return 1.0
+
+    multiplier = 1.0
+    action_lower = action_type.lower()
+
+    # === HUNGER MODIFIERS ===
+    if need_name == "hunger":
+        # Greedy eater gets more satisfaction from eating
+        if prefs.is_greedy_eater:
+            multiplier *= 1.3
+
+        # Picky eater: quality affects satisfaction more
+        if prefs.is_picky_eater:
+            if quality in ("excellent", "exceptional"):
+                multiplier *= 1.3  # Loves high-quality food
+            elif quality == "poor":
+                multiplier *= 0.5  # Barely tolerates low-quality
+
+    # === ENERGY MODIFIERS ===
+    elif need_name == "energy":
+        # Stamina traits affect recovery
+        if prefs.has_high_stamina:
+            multiplier *= 1.2
+        elif prefs.has_low_stamina:
+            multiplier *= 0.8
+
+        # Sleep-specific modifiers
+        if "sleep" in action_lower or "rest" in action_lower:
+            if prefs.is_insomniac:
+                multiplier *= 0.6  # Struggles to recover from sleep
+            elif prefs.is_heavy_sleeper:
+                multiplier *= 1.3  # Recovers well from sleep
+
+    # === SOCIAL CONNECTION MODIFIERS ===
+    elif need_name == "social_connection":
+        # Social personality traits
+        if prefs.is_social_butterfly:
+            multiplier *= 1.3
+        elif prefs.is_loner:
+            multiplier *= 0.5
+
+        # Social tendency affects group vs individual interactions
+        if prefs.social_tendency == SocialTendency.EXTROVERT:
+            if "group" in action_lower or "party" in action_lower or "gathering" in action_lower:
+                multiplier *= 1.2
+        elif prefs.social_tendency == SocialTendency.INTROVERT:
+            if "group" in action_lower or "party" in action_lower or "gathering" in action_lower:
+                multiplier *= 0.8
+            elif "conversation" in action_lower or "talk" in action_lower or "chat" in action_lower:
+                multiplier *= 1.2  # Prefers one-on-one
+
+    # === INTIMACY MODIFIERS ===
+    elif need_name == "intimacy":
+        # Drive level affects satisfaction
+        drive_multipliers = {
+            DriveLevel.ASEXUAL: 0.0,
+            DriveLevel.VERY_LOW: 0.5,
+            DriveLevel.LOW: 0.8,
+            DriveLevel.MODERATE: 1.0,
+            DriveLevel.HIGH: 1.2,
+            DriveLevel.VERY_HIGH: 1.5,
+        }
+        multiplier *= drive_multipliers.get(prefs.drive_level, 1.0)
+
+        # Intimacy style modifiers
+        if prefs.intimacy_style == IntimacyStyle.CASUAL:
+            if "encounter" in action_lower or "physical" in action_lower:
+                multiplier *= 1.3
+        elif prefs.intimacy_style == IntimacyStyle.EMOTIONAL:
+            if "emotional" in action_lower or "vulnerability" in action_lower:
+                multiplier *= 1.5
+            elif "encounter" in action_lower:
+                multiplier *= 0.8  # Physical without emotional connection less satisfying
+
+    return multiplier
 
 
 class NeedsManager(BaseManager):
@@ -166,16 +368,16 @@ class NeedsManager(BaseManager):
             setattr(needs, need_name, self._clamp(new_value, max_val=max_intensity))
 
         # Handle intimacy separately (daily decay based on drive)
+        # Intimacy decreases over time (0 = desperate, 100 = content)
         profile = self.get_intimacy_profile(entity_id)
         if profile:
             daily_rate = INTIMACY_DAILY_DECAY.get(profile.drive_level, 5)
             # Apply decay multiplier for intimacy too
             decay_multiplier = self.get_decay_multiplier(entity_id, "intimacy")
             hourly_rate = (daily_rate / 24) * decay_multiplier
-            # Apply max intensity cap for intimacy
-            intimacy_max = self.get_max_intensity(entity_id, "intimacy")
+            # Intimacy decreases (negative rate) based on drive level
             needs.intimacy = self._clamp(
-                needs.intimacy + (hourly_rate * hours), max_val=intimacy_max
+                needs.intimacy - (hourly_rate * hours)
             )
 
         # Update morale based on other needs
@@ -194,16 +396,16 @@ class NeedsManager(BaseManager):
         elif needs.hunger < 30:
             morale_modifier -= 10
 
-        # Fatigue effects on morale
-        if needs.fatigue > 80:
+        # Energy effects on morale (low energy = exhausted)
+        if needs.energy < 20:
             morale_modifier -= 15
-        elif needs.fatigue > 60:
+        elif needs.energy < 40:
             morale_modifier -= 8
 
-        # Pain effects on morale
-        if needs.pain > 60:
+        # Wellness effects on morale (low wellness = pain)
+        if needs.wellness < 40:
             morale_modifier -= 25
-        elif needs.pain > 40:
+        elif needs.wellness < 60:
             morale_modifier -= 15
 
         # Social isolation effects
@@ -237,16 +439,16 @@ class NeedsManager(BaseManager):
     ) -> CharacterNeeds:
         """Satisfy a need by the given amount.
 
-        For hunger: increases (eating fills you up)
-        For fatigue: decreases (resting reduces fatigue)
-        For hygiene: increases (bathing cleans you)
-        For social: increases (socializing fulfills need)
-        For intimacy: decreases (satisfied = 0)
+        Applies satisfaction_multiplier from any active NeedModifier records.
+
+        All needs follow the same semantics: higher value = better state.
+        Satisfying a need increases its value (e.g., eating increases hunger,
+        resting increases energy, healing increases wellness).
 
         Args:
             entity_id: Entity to update
             need_name: Name of need to satisfy
-            amount: How much to change (positive = satisfy)
+            amount: How much to increase (positive = satisfy, before multipliers)
             turn: Current turn for tracking last satisfaction
 
         Returns:
@@ -257,22 +459,21 @@ class NeedsManager(BaseManager):
         if not hasattr(needs, need_name):
             raise ValueError(f"Unknown need: {need_name}")
 
+        # Apply satisfaction multiplier from NeedModifier
+        satisfaction_mult = self.get_satisfaction_multiplier(entity_id, need_name)
+        modified_amount = int(amount * satisfaction_mult)
+
         current = getattr(needs, need_name)
 
-        # Different needs work differently
-        if need_name in ("fatigue", "pain", "intimacy"):
-            # Lower is better for these
-            new_value = current - amount
-        else:
-            # Higher is better
-            new_value = current + amount
+        # All needs: higher is better, so satisfaction increases the value
+        new_value = current + modified_amount
 
         setattr(needs, need_name, self._clamp(new_value))
 
         # Track last satisfaction turn
         turn_tracking = {
             "hunger": "last_meal_turn",
-            "fatigue": "last_sleep_turn",
+            "energy": "last_sleep_turn",
             "hygiene": "last_bath_turn",
             "social_connection": "last_social_turn",
             "intimacy": "last_intimate_turn",
@@ -316,11 +517,11 @@ class NeedsManager(BaseManager):
                 )
             )
 
-        # Fatigue effects
-        if needs.fatigue > 80:
+        # Energy effects (low energy = exhausted)
+        if needs.energy < 20:
             effects.append(
                 NeedEffect(
-                    need_name="fatigue",
+                    need_name="energy",
                     threshold_name="exhausted",
                     description="Exhausted - barely able to stand",
                     stat_penalties={"STR": -3, "DEX": -3, "INT": -3, "WIS": -3},
@@ -328,10 +529,10 @@ class NeedsManager(BaseManager):
                     special_effects={"hallucination_chance": 0.20},
                 )
             )
-        elif needs.fatigue > 60:
+        elif needs.energy < 40:
             effects.append(
                 NeedEffect(
-                    need_name="fatigue",
+                    need_name="energy",
                     threshold_name="very_tired",
                     description="Very tired - struggling to focus",
                     stat_penalties={"INT": -2, "WIS": -2, "DEX": -1},
@@ -351,21 +552,21 @@ class NeedsManager(BaseManager):
                 )
             )
 
-        # Pain effects
-        if needs.pain > 60:
+        # Wellness effects (low wellness = pain)
+        if needs.wellness < 40:
             effects.append(
                 NeedEffect(
-                    need_name="pain",
+                    need_name="wellness",
                     threshold_name="severe",
                     description="Severe pain - hard to concentrate",
                     morale_modifier=-25,
                     check_penalty=-4,
                 )
             )
-        elif needs.pain > 40:
+        elif needs.wellness < 60:
             effects.append(
                 NeedEffect(
-                    need_name="pain",
+                    need_name="wellness",
                     threshold_name="moderate",
                     description="Moderate pain - distracting",
                     morale_modifier=-15,
@@ -397,8 +598,8 @@ class NeedsManager(BaseManager):
                 )
             )
 
-        # Intimacy effects
-        if needs.intimacy > 80:
+        # Intimacy effects (low intimacy = desperate)
+        if needs.intimacy < 20:
             effects.append(
                 NeedEffect(
                     need_name="intimacy",
@@ -443,10 +644,10 @@ class NeedsManager(BaseManager):
         return {
             "has_needs": True,
             "hunger": needs.hunger,
-            "fatigue": needs.fatigue,
+            "energy": needs.energy,
             "hygiene": needs.hygiene,
             "comfort": needs.comfort,
-            "pain": needs.pain,
+            "wellness": needs.wellness,
             "social_connection": needs.social_connection,
             "morale": needs.morale,
             "sense_of_purpose": needs.sense_of_purpose,
@@ -460,17 +661,20 @@ class NeedsManager(BaseManager):
         """Get the most urgent need for NPC behavior decisions.
 
         Returns (need_name, urgency_level) where urgency > 70 overrides schedule.
+        All needs now follow the same pattern: 0 = bad, 100 = good.
+        Urgency is calculated as 100 - value (lower value = higher urgency).
         """
         needs = self.get_needs(entity_id)
         if needs is None:
             return None, 0
 
         # Calculate urgency for each need (0-100)
+        # All needs: 0 = bad state, so urgency = 100 - value
         urgencies: dict[str, int] = {
-            "hunger": max(0, 100 - needs.hunger),  # Lower hunger = more urgent
-            "fatigue": needs.fatigue,  # Higher fatigue = more urgent
+            "hunger": max(0, 100 - needs.hunger),
+            "energy": max(0, 100 - needs.energy),
             "social_connection": max(0, 100 - needs.social_connection),
-            "intimacy": needs.intimacy,  # Higher = more urgent
+            "intimacy": max(0, 100 - needs.intimacy),
         }
 
         # Find most urgent

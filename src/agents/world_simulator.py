@@ -56,7 +56,7 @@ class WorldSimulator(BaseManager):
     """Simulates world changes due to time passage and location changes.
 
     Integrates with:
-    - NeedsManager for hunger/fatigue/etc decay
+    - NeedsManager for hunger/energy/etc decay
     - RelationshipManager for mood modifier expiration
     - ConsistencyValidator for temporal effects
     - Schedule system for NPC movements
@@ -211,7 +211,7 @@ class WorldSimulator(BaseManager):
             # Urgent need overrides schedule
             if need_name == "hunger":
                 return ActivityType.ACTIVE  # Seeking food
-            elif need_name == "fatigue":
+            elif need_name == "energy":
                 return ActivityType.RESTING  # Trying to rest
             elif need_name == "social_connection":
                 return ActivityType.SOCIALIZING

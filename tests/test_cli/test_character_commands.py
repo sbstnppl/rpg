@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from typer.testing import CliRunner
 
 from src.cli.main import app
+from src.cli.commands.character import CharacterCreationState
 from src.database.models.base import Base
 from src.database.models.entities import Entity, EntityAttribute
 from src.database.models.enums import EntityType, ItemType
@@ -52,7 +53,7 @@ def temp_db(tmp_path):
         finally:
             session.close()
 
-    yield db_url, engine, mock_get_db_session
+    yield engine, mock_get_db_session
 
     engine.dispose()
 
@@ -60,7 +61,7 @@ def temp_db(tmp_path):
 @pytest.fixture
 def session_with_player(temp_db):
     """Create a session with a player character."""
-    db_url, engine = temp_db
+    engine, mock_get_db_session = temp_db
 
     Session = sessionmaker(bind=engine)
     with Session() as db:
@@ -135,7 +136,7 @@ def session_with_player(temp_db):
         session_id = game_session.id
         player_id = player.id
 
-    return db_url, engine, session_id, player_id
+    return engine, mock_get_db_session, session_id, player_id
 
 
 class TestCharacterStatus:
@@ -143,9 +144,9 @@ class TestCharacterStatus:
 
     def test_shows_player_name(self, session_with_player):
         """Should display player character name."""
-        db_url, engine, session_id, player_id = session_with_player
+        engine, mock_get_db_session, session_id, player_id = session_with_player
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             result = runner.invoke(
                 app, ["character", "status", "--session", str(session_id)]
             )
@@ -155,9 +156,9 @@ class TestCharacterStatus:
 
     def test_requires_existing_session(self, temp_db):
         """Should error when no session exists."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             result = runner.invoke(app, ["character", "status"])
 
         assert result.exit_code == 1
@@ -165,7 +166,7 @@ class TestCharacterStatus:
 
     def test_requires_existing_character(self, temp_db):
         """Should error when session has no player."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
         # Create session without player
         Session = sessionmaker(bind=engine)
@@ -179,7 +180,7 @@ class TestCharacterStatus:
             db.commit()
             session_id = game_session.id
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             result = runner.invoke(
                 app, ["character", "status", "--session", str(session_id)]
             )
@@ -193,9 +194,9 @@ class TestCharacterInventory:
 
     def test_shows_owned_items(self, session_with_player):
         """Should display items owned by player."""
-        db_url, engine, session_id, player_id = session_with_player
+        engine, mock_get_db_session, session_id, player_id = session_with_player
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             result = runner.invoke(
                 app, ["character", "inventory", "--session", str(session_id)]
             )
@@ -206,9 +207,9 @@ class TestCharacterInventory:
 
     def test_shows_item_types(self, session_with_player):
         """Should show item type information."""
-        db_url, engine, session_id, player_id = session_with_player
+        engine, mock_get_db_session, session_id, player_id = session_with_player
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             result = runner.invoke(
                 app, ["character", "inventory", "--session", str(session_id)]
             )
@@ -223,9 +224,9 @@ class TestCharacterEquipment:
 
     def test_shows_equipped_items(self, session_with_player):
         """Should display equipped items with slots."""
-        db_url, engine, session_id, player_id = session_with_player
+        engine, mock_get_db_session, session_id, player_id = session_with_player
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             result = runner.invoke(
                 app, ["character", "equipment", "--session", str(session_id)]
             )
@@ -240,9 +241,9 @@ class TestCharacterCreate:
 
     def test_requires_active_session(self, temp_db):
         """Should require an active session to create character."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             result = runner.invoke(app, ["character", "create"])
 
         assert result.exit_code == 1
@@ -250,9 +251,9 @@ class TestCharacterCreate:
 
     def test_prevents_duplicate_player(self, session_with_player):
         """Should prevent creating second player in same session."""
-        db_url, engine, session_id, player_id = session_with_player
+        engine, mock_get_db_session, session_id, player_id = session_with_player
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             result = runner.invoke(
                 app, ["character", "create", "--session", str(session_id)]
             )
@@ -266,15 +267,15 @@ class TestCharacterCreateRandom:
 
     def test_random_creates_player(self, temp_db):
         """Random creation should create a player entity."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
         # First create a session
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             runner.invoke(app, ["session", "start"])
 
         # Now create character with random stats
         # We need to mock the interactive input
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             # Mock the prompts
             with patch("src.cli.commands.character.prompt_character_name") as mock_name:
                 with patch("src.cli.commands.character.prompt_background") as mock_bg:
@@ -306,26 +307,32 @@ class TestCharacterCreateAI:
 
     def test_ai_flag_triggers_async_creation(self, temp_db):
         """--ai flag should call the async AI creation function."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
         # Create a session first
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             runner.invoke(app, ["session", "start"])
 
         # Mock the AI creation function and world extraction
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             with patch(
                 "src.cli.commands.character._ai_character_creation"
             ) as mock_ai:
                 with patch(
                     "src.cli.commands.character._extract_world_data"
                 ) as mock_extract:
-                    mock_ai.return_value = (
-                        "AI Hero",
-                        {"strength": 15, "dexterity": 14, "constitution": 13,
-                         "intelligence": 12, "wisdom": 10, "charisma": 8},
-                        "Created by AI",
-                        "AI: Hello! User: Create me a character",
+                    # Return a CharacterCreationState object
+                    mock_ai.return_value = CharacterCreationState(
+                        name="AI Hero",
+                        attributes={"strength": 15, "dexterity": 14, "constitution": 13,
+                                   "intelligence": 12, "wisdom": 10, "charisma": 8},
+                        background="Created by AI",
+                        age=25,
+                        gender="male",
+                        build="athletic",
+                        hair_color="brown",
+                        eye_color="blue",
+                        personality_notes="Brave and kind",
                     )
                     # Return None to skip world extraction
                     mock_extract.return_value = None
@@ -341,12 +348,12 @@ class TestCharacterCreateAI:
 
     def test_ai_creation_handles_llm_error(self, temp_db):
         """Should handle LLM errors gracefully."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             runner.invoke(app, ["session", "start"])
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.character.get_db_session", mock_get_db_session):
             with patch(
                 "src.cli.commands.character._ai_character_creation"
             ) as mock_ai:
@@ -360,55 +367,52 @@ class TestCharacterCreateAI:
         assert result.exit_code == 1
 
 
-class TestDetectGameStartIntent:
-    """Tests for _detect_game_start_intent function."""
+class TestParseReadyToPlay:
+    """Tests for _parse_ready_to_play function."""
 
-    def test_detects_start_playing(self):
-        """Should detect 'start playing' phrases."""
-        from src.cli.commands.character import _detect_game_start_intent
+    def test_detects_ready_in_code_block(self):
+        """Should detect ready_to_play in markdown code block."""
+        from src.cli.commands.character import _parse_ready_to_play
 
-        assert _detect_game_start_intent("Let's start playing now")
-        assert _detect_game_start_intent("I want to start playing")
-        assert _detect_game_start_intent("start playing please")
+        response = '''Great! Let's begin!
 
-    def test_detects_lets_phrases(self):
-        """Should detect 'let's go/play/start/begin' phrases."""
-        from src.cli.commands.character import _detect_game_start_intent
+```json
+{"ready_to_play": true}
+```'''
+        assert _parse_ready_to_play(response) is True
 
-        assert _detect_game_start_intent("let's go")
-        assert _detect_game_start_intent("Let's play!")
-        assert _detect_game_start_intent("let's start")
-        assert _detect_game_start_intent("let's begin")
+    def test_detects_ready_inline(self):
+        """Should detect inline ready_to_play JSON."""
+        from src.cli.commands.character import _parse_ready_to_play
 
-    def test_detects_ready_phrases(self):
-        """Should detect 'ready' phrases."""
-        from src.cli.commands.character import _detect_game_start_intent
+        response = 'Finn is ready for adventure! {"ready_to_play": true}'
+        assert _parse_ready_to_play(response) is True
 
-        assert _detect_game_start_intent("I'm ready to play")
-        assert _detect_game_start_intent("im ready")
-        assert _detect_game_start_intent("ready to start")
-        assert _detect_game_start_intent("good to go")
+    def test_returns_false_when_not_present(self):
+        """Should return False when no ready_to_play."""
+        from src.cli.commands.character import _parse_ready_to_play
 
-    def test_detects_done_phrases(self):
-        """Should detect 'done' phrases."""
-        from src.cli.commands.character import _detect_game_start_intent
+        response = '''Here are your attributes:
 
-        assert _detect_game_start_intent("done")
-        assert _detect_game_start_intent("I'm done")
-        assert _detect_game_start_intent("im done")
-        assert _detect_game_start_intent("all done")
-        assert _detect_game_start_intent("that's it")
-        assert _detect_game_start_intent("thats all")
+```json
+{"field_updates": {"name": "Finn"}}
+```'''
+        assert _parse_ready_to_play(response) is False
 
-    def test_does_not_detect_regular_conversation(self):
-        """Should not detect regular conversation."""
-        from src.cli.commands.character import _detect_game_start_intent
+    def test_returns_false_when_false_value(self):
+        """Should return False when ready_to_play is false."""
+        from src.cli.commands.character import _parse_ready_to_play
 
-        assert not _detect_game_start_intent("Tell me more about attributes")
-        assert not _detect_game_start_intent("What's my character's name again?")
-        assert not _detect_game_start_intent("Can you make him taller?")
-        assert not _detect_game_start_intent("I want high strength")
-        assert not _detect_game_start_intent("Give me more options")
+        response = '{"ready_to_play": false}'
+        assert _parse_ready_to_play(response) is False
+
+    def test_handles_mixed_case(self):
+        """Should handle case-insensitive boolean."""
+        from src.cli.commands.character import _parse_ready_to_play
+
+        response = '{"ready_to_play": True}'
+        # JSON booleans are lowercase, but regex handles True
+        assert _parse_ready_to_play(response) is True
 
 
 class TestExtractNameFromHistory:
@@ -718,3 +722,171 @@ Nice to meet you!'''
         assert "field_updates" not in result
         assert "Setting name" in result
         assert "done!" in result
+
+
+class TestStripJsonComments:
+    """Tests for _strip_json_comments function."""
+
+    def test_strips_single_line_comments(self):
+        """Should strip // comments from JSON."""
+        from src.cli.commands.character import _strip_json_comments
+
+        json_with_comments = '''{
+            "strength": 10,  // Typical for age
+            "dexterity": 14  // Quick and nimble
+        }'''
+
+        result = _strip_json_comments(json_with_comments)
+        assert "//" not in result
+        assert "Typical" not in result
+        assert '"strength": 10' in result
+        assert '"dexterity": 14' in result
+
+    def test_preserves_urls_with_slashes(self):
+        """Should not strip // in URLs."""
+        from src.cli.commands.character import _strip_json_comments
+
+        json_with_url = '{"url": "https://example.com/path"}'
+        result = _strip_json_comments(json_with_url)
+
+        assert "https://example.com/path" in result
+
+    def test_handles_multiline_json(self):
+        """Should handle multiline JSON with comments on each line."""
+        from src.cli.commands.character import _strip_json_comments
+
+        json_str = '''{"attributes": {
+            "strength": 8,     // young
+            "dexterity": 14,   // nimble
+            "constitution": 12 // healthy
+        }}'''
+
+        result = _strip_json_comments(json_str)
+        # Should be valid JSON now
+        import json
+        data = json.loads(result)
+        assert data["attributes"]["strength"] == 8
+        assert data["attributes"]["dexterity"] == 14
+
+
+class TestParseFieldUpdatesWithComments:
+    """Tests for _parse_field_updates handling of JSON with comments."""
+
+    def test_parses_json_with_inline_comments(self):
+        """Should parse field_updates with // comments."""
+        from src.cli.commands.character import _parse_field_updates
+
+        response = '''I'll set Finn's attributes:
+
+```json
+{"field_updates": {"attributes": {
+    "strength": 8,     // Typical for his young age
+    "dexterity": 14,   // Nimble and quick
+    "constitution": 12, // Healthy and resilient
+    "intelligence": 13, // Curious and bright
+    "wisdom": 11,       // Learning about the world
+    "charisma": 8       // Still developing social skills
+}}}
+```'''
+
+        updates = _parse_field_updates(response)
+        assert updates is not None
+        assert "attributes" in updates
+        assert updates["attributes"]["strength"] == 8
+        assert updates["attributes"]["dexterity"] == 14
+
+    def test_parses_multiline_inline_json(self):
+        """Should parse inline JSON spread across multiple lines."""
+        from src.cli.commands.character import _parse_field_updates
+
+        response = '''Setting values: {"field_updates": {
+            "name": "Finn",
+            "age": 12,
+            "gender": "male"
+        }} Done!'''
+
+        updates = _parse_field_updates(response)
+        assert updates is not None
+        assert updates["name"] == "Finn"
+        assert updates["age"] == 12
+
+    def test_parses_json_with_newlines_in_strings(self):
+        """Should parse JSON where string values contain literal newlines."""
+        from src.cli.commands.character import _parse_field_updates
+
+        # Simulating AI output with newlines inside the background string
+        response = '''```json
+{"field_updates": {"background": "Finn grew up in a village.
+He lost his parents at age 8.
+Now he helps the local herbalist."}}
+```'''
+
+        updates = _parse_field_updates(response)
+        assert updates is not None
+        assert "background" in updates
+        assert "village" in updates["background"]
+
+
+class TestSanitizeJsonString:
+    """Tests for _sanitize_json_string function."""
+
+    def test_escapes_newlines_in_string_values(self):
+        """Should escape newlines inside JSON string values."""
+        from src.cli.commands.character import _sanitize_json_string
+
+        json_str = '{"text": "line one\nline two"}'
+        result = _sanitize_json_string(json_str)
+
+        assert "\\n" in result
+        import json
+        data = json.loads(result)
+        assert data["text"] == "line one\nline two"
+
+    def test_preserves_structural_newlines(self):
+        """Should not escape newlines between JSON elements."""
+        from src.cli.commands.character import _sanitize_json_string
+
+        json_str = '{\n  "name": "Finn",\n  "age": 12\n}'
+        result = _sanitize_json_string(json_str)
+
+        import json
+        data = json.loads(result)
+        assert data["name"] == "Finn"
+        assert data["age"] == 12
+
+
+class TestExtractNameFromInput:
+    """Tests for _extract_name_from_input function."""
+
+    def test_extracts_capitalized_single_word(self):
+        """Should extract a capitalized single word as name."""
+        from src.cli.commands.character import _extract_name_from_input
+
+        assert _extract_name_from_input("Finn") == "Finn"
+        assert _extract_name_from_input("Elena") == "Elena"
+        assert _extract_name_from_input("Marcus") == "Marcus"
+
+    def test_ignores_common_words(self):
+        """Should not extract common words as names."""
+        from src.cli.commands.character import _extract_name_from_input
+
+        assert _extract_name_from_input("Yes") is None
+        assert _extract_name_from_input("Done") is None
+        assert _extract_name_from_input("Ready") is None
+        assert _extract_name_from_input("Male") is None
+
+    def test_extracts_from_name_phrases(self):
+        """Should extract name from 'My name is X' patterns."""
+        from src.cli.commands.character import _extract_name_from_input
+
+        assert _extract_name_from_input("My name is Finn") == "Finn"
+        assert _extract_name_from_input("Call me Elena") == "Elena"
+
+    def test_returns_none_for_sentences(self):
+        """Should return None for longer sentences."""
+        from src.cli.commands.character import _extract_name_from_input
+
+        assert _extract_name_from_input("I want to play a warrior") is None
+        assert _extract_name_from_input("Make him strong") is None
+
+

@@ -15,6 +15,7 @@ from src.managers.context_compiler import SceneContext
 def mock_scene_context():
     """Create a mock SceneContext for testing."""
     return SceneContext(
+        turn_context="## Turn 1\nThis is the FIRST TURN. Introduce the player character.",
         time_context="## Current Scene\n- Time: Day 1, 09:00 (Monday)",
         location_context="- Location: The Rusty Tankard\n- Description: A cozy tavern...",
         player_context="## Player Character\n- Name: Hero",
@@ -58,6 +59,7 @@ class TestContextCompilerNode:
             mock_compiler.compile_scene.assert_called_once_with(
                 player_id=player_entity.id,
                 location_key="tavern",
+                turn_number=1,
                 include_secrets=True,
             )
 

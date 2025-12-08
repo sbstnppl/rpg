@@ -264,3 +264,102 @@ class ModifierSource(str, Enum):
     ADAPTATION = "adaptation"  # From adaptation to circumstances
     CUSTOM = "custom"  # Manually set
     TEMPORARY = "temporary"  # Temporary effect (spell, drug, etc.)
+
+
+# =============================================================================
+# Navigation & World Map Enums
+# =============================================================================
+
+
+class TerrainType(str, Enum):
+    """Types of terrain zones."""
+
+    PLAINS = "plains"  # Open grassland, easy travel
+    FOREST = "forest"  # Dense trees, slow travel, limited visibility
+    ROAD = "road"  # Maintained path, fastest travel
+    TRAIL = "trail"  # Rough path, moderate speed
+    MOUNTAIN = "mountain"  # Rocky terrain, requires climbing
+    SWAMP = "swamp"  # Wet terrain, very slow
+    DESERT = "desert"  # Hot, requires water
+    LAKE = "lake"  # Body of water, requires swimming/boat
+    RIVER = "river"  # Flowing water, may be crossable
+    OCEAN = "ocean"  # Deep water, requires ship
+    CLIFF = "cliff"  # Vertical terrain, requires climbing
+    CAVE = "cave"  # Underground, limited visibility
+    URBAN = "urban"  # City streets
+    RUINS = "ruins"  # Abandoned structures
+
+
+class ConnectionType(str, Enum):
+    """Types of connections between zones."""
+
+    OPEN = "open"  # No barrier, direct access
+    PATH = "path"  # Trail or walkway
+    BRIDGE = "bridge"  # Over water/chasm
+    CLIMB = "climb"  # Requires climbing skill
+    SWIM = "swim"  # Requires swimming skill
+    DOOR = "door"  # May be locked
+    GATE = "gate"  # May require permission
+    HIDDEN = "hidden"  # Secret passage
+
+
+class TransportType(str, Enum):
+    """Types of transport modes."""
+
+    WALKING = "walking"
+    RUNNING = "running"
+    MOUNTED = "mounted"  # Horse, camel, etc.
+    SWIMMING = "swimming"
+    CLIMBING = "climbing"
+    FLYING = "flying"
+    BOAT = "boat"
+    SHIP = "ship"
+    VEHICLE = "vehicle"  # Modern: car, truck
+
+
+class MapType(str, Enum):
+    """Types of maps (physical items)."""
+
+    WORLD = "world"  # Shows continents, countries
+    REGIONAL = "regional"  # Shows roads, cities, rivers
+    CITY = "city"  # Shows streets, buildings
+    DUNGEON = "dungeon"  # Shows rooms, corridors
+    BUILDING = "building"  # Shows floor plan
+
+
+class VisibilityRange(str, Enum):
+    """How far you can see from a zone."""
+
+    FAR = "far"  # Plains, open areas
+    MEDIUM = "medium"  # Light forest, urban
+    SHORT = "short"  # Dense forest, caves
+    NONE = "none"  # Complete darkness
+
+
+class EncounterFrequency(str, Enum):
+    """How often random encounters occur."""
+
+    NONE = "none"  # Safe zones (towns, roads)
+    LOW = "low"  # Patrolled areas
+    MEDIUM = "medium"  # Wilderness
+    HIGH = "high"  # Dangerous areas
+    VERY_HIGH = "very_high"  # Monster lairs
+
+
+class DiscoveryMethod(str, Enum):
+    """How a location/zone was discovered."""
+
+    VISITED = "visited"  # Player went there
+    TOLD_BY_NPC = "told_by_npc"  # NPC mentioned it
+    MAP_VIEWED = "map_viewed"  # Saw it on a physical map
+    DIGITAL_LOOKUP = "digital_lookup"  # Google Maps, GPS
+    VISIBLE_FROM = "visible_from"  # Can see it from current location
+    STARTING_KNOWLEDGE = "starting_knowledge"  # Character's background
+
+
+class PlacementType(str, Enum):
+    """How a location is placed within a zone."""
+
+    WITHIN = "within"  # Fully inside the zone
+    EDGE = "edge"  # At zone boundary
+    LANDMARK = "landmark"  # Visible from afar

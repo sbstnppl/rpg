@@ -1,6 +1,6 @@
 """Tests for session CLI commands."""
 
-import os
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import pytest
@@ -34,7 +34,23 @@ def temp_db(tmp_path):
 
     Base.metadata.create_all(bind=engine)
 
-    yield db_url, engine
+    # Create a session factory for this test database
+    TestSessionLocal = sessionmaker(bind=engine)
+
+    @contextmanager
+    def mock_get_db_session():
+        """Mock get_db_session that uses the test database."""
+        session = TestSessionLocal()
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    yield engine, mock_get_db_session
 
     engine.dispose()
 
@@ -44,9 +60,9 @@ class TestSessionStart:
 
     def test_creates_session_with_defaults(self, temp_db):
         """Should create session with default name and setting."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             result = runner.invoke(app, ["session", "start"])
 
         assert result.exit_code == 0
@@ -64,9 +80,9 @@ class TestSessionStart:
 
     def test_creates_session_with_custom_name(self, temp_db):
         """Should create session with custom name."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             result = runner.invoke(
                 app, ["session", "start", "--name", "My Epic Quest"]
             )
@@ -81,9 +97,9 @@ class TestSessionStart:
 
     def test_creates_session_with_custom_setting(self, temp_db):
         """Should create session with custom setting."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             result = runner.invoke(
                 app, ["session", "start", "--setting", "scifi"]
             )
@@ -98,9 +114,9 @@ class TestSessionStart:
 
     def test_creates_time_state_for_session(self, temp_db):
         """Should create TimeState record for new session."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             result = runner.invoke(app, ["session", "start"])
 
         assert result.exit_code == 0
@@ -119,7 +135,7 @@ class TestSessionStart:
 
     def test_foreign_keys_enforced(self, temp_db):
         """Should enforce foreign key constraints in SQLite."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
         # Try to insert orphan time_state - should fail
         Session = sessionmaker(bind=engine)
@@ -135,9 +151,9 @@ class TestSessionList:
 
     def test_lists_all_sessions(self, temp_db):
         """Should list all sessions."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             # Create some sessions
             runner.invoke(app, ["session", "start", "--name", "Session 1"])
             runner.invoke(app, ["session", "start", "--name", "Session 2"])
@@ -150,9 +166,9 @@ class TestSessionList:
 
     def test_shows_empty_message_when_no_sessions(self, temp_db):
         """Should handle empty session list gracefully."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             result = runner.invoke(app, ["session", "list"])
 
         assert result.exit_code == 0
@@ -163,9 +179,9 @@ class TestSessionDelete:
 
     def test_deletes_session(self, temp_db):
         """Should delete session by ID."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             # Create a session
             runner.invoke(app, ["session", "start", "--name", "To Delete"])
 
@@ -192,9 +208,9 @@ class TestSessionDelete:
 
     def test_cascades_to_time_states(self, temp_db):
         """Deleting session should cascade to time_states."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             # Create a session (which creates time_state)
             runner.invoke(app, ["session", "start"])
 
@@ -223,9 +239,9 @@ class TestSessionDelete:
 
     def test_handles_nonexistent_session(self, temp_db):
         """Should handle attempt to delete non-existent session."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             result = runner.invoke(
                 app, ["session", "delete", "9999", "--force"]
             )
@@ -239,9 +255,9 @@ class TestSessionLoad:
 
     def test_loads_session_info(self, temp_db):
         """Should display session information."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             runner.invoke(app, ["session", "start", "--name", "Test Session"])
 
             Session = sessionmaker(bind=engine)
@@ -256,9 +272,9 @@ class TestSessionLoad:
 
     def test_handles_nonexistent_session(self, temp_db):
         """Should handle loading non-existent session."""
-        db_url, engine = temp_db
+        engine, mock_get_db_session = temp_db
 
-        with patch.dict(os.environ, {"DATABASE_URL": db_url}):
+        with patch("src.cli.commands.session.get_db_session", mock_get_db_session):
             result = runner.invoke(app, ["session", "load", "9999"])
 
         assert result.exit_code == 1

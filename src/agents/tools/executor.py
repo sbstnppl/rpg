@@ -9,26 +9,58 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from src.database.models.entities import Entity
+from src.database.models.enums import DiscoveryMethod
 from src.database.models.session import GameSession
 from src.dice.checks import make_skill_check
 from src.dice.combat import make_attack_roll, roll_damage
 from src.dice.types import AdvantageType
+from src.managers.discovery_manager import DiscoveryManager
+from src.managers.pathfinding_manager import PathfindingManager
 from src.managers.relationship_manager import RelationshipManager
+from src.managers.zone_manager import ZoneManager
 
 
 class GMToolExecutor:
     """Executes GM tools and returns structured results."""
 
-    def __init__(self, db: Session, game_session: GameSession):
+    def __init__(
+        self,
+        db: Session,
+        game_session: GameSession,
+        current_zone_key: str | None = None,
+    ):
         """Initialize executor with database context.
 
         Args:
             db: Database session.
             game_session: Current game session.
+            current_zone_key: Player's current zone key (for navigation tools).
         """
         self.db = db
         self.game_session = game_session
+        self.current_zone_key = current_zone_key
         self.relationship_manager = RelationshipManager(db, game_session)
+        self._zone_manager: ZoneManager | None = None
+        self._pathfinding_manager: PathfindingManager | None = None
+        self._discovery_manager: DiscoveryManager | None = None
+
+    @property
+    def zone_manager(self) -> ZoneManager:
+        if self._zone_manager is None:
+            self._zone_manager = ZoneManager(self.db, self.game_session)
+        return self._zone_manager
+
+    @property
+    def pathfinding_manager(self) -> PathfindingManager:
+        if self._pathfinding_manager is None:
+            self._pathfinding_manager = PathfindingManager(self.db, self.game_session)
+        return self._pathfinding_manager
+
+    @property
+    def discovery_manager(self) -> DiscoveryManager:
+        if self._discovery_manager is None:
+            self._discovery_manager = DiscoveryManager(self.db, self.game_session)
+        return self._discovery_manager
 
     def execute(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Execute a tool and return structured result.
@@ -49,6 +81,13 @@ class GMToolExecutor:
             "roll_damage": self._execute_roll_damage,
             "get_npc_attitude": self._execute_get_npc_attitude,
             "update_npc_attitude": self._execute_update_npc_attitude,
+            "satisfy_need": self._execute_satisfy_need,
+            "check_route": self._execute_check_route,
+            "start_travel": self._execute_start_travel,
+            "move_to_zone": self._execute_move_to_zone,
+            "check_terrain": self._execute_check_terrain,
+            "discover_zone": self._execute_discover_zone,
+            "discover_location": self._execute_discover_location,
         }
 
         handler = handlers.get(tool_name)
@@ -279,3 +318,343 @@ class GMToolExecutor:
             "disadvantage": AdvantageType.DISADVANTAGE,
         }
         return mapping.get(advantage_str, AdvantageType.NORMAL)
+
+    def _execute_satisfy_need(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Execute need satisfaction with preference modifiers.
+
+        Args:
+            args: Tool arguments with entity_key, need_name, action_type, quality, base_amount.
+
+        Returns:
+            Result with amount satisfied, modifiers applied, new value.
+        """
+        from src.database.models.character_preferences import CharacterPreferences
+        from src.managers.needs import (
+            NeedsManager,
+            estimate_base_satisfaction,
+            get_preference_multiplier,
+        )
+
+        entity_key = args["entity_key"]
+        need_name = args["need_name"]
+        action_type = args["action_type"]
+        quality = args.get("quality", "basic")
+        base_amount = args.get("base_amount")
+
+        # Get entity
+        entity = self._get_entity_by_key(entity_key)
+        if entity is None:
+            return {"error": f"Entity '{entity_key}' not found"}
+
+        # Initialize needs manager
+        needs_mgr = NeedsManager(self.db, self.game_session)
+
+        # If base_amount not provided, estimate from action_type
+        if base_amount is None:
+            base_amount = estimate_base_satisfaction(need_name, action_type, quality)
+
+        # Get character preferences for preference multiplier
+        prefs = (
+            self.db.query(CharacterPreferences)
+            .filter(
+                CharacterPreferences.entity_id == entity.id,
+                CharacterPreferences.session_id == self.game_session.id,
+            )
+            .first()
+        )
+
+        # Get satisfaction multiplier from NeedModifier (system-level)
+        satisfaction_mult = needs_mgr.get_satisfaction_multiplier(entity.id, need_name)
+
+        # Get preference-based multiplier (context-specific)
+        pref_mult = get_preference_multiplier(prefs, need_name, action_type, quality)
+
+        # Calculate final amount (preference multiplier applied here, satisfaction_mult applied in satisfy_need)
+        # Note: satisfy_need already applies satisfaction_mult, so we only apply pref_mult here
+        adjusted_amount = int(base_amount * pref_mult)
+
+        # Get old value
+        old_needs = needs_mgr.get_needs(entity.id)
+        old_value = getattr(old_needs, need_name) if old_needs else 50
+
+        # Apply satisfaction (satisfy_need will apply satisfaction_mult internally)
+        new_needs = needs_mgr.satisfy_need(
+            entity.id,
+            need_name,
+            adjusted_amount,
+            turn=self.game_session.total_turns,
+        )
+        new_value = getattr(new_needs, need_name)
+
+        return {
+            "entity_key": entity_key,
+            "need_name": need_name,
+            "action_type": action_type,
+            "quality": quality,
+            "base_amount": base_amount,
+            "preference_multiplier": round(pref_mult, 2),
+            "satisfaction_multiplier": round(satisfaction_mult, 2),
+            "final_amount": int(adjusted_amount * satisfaction_mult),
+            "old_value": old_value,
+            "new_value": new_value,
+            "delta": new_value - old_value,
+        }
+
+    # =========================================================================
+    # Navigation Tool Handlers
+    # =========================================================================
+
+    def _execute_check_route(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Check the optimal route and travel time between zones.
+
+        Args:
+            args: Tool arguments with from_zone, to_zone, transport_mode.
+
+        Returns:
+            Route info including path, travel time, and hazards.
+        """
+        from_zone = args.get("from_zone") or self.current_zone_key
+        to_zone = args["to_zone"]
+        transport_mode = args.get("transport_mode", "walking")
+
+        if from_zone is None:
+            return {"error": "No starting zone specified and current zone unknown"}
+
+        # Check destination is known
+        if not self.discovery_manager.is_zone_discovered(to_zone):
+            return {"error": f"Destination '{to_zone}' is unknown - it must be discovered first"}
+
+        result = self.pathfinding_manager.find_optimal_path(
+            from_zone_key=from_zone,
+            to_zone_key=to_zone,
+            transport_mode_key=transport_mode,
+        )
+
+        if not result["found"]:
+            return {
+                "error": f"No route found to '{to_zone}' via {transport_mode}",
+                "reason": result.get("reason", "Destination may be inaccessible"),
+            }
+
+        # Get route summary with hazards
+        summary = self.pathfinding_manager.get_route_summary(result["path"], transport_mode)
+
+        return {
+            "from_zone": from_zone,
+            "to_zone": to_zone,
+            "transport_mode": transport_mode,
+            "total_travel_minutes": result["total_cost"],
+            "zones_traversed": len(result["path"]),
+            "path": [z.display_name for z in result["path"]],
+            "hazards": summary.get("hazards", []),
+            "skill_checks_required": summary.get("skill_checks", []),
+        }
+
+    def _execute_start_travel(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Start a journey to a destination zone.
+
+        Args:
+            args: Tool arguments with to_zone, transport_mode, prefer_roads.
+
+        Returns:
+            Journey initiation result.
+        """
+        from src.managers.travel_manager import TravelManager
+
+        to_zone = args["to_zone"]
+        transport_mode = args.get("transport_mode", "walking")
+        prefer_roads = args.get("prefer_roads", False)
+
+        if self.current_zone_key is None:
+            return {"error": "Current zone unknown - cannot start journey"}
+
+        # Check destination is known
+        if not self.discovery_manager.is_zone_discovered(to_zone):
+            return {"error": f"Destination '{to_zone}' is unknown - it must be discovered first"}
+
+        travel_mgr = TravelManager(self.db, self.game_session)
+
+        result = travel_mgr.start_journey(
+            from_zone_key=self.current_zone_key,
+            to_zone_key=to_zone,
+            transport_mode=transport_mode,
+            prefer_roads=prefer_roads,
+        )
+
+        if not result["success"]:
+            return {"error": result.get("reason", "Failed to start journey")}
+
+        journey = result["journey"]
+        return {
+            "started": True,
+            "destination": to_zone,
+            "transport_mode": transport_mode,
+            "estimated_minutes": journey.estimated_total_minutes,
+            "zones_to_traverse": len(journey.path),
+            "current_zone": journey.current_zone_key,
+            "message": f"Journey to {to_zone} started. Estimated travel time: {journey.estimated_total_minutes} minutes.",
+        }
+
+    def _execute_move_to_zone(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Move to an adjacent zone immediately.
+
+        Args:
+            args: Tool arguments with zone_key, transport_mode.
+
+        Returns:
+            Movement result.
+        """
+        zone_key = args["zone_key"]
+        transport_mode = args.get("transport_mode", "walking")
+
+        if self.current_zone_key is None:
+            return {"error": "Current zone unknown - cannot move"}
+
+        # Check zone is adjacent
+        adjacent_data = self.zone_manager.get_adjacent_zones_with_directions(self.current_zone_key)
+        adjacent_keys = [item["zone"].zone_key for item in adjacent_data]
+
+        if zone_key not in adjacent_keys:
+            return {
+                "error": f"'{zone_key}' is not adjacent to current zone",
+                "adjacent_zones": adjacent_keys,
+            }
+
+        # Check accessibility
+        accessibility = self.zone_manager.check_accessibility(zone_key, transport_mode)
+
+        if not accessibility["can_enter"]:
+            return {
+                "error": f"Cannot enter '{zone_key}' via {transport_mode}",
+                "reason": accessibility.get("reason", "Terrain is impassable"),
+                "required_skill": accessibility.get("requires_skill"),
+            }
+
+        # Auto-discover surroundings on arrival
+        discovery_result = self.discovery_manager.auto_discover_surroundings(zone_key)
+
+        zone = self.zone_manager.get_zone(zone_key)
+        travel_cost = self.zone_manager.get_terrain_cost(zone_key, transport_mode)
+
+        return {
+            "moved": True,
+            "new_zone": zone_key,
+            "zone_name": zone.display_name if zone else zone_key,
+            "terrain": zone.terrain_type.value if zone and zone.terrain_type else "unknown",
+            "travel_minutes": travel_cost,
+            "new_discoveries": {
+                "zones": discovery_result.get("adjacent_zones_discovered", []),
+                "locations": discovery_result.get("locations_discovered", []),
+            },
+        }
+
+    def _execute_check_terrain(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Check terrain accessibility and requirements.
+
+        Args:
+            args: Tool arguments with zone_key, transport_mode.
+
+        Returns:
+            Terrain accessibility info.
+        """
+        zone_key = args["zone_key"]
+        transport_mode = args.get("transport_mode", "walking")
+
+        zone = self.zone_manager.get_zone(zone_key)
+        if zone is None:
+            return {"error": f"Zone '{zone_key}' not found"}
+
+        accessibility = self.zone_manager.check_accessibility(zone_key, transport_mode)
+
+        return {
+            "zone_key": zone_key,
+            "zone_name": zone.display_name,
+            "terrain_type": zone.terrain_type.value if zone.terrain_type else "unknown",
+            "transport_mode": transport_mode,
+            "can_enter": accessibility["can_enter"],
+            "reason": accessibility.get("reason"),
+            "requires_skill": accessibility.get("requires_skill"),
+            "skill_difficulty": accessibility.get("skill_difficulty"),
+            "failure_consequence": zone.failure_consequence,
+            "travel_cost": accessibility.get("travel_cost"),
+        }
+
+    def _execute_discover_zone(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Mark a zone as discovered.
+
+        Args:
+            args: Tool arguments with zone_key, discovery_method, source_entity.
+
+        Returns:
+            Discovery result.
+        """
+        zone_key = args["zone_key"]
+        method_str = args["discovery_method"]
+        source_entity = args.get("source_entity")
+
+        # Map string to enum
+        method_map = {
+            "told_by_npc": DiscoveryMethod.TOLD_BY_NPC,
+            "map_viewed": DiscoveryMethod.MAP_VIEWED,
+            "visible_from": DiscoveryMethod.VISIBLE_FROM,
+            "visited": DiscoveryMethod.VISITED,
+        }
+        method = method_map.get(method_str, DiscoveryMethod.VISITED)
+
+        result = self.discovery_manager.discover_zone(
+            zone_key=zone_key,
+            method=method,
+            source_entity_key=source_entity,
+        )
+
+        if not result["success"]:
+            return {"error": result.get("reason", f"Failed to discover zone '{zone_key}'")}
+
+        zone = result.get("zone")
+        return {
+            "discovered": result["newly_discovered"],
+            "zone_key": zone_key,
+            "zone_name": zone.display_name if zone else zone_key,
+            "method": method_str,
+            "already_known": not result["newly_discovered"],
+        }
+
+    def _execute_discover_location(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Mark a location as discovered.
+
+        Args:
+            args: Tool arguments with location_key, discovery_method, source_entity.
+
+        Returns:
+            Discovery result.
+        """
+        location_key = args["location_key"]
+        method_str = args["discovery_method"]
+        source_entity = args.get("source_entity")
+
+        # Map string to enum
+        method_map = {
+            "told_by_npc": DiscoveryMethod.TOLD_BY_NPC,
+            "map_viewed": DiscoveryMethod.MAP_VIEWED,
+            "visible_from": DiscoveryMethod.VISIBLE_FROM,
+            "visited": DiscoveryMethod.VISITED,
+        }
+        method = method_map.get(method_str, DiscoveryMethod.VISITED)
+
+        result = self.discovery_manager.discover_location(
+            location_key=location_key,
+            method=method,
+            source_entity_key=source_entity,
+        )
+
+        if not result["success"]:
+            return {"error": result.get("reason", f"Failed to discover location '{location_key}'")}
+
+        location = result.get("location")
+        return {
+            "discovered": result["newly_discovered"],
+            "location_key": location_key,
+            "location_name": location.display_name if location else location_key,
+            "method": method_str,
+            "already_known": not result["newly_discovered"],
+        }

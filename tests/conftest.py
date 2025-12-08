@@ -33,6 +33,7 @@ def engine():
         injuries,
         items,
         mental_state,
+        navigation,
         relationships,
         session,
         tasks,
@@ -68,6 +69,22 @@ def game_session(db_session: Session) -> GameSession:
     """Create a basic GameSession fixture."""
     session = GameSession(
         session_name="Test Session",
+        setting="fantasy",
+        status="active",
+        total_turns=1,
+        llm_provider="anthropic",
+        gm_model="claude-sonnet-4-20250514",
+    )
+    db_session.add(session)
+    db_session.flush()
+    return session
+
+
+@pytest.fixture
+def game_session_2(db_session: Session) -> GameSession:
+    """Create a second GameSession fixture for testing session isolation."""
+    session = GameSession(
+        session_name="Test Session 2",
         setting="fantasy",
         status="active",
         total_turns=1,

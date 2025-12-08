@@ -539,10 +539,13 @@ class InjuryManager(BaseManager):
         return min(100, int(max_pain + additional_pain))
 
     def sync_pain_to_needs(self, entity_id: int, needs_manager: "NeedsManager") -> None:
-        """Sync injury pain to character needs pain value."""
+        """Sync injury pain to character needs wellness value.
+
+        Wellness is inverted from pain: 0 = agony, 100 = pain-free.
+        """
         total_pain = self.get_total_pain(entity_id)
         needs = needs_manager.get_or_create_needs(entity_id)
-        needs.pain = total_pain
+        needs.wellness = 100 - total_pain
         self.db.flush()
 
     def get_injuries_summary(self, entity_id: int) -> dict:

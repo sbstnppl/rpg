@@ -112,15 +112,18 @@
 
 ### 2.11 Context Compiler
 - [x] Create `src/managers/context_compiler.py`
-  - `compile_scene(npcs_present, location)`
+  - `compile_scene(player_id, location_key, turn_number)`
   - Aggregates data from all managers
   - Returns formatted context for GM
   - Includes needs/injury summaries for NPCs
+  - `_get_turn_context()` - turn number and recent history for narrative continuity
   - `_get_equipment_description()` - visible equipment context
   - `_format_appearance()` - includes age support
 
 ### 2.12 Realism Managers (NEW)
 - [x] Create `src/managers/needs.py` - NeedsManager
+  - All needs use unified semantics: 0=bad (red), 100=good (green)
+  - 9 needs: hunger, energy, hygiene, comfort, wellness, social_connection, morale, sense_of_purpose, intimacy
   - `apply_time_decay()` - activity-based need changes with modifier support
   - `get_active_effects()` - stat penalties from unmet needs
   - `get_npc_urgency()` - for schedule overrides
@@ -140,7 +143,7 @@
   - `add_injury()`, `get_injuries()`
   - `get_activity_impact()` - penalties for walking/running/etc
   - `apply_healing()` - recovery progression
-  - `sync_pain_to_needs()` - pain↔needs integration
+  - `sync_pain_to_needs()` - pain→wellness integration (wellness = 100 - total_pain)
 - [x] Create `src/managers/death.py` - DeathManager
   - `take_damage()` - vital status + injury creation
   - `make_death_save()` - d20 mechanics
@@ -173,7 +176,23 @@
   - Configurable `base_url` for OpenAI-compatible APIs (DeepSeek, Ollama, vLLM)
   - Token counting via tiktoken
 
-### 3.4 Dice System
+### 3.4 Audit Logging
+- [x] Create `src/llm/audit_logger.py`
+  - `LLMAuditContext` - session/turn/call_type tracking
+  - `LLMAuditEntry` - full request/response data
+  - `LLMAuditLogger` - async file writing with markdown formatting
+  - `set_audit_context()`, `get_audit_context()` - context variable management
+  - `get_audit_logger()` - factory with configurable directory
+- [x] Create `src/llm/logging_provider.py`
+  - `LoggingProvider` - wrapper that delegates + logs all LLM calls
+  - Captures timing, messages, tool calls, responses
+- [x] Modify `src/llm/factory.py` - wrap providers when `log_llm_calls=True`
+- [x] Add `llm_log_dir` setting to `src/config.py`
+- [x] Set audit context in agent nodes (game_master, entity_extractor)
+- [x] Set audit context in character.py CLI
+- [x] Create tests for audit logging (35 tests)
+
+### 3.5 Dice System
 - [x] Create `src/dice/types.py` - Dataclasses for expressions and results
 - [x] Create `src/dice/parser.py` - Parse dice notation (1d20, 2d6+3)
 - [x] Create `src/dice/roller.py` - Roll with modifiers, advantage/disadvantage
@@ -291,3 +310,85 @@
 - [x] Create `data/templates/world_simulator.md`
 - [x] Create `data/templates/combat_resolver.md`
 - [x] Create `data/templates/character_creator.md`
+
+## Phase 8: World Map & Navigation System
+
+### 8.1 Database Schema
+- [x] Add navigation enums to `src/database/models/enums.py`
+  - TerrainType, ConnectionType, TransportType, MapType
+  - VisibilityRange, EncounterFrequency, DiscoveryMethod, PlacementType
+- [x] Create `src/database/models/navigation.py`
+  - TerrainZone - explorable terrain segments
+  - ZoneConnection - adjacencies between zones
+  - LocationZonePlacement - links locations to zones
+  - TransportMode - travel methods with terrain costs
+  - ZoneDiscovery - fog of war for zones (session-scoped)
+  - LocationDiscovery - fog of war for locations (session-scoped)
+  - MapItem - physical maps that reveal locations
+  - DigitalMapAccess - digital map services (modern/sci-fi)
+- [x] Create Alembic migration `005_add_navigation_system.py`
+
+### 8.2 Zone Manager
+- [x] Create `src/managers/zone_manager.py`
+  - `get_zone(key)`, `create_zone(**data)`
+  - `connect_zones(from_key, to_key, direction)`
+  - `get_adjacent_zones(zone_key)` - zones connected to this one
+  - `get_adjacent_zones_with_directions(zone_key)` - with direction info
+  - `place_location_in_zone(location_key, zone_key)`
+  - `get_zone_locations(zone_key)` - locations within a zone
+  - `get_location_zone(location_key)` - zone containing a location
+  - `get_terrain_cost(zone_key, transport_mode)` - movement cost
+  - `check_accessibility(zone_key, character_skills)` - skill checks
+  - `get_visible_from_zone(zone_key)` - visible zones
+  - `get_visible_locations_from_zone(zone_key)` - visible locations
+  - `get_transport_mode(mode_key)`
+  - `get_available_transport_modes(zone_key)` - usable transport in zone
+
+### 8.3 Pathfinding System
+- [x] Create `src/managers/pathfinding_manager.py`
+  - `find_optimal_path(from_zone, to_zone, transport_mode)` - A* algorithm
+  - `find_path_via(from_zone, to_zone, waypoints, transport_mode)`
+  - `calculate_travel_time(path, transport_mode, character)` - with fatigue
+  - `get_route_summary(path)` - terrain types, distances, hazards
+  - Support terrain costs, transport mode limitations
+  - Support route preferences (avoid forests, take roads only)
+
+### 8.4 Travel Simulation System
+- [x] Create `src/managers/travel_manager.py`
+  - `start_journey(from_zone, to_zone, transport_mode, route_preference)`
+  - `advance_travel()` - move to next zone, roll encounters
+  - `interrupt_travel(action)` - leave road, explore side area
+  - `get_journey_state()` - current position, progress, fatigue
+  - `resume_journey()` - continue interrupted journey
+  - `detour_to_zone()` - explore adjacent zones off the path
+  - Skill checks for hazardous terrain (swimming, climbing)
+  - Random encounter rolls per terrain type
+
+### 8.5 Discovery System
+- [x] Create `src/managers/discovery_manager.py`
+  - `discover_zone(zone_key, method, source)` - reveal terrain zone
+  - `discover_location(location_key, method, source)` - reveal location
+  - `view_map(map_item)` - reveal all zones/locations on a map
+  - `check_digital_access()` - available digital map services
+  - `get_known_zones()`, `get_known_locations()` - discovered items
+  - `auto_discover_surroundings(zone_key)` - on zone entry
+  - `is_zone_discovered()`, `is_location_discovered()` - check discovery status
+
+### 8.6 Map Item Integration
+- [ ] MapItem integration with Item system
+- [ ] "View map" action reveals zones and locations
+- [ ] Setting-based digital map availability
+- [ ] Device/connection requirements for digital maps
+
+### 8.7 GM Integration
+- [ ] Update GM prompt with zone navigation context
+- [ ] Only reference known zones/locations in responses
+- [ ] Include current zone, adjacent zones, known locations in context
+- [ ] Travel time estimates based on terrain + transport
+- [ ] Block impossible movements (no swimming without skill)
+- [ ] Trigger travel simulation for distant destinations
+
+### 8.8 World Building CLI Tools
+- [ ] CLI commands: `world create-zone`, `world connect-zones`, `world place-location`
+- [ ] Import from YAML/JSON templates
+- [ ] Bulk zone creation for regions

@@ -233,6 +233,245 @@ UPDATE_NPC_ATTITUDE_TOOL = ToolDefinition(
 )
 
 
+# Satisfy Need Tool
+SATISFY_NEED_TOOL = ToolDefinition(
+    name="satisfy_need",
+    description=(
+        "Satisfy a character need when they perform an action that addresses it "
+        "(eating, sleeping, bathing, socializing, etc.). Use the action_type to "
+        "estimate the satisfaction amount, which will be adjusted by character "
+        "preferences and traits automatically."
+    ),
+    parameters=[
+        ToolParameter(
+            name="entity_key",
+            param_type="string",
+            description="Entity key of the character performing the action (e.g., 'player', 'npc_innkeeper')",
+        ),
+        ToolParameter(
+            name="need_name",
+            param_type="string",
+            description="Which need is being satisfied",
+            enum=[
+                "hunger",
+                "energy",
+                "hygiene",
+                "comfort",
+                "wellness",
+                "social_connection",
+                "morale",
+                "sense_of_purpose",
+                "intimacy",
+            ],
+        ),
+        ToolParameter(
+            name="action_type",
+            param_type="string",
+            description=(
+                "Type of action: hunger (snack/light_meal/full_meal/feast), "
+                "energy (quick_nap/short_rest/full_sleep), "
+                "hygiene (quick_wash/partial_bath/full_bath), "
+                "social (chat/conversation/group_activity/bonding), "
+                "comfort (change_clothes/shelter/luxury), "
+                "wellness (minor_remedy/medicine/treatment), "
+                "morale (minor_victory/achievement/major_success/setback), "
+                "purpose (accept_quest/progress/complete_quest), "
+                "intimacy (flirtation/affection/intimate_encounter)"
+            ),
+        ),
+        ToolParameter(
+            name="quality",
+            param_type="string",
+            description="Quality of the action or item (affects satisfaction amount)",
+            required=False,
+            enum=["poor", "basic", "good", "excellent", "exceptional"],
+            default="basic",
+        ),
+        ToolParameter(
+            name="base_amount",
+            param_type="integer",
+            description="Optional override for base satisfaction amount (if not provided, estimated from action_type)",
+            required=False,
+        ),
+    ],
+)
+
+
+# Check Route Tool
+CHECK_ROUTE_TOOL = ToolDefinition(
+    name="check_route",
+    description=(
+        "Check the optimal route and travel time between two known zones. Use this when "
+        "the player asks how to get somewhere or how long travel will take. Returns the "
+        "path, travel time, and any hazards along the way."
+    ),
+    parameters=[
+        ToolParameter(
+            name="from_zone",
+            param_type="string",
+            description="Zone key where the journey starts (current zone if not specified)",
+            required=False,
+        ),
+        ToolParameter(
+            name="to_zone",
+            param_type="string",
+            description="Zone key of the destination",
+        ),
+        ToolParameter(
+            name="transport_mode",
+            param_type="string",
+            description="How the player is traveling",
+            required=False,
+            enum=["walking", "mounted", "swimming", "climbing"],
+            default="walking",
+        ),
+    ],
+)
+
+
+# Start Travel Tool
+START_TRAVEL_TOOL = ToolDefinition(
+    name="start_travel",
+    description=(
+        "Begin a journey to a destination zone. This initiates simulated travel where the "
+        "player will progress through zones with encounters, weather, and skill checks. "
+        "Use this when the player wants to travel to a known distant location."
+    ),
+    parameters=[
+        ToolParameter(
+            name="to_zone",
+            param_type="string",
+            description="Zone key of the destination",
+        ),
+        ToolParameter(
+            name="transport_mode",
+            param_type="string",
+            description="How the player is traveling",
+            required=False,
+            enum=["walking", "mounted", "swimming", "climbing"],
+            default="walking",
+        ),
+        ToolParameter(
+            name="prefer_roads",
+            param_type="boolean",
+            description="Whether to prefer road routes even if slower",
+            required=False,
+            default=False,
+        ),
+    ],
+)
+
+
+# Move to Adjacent Zone Tool
+MOVE_TO_ZONE_TOOL = ToolDefinition(
+    name="move_to_zone",
+    description=(
+        "Move the player to an adjacent zone. Use this for immediate short-distance "
+        "movement to a directly connected zone, not for long journeys. For distant "
+        "destinations, use start_travel instead."
+    ),
+    parameters=[
+        ToolParameter(
+            name="zone_key",
+            param_type="string",
+            description="Zone key to move to (must be adjacent to current zone)",
+        ),
+        ToolParameter(
+            name="transport_mode",
+            param_type="string",
+            description="How the player is moving",
+            required=False,
+            enum=["walking", "mounted", "swimming", "climbing"],
+            default="walking",
+        ),
+    ],
+)
+
+
+# Check Terrain Accessibility Tool
+CHECK_TERRAIN_TOOL = ToolDefinition(
+    name="check_terrain",
+    description=(
+        "Check if terrain is accessible and what skills are required. Use before "
+        "attempting to enter hazardous terrain like lakes (swimming), cliffs (climbing), "
+        "or other skill-requiring areas."
+    ),
+    parameters=[
+        ToolParameter(
+            name="zone_key",
+            param_type="string",
+            description="Zone key to check accessibility for",
+        ),
+        ToolParameter(
+            name="transport_mode",
+            param_type="string",
+            description="How the player intends to traverse it",
+            required=False,
+            enum=["walking", "mounted", "swimming", "climbing"],
+            default="walking",
+        ),
+    ],
+)
+
+
+# Discover Zone Tool
+DISCOVER_ZONE_TOOL = ToolDefinition(
+    name="discover_zone",
+    description=(
+        "Mark a zone as discovered by the player. Use when an NPC tells the player "
+        "about a location, or when the player finds a map or gains knowledge of an area."
+    ),
+    parameters=[
+        ToolParameter(
+            name="zone_key",
+            param_type="string",
+            description="Zone key to discover",
+        ),
+        ToolParameter(
+            name="discovery_method",
+            param_type="string",
+            description="How the zone was discovered",
+            enum=["told_by_npc", "map_viewed", "visible_from", "visited"],
+        ),
+        ToolParameter(
+            name="source_entity",
+            param_type="string",
+            description="Entity key of NPC who told about the zone (if applicable)",
+            required=False,
+        ),
+    ],
+)
+
+
+# Discover Location Tool
+DISCOVER_LOCATION_TOOL = ToolDefinition(
+    name="discover_location",
+    description=(
+        "Mark a location as discovered by the player. Use when the player learns "
+        "about a specific place like a building, dungeon, or point of interest."
+    ),
+    parameters=[
+        ToolParameter(
+            name="location_key",
+            param_type="string",
+            description="Location key to discover",
+        ),
+        ToolParameter(
+            name="discovery_method",
+            param_type="string",
+            description="How the location was discovered",
+            enum=["told_by_npc", "map_viewed", "visible_from", "visited"],
+        ),
+        ToolParameter(
+            name="source_entity",
+            param_type="string",
+            description="Entity key of NPC who told about the location (if applicable)",
+            required=False,
+        ),
+    ],
+)
+
+
 # All GM tools
 GM_TOOLS = [
     SKILL_CHECK_TOOL,
@@ -240,4 +479,11 @@ GM_TOOLS = [
     ROLL_DAMAGE_TOOL,
     GET_NPC_ATTITUDE_TOOL,
     UPDATE_NPC_ATTITUDE_TOOL,
+    SATISFY_NEED_TOOL,
+    CHECK_ROUTE_TOOL,
+    START_TRAVEL_TOOL,
+    MOVE_TO_ZONE_TOOL,
+    CHECK_TERRAIN_TOOL,
+    DISCOVER_ZONE_TOOL,
+    DISCOVER_LOCATION_TOOL,
 ]

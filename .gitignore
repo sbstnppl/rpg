@@ -49,6 +49,9 @@ htmlcov/
 *.db
 *.sqlite3
 
+# Logs
+logs/
+
 # OS
 .DS_Store
 Thumbs.db

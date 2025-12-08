@@ -52,6 +52,7 @@ from src.schemas.settings import (
     validate_point_buy,
     calculate_point_cost,
 )
+from src.llm.audit_logger import set_audit_context
 
 app = typer.Typer(help="Character commands")
 console = Console()
@@ -238,16 +239,21 @@ def status(
             for attr in player.attributes:
                 stats[attr.attribute_key.replace("_", " ").title()] = attr.value
 
-        # Get needs
+        # Get needs (all 9)
         needs = None
         needs_manager = NeedsManager(db, game_session)
         needs_state = needs_manager.get_needs(player.id)
         if needs_state:
             needs = {
                 "Hunger": int(needs_state.hunger),
-                "Fatigue": int(needs_state.fatigue),
+                "Energy": int(needs_state.energy),
                 "Hygiene": int(needs_state.hygiene),
+                "Comfort": int(needs_state.comfort),
+                "Wellness": int(needs_state.wellness),
+                "Social": int(needs_state.social_connection),
                 "Morale": int(needs_state.morale),
+                "Purpose": int(needs_state.sense_of_purpose),
+                "Intimacy": int(needs_state.intimacy),
             }
 
         # Get conditions (placeholder)
@@ -558,18 +564,19 @@ def _create_character_records(
         db.add(attr)
 
     # Create character needs with defaults
+    # All needs: 0 = bad (action required), 100 = good (no action needed)
     needs = CharacterNeeds(
         session_id=game_session.id,
         entity_id=entity.id,
         hunger=80,
-        fatigue=20,
+        energy=80,
         hygiene=80,
         comfort=70,
-        pain=0,
+        wellness=100,
         social_connection=50,
         morale=70,
         sense_of_purpose=60,
-        intimacy=20,
+        intimacy=80,
     )
     db.add(needs)
 
@@ -783,6 +790,7 @@ def _load_inference_template() -> str:
 
 async def _infer_gameplay_fields(
     state: CharacterCreationState,
+    session_id: int | None = None,
 ) -> dict | None:
     """Infer gameplay-relevant fields from character background and personality.
 
@@ -793,6 +801,7 @@ async def _infer_gameplay_fields(
 
     Args:
         state: Character creation state with background and personality.
+        session_id: Optional session ID for logging.
 
     Returns:
         Dict with inferred_skills, inferred_preferences, inferred_need_modifiers,
@@ -803,6 +812,9 @@ async def _infer_gameplay_fields(
         from src.llm.message_types import Message, MessageRole
     except ImportError:
         return None
+
+    # Set audit context for logging
+    set_audit_context(session_id=session_id, call_type="character_inference")
 
     template = _load_inference_template()
     if not template:
@@ -1011,6 +1023,7 @@ async def _extract_world_data(
     character_name: str,
     character_background: str,
     setting_name: str,
+    session_id: int | None = None,
 ) -> dict | None:
     """Extract world data from character creation output using LLM.
 
@@ -1019,6 +1032,7 @@ async def _extract_world_data(
         character_name: Character's name.
         character_background: Character's background story.
         setting_name: Game setting name.
+        session_id: Optional session ID for logging.
 
     Returns:
         Extracted world data dict or None if extraction fails.
@@ -1028,6 +1042,9 @@ async def _extract_world_data(
         from src.llm.message_types import Message, MessageRole
     except ImportError:
         return None
+
+    # Set audit context for logging
+    set_audit_context(session_id=session_id, call_type="world_extraction")
 
     template = _load_world_extraction_template()
     if not template:
@@ -1231,10 +1248,103 @@ def _parse_character_complete(response: str) -> dict | None:
     return None
 
 
+def _strip_json_comments(json_str: str) -> str:
+    """Strip JavaScript-style comments from JSON string.
+
+    LLMs sometimes add // comments which are invalid in JSON.
+
+    Args:
+        json_str: JSON string that may contain comments.
+
+    Returns:
+        JSON string with comments removed.
+    """
+    # Remove single-line // comments (but not inside strings)
+    # This is a simple approach that works for typical LLM output
+    lines = json_str.split('\n')
+    cleaned_lines = []
+    for line in lines:
+        # Find // that's not inside a string
+        # Simple approach: remove everything after // if it's not preceded by http
+        if '//' in line and 'http' not in line:
+            # Check if // is inside a string by counting quotes before it
+            idx = line.find('//')
+            before = line[:idx]
+            # Count unescaped quotes
+            quote_count = before.count('"') - before.count('\\"')
+            if quote_count % 2 == 0:  # Not inside a string
+                line = before.rstrip()
+        cleaned_lines.append(line)
+    return '\n'.join(cleaned_lines)
+
+
+def _sanitize_json_string(json_str: str) -> str:
+    """Sanitize JSON string by escaping control characters in string values.
+
+    LLMs sometimes put literal newlines inside JSON string values, which is invalid.
+    This function escapes them properly.
+
+    Args:
+        json_str: JSON string that may have unescaped control characters.
+
+    Returns:
+        JSON string with control characters properly escaped.
+    """
+    # First, handle the simple case of newlines inside string values
+    # We need to be careful not to escape newlines that are structural (between key-value pairs)
+
+    # Strategy: Find string values and escape newlines within them
+    result = []
+    in_string = False
+    escape_next = False
+    i = 0
+
+    while i < len(json_str):
+        char = json_str[i]
+
+        if escape_next:
+            result.append(char)
+            escape_next = False
+            i += 1
+            continue
+
+        if char == '\\':
+            result.append(char)
+            escape_next = True
+            i += 1
+            continue
+
+        if char == '"':
+            in_string = not in_string
+            result.append(char)
+            i += 1
+            continue
+
+        if in_string:
+            # Inside a string - escape control characters
+            if char == '\n':
+                result.append('\\n')
+            elif char == '\r':
+                result.append('\\r')
+            elif char == '\t':
+                result.append('\\t')
+            elif ord(char) < 32:  # Other control characters
+                result.append(f'\\u{ord(char):04x}')
+            else:
+                result.append(char)
+        else:
+            result.append(char)
+
+        i += 1
+
+    return ''.join(result)
+
+
 def _parse_field_updates(response: str) -> dict | None:
     """Parse field updates from AI response.
 
     Looks for JSON blocks with field_updates key containing character data.
+    Handles malformed JSON with comments.
 
     Args:
         response: LLM response text.
@@ -1253,21 +1363,25 @@ def _parse_field_updates(response: str) -> dict | None:
             re.DOTALL
         )
         if code_block_match:
-            data = json.loads(code_block_match.group(1))
+            json_str = _strip_json_comments(code_block_match.group(1))
+            json_str = _sanitize_json_string(json_str)
+            data = json.loads(json_str)
             if "field_updates" in data:
                 return data["field_updates"]
 
-        # Look for inline field_updates JSON
+        # Look for inline field_updates JSON (possibly multiline with braces)
         inline_match = re.search(
-            r'\{"field_updates":\s*(\{[^}]+\})\s*\}',
+            r'\{"field_updates":\s*(\{[\s\S]*?\})\s*\}',
             response,
-            re.DOTALL
         )
         if inline_match:
-            return json.loads(inline_match.group(1))
+            json_str = _strip_json_comments(inline_match.group(1))
+            json_str = _sanitize_json_string(json_str)
+            return json.loads(json_str)
 
-    except json.JSONDecodeError:
-        pass
+    except json.JSONDecodeError as e:
+        # Log for debugging but don't crash
+        console.print(f"[dim]JSON parse warning: {e}[/dim]")
     return None
 
 
@@ -1309,6 +1423,48 @@ def _parse_hidden_content(response: str) -> dict | None:
     except json.JSONDecodeError:
         pass
     return None
+
+
+def _parse_ready_to_play(response: str) -> bool:
+    """Parse ready_to_play signal from AI response.
+
+    Looks for JSON blocks with ready_to_play key set to true.
+
+    Args:
+        response: LLM response text.
+
+    Returns:
+        True if AI signals ready to play, False otherwise.
+
+    Example response format:
+        {"ready_to_play": true}
+    """
+    try:
+        # Look for ready_to_play JSON in markdown code blocks
+        code_block_match = re.search(
+            r'```json\s*(\{[^`]*"ready_to_play"[^`]*\})\s*```',
+            response,
+            re.DOTALL
+        )
+        if code_block_match:
+            json_str = _strip_json_comments(code_block_match.group(1))
+            json_str = _sanitize_json_string(json_str)
+            data = json.loads(json_str)
+            if data.get("ready_to_play") is True:
+                return True
+
+        # Look for inline ready_to_play JSON
+        inline_match = re.search(
+            r'\{"ready_to_play":\s*(true|false)\s*\}',
+            response,
+            re.IGNORECASE
+        )
+        if inline_match:
+            return inline_match.group(1).lower() == "true"
+
+    except json.JSONDecodeError:
+        pass
+    return False
 
 
 def _apply_field_updates(state: CharacterCreationState, updates: dict) -> None:
@@ -1360,47 +1516,10 @@ def _strip_json_blocks(text: str) -> str:
     text = re.sub(r'\{[^{}]*"character_complete"[^{}]*\}', '', text)
     text = re.sub(r'\{[^{}]*"field_updates"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
     text = re.sub(r'\{[^{}]*"hidden_content"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
+    text = re.sub(r'\{[^{}]*"ready_to_play"[^{}]*\}', '', text)
     # Clean up extra whitespace left behind
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
-
-
-def _detect_game_start_intent(player_input: str) -> bool:
-    """Detect if player wants to start the game.
-
-    Args:
-        player_input: The player's message.
-
-    Returns:
-        True if input indicates desire to start playing.
-    """
-    input_lower = player_input.lower()
-
-    # Direct game-start phrases
-    game_start_phrases = [
-        "start playing",
-        "let's start",
-        "let's play",
-        "let's go",
-        "let's begin",
-        "start the game",
-        "begin the game",
-        "ready to play",
-        "ready to start",
-        "good to go",
-        "i'm ready",
-        "im ready",
-        "done",
-        "i'm done",
-        "im done",
-        "all done",
-        "that's it",
-        "thats it",
-        "that's all",
-        "thats all",
-    ]
-
-    return any(phrase in input_lower for phrase in game_start_phrases)
 
 
 def _extract_name_from_history(conversation_history: list[str]) -> str | None:
@@ -1421,8 +1540,10 @@ def _extract_name_from_history(conversation_history: list[str]) -> str | None:
     patterns = [
         r"(?:name is|named|called|character)\s+([A-Z][a-z]+)",
         r"([A-Z][a-z]+)\s+is\s+(?:a\s+)?(?:\d+[- ]year[- ]old|young|an?\s+)",
-        r"([A-Z][a-z]+)'s\s+(?:character|attributes|background|stats)",
+        r"([A-Z][a-z]+)'s\s+(?:character|attributes|background|stats|name)",
         r"for\s+([A-Z][a-z]+)(?:\s+are)?:",
+        r"we have\s+([A-Z][a-z]+)'s",
+        r"Now that we have\s+([A-Z][a-z]+)",
     ]
 
     for pattern in patterns:
@@ -1434,6 +1555,52 @@ def _extract_name_from_history(conversation_history: list[str]) -> str | None:
                 "the", "this", "that", "here", "there", "what", "would",
                 "strength", "dexterity", "constitution", "intelligence",
                 "wisdom", "charisma", "player", "character", "assistant",
+                "now", "since", "great", "based", "your",
+            ):
+                return name
+
+    return None
+
+
+def _extract_name_from_input(player_input: str) -> str | None:
+    """Extract a name if the player input looks like just a name.
+
+    Args:
+        player_input: The player's message.
+
+    Returns:
+        The name if input looks like a single name, else None.
+    """
+    # Clean the input
+    cleaned = player_input.strip()
+
+    # If it's a single capitalized word that looks like a name
+    if re.match(r'^[A-Z][a-z]+$', cleaned):
+        # Filter out common words (compare lowercase)
+        lower = cleaned.lower()
+        if lower not in (
+            "yes", "no", "sure", "okay", "done", "ready", "start", "begin",
+            "male", "female", "human", "elf", "dwarf", "tall", "short",
+            "ok", "yep", "yeah", "yup", "nope", "go", "confirm",
+        ):
+            return cleaned
+
+    # Handle "My name is X" or "Call me X" or "Name: X"
+    patterns = [
+        r"(?:my name is|call me|name:?)\s+([A-Z][a-z]+)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, cleaned, re.IGNORECASE)
+        if match:
+            name = match.group(1)
+            # Capitalize first letter
+            name = name[0].upper() + name[1:].lower()
+            # Double-check it's not a common word
+            if name.lower() not in (
+                "yes", "no", "sure", "okay", "done", "ready", "start", "begin",
+                "male", "female", "human", "elf", "dwarf", "tall", "short",
+                "ok", "yep", "yeah", "yup", "nope", "go", "confirm",
             ):
                 return name
 
@@ -1473,11 +1640,13 @@ def _validate_ai_attributes(
 
 def _ai_character_creation(
     schema: SettingSchema,
+    session_id: int | None = None,
 ) -> CharacterCreationState:
     """Run AI-assisted character creation.
 
     Args:
         schema: Setting schema.
+        session_id: Optional session ID for logging.
 
     Returns:
         CharacterCreationState with all fields populated.
@@ -1486,11 +1655,12 @@ def _ai_character_creation(
         typer.Exit: If creation is cancelled.
     """
     import asyncio
-    return asyncio.run(_ai_character_creation_async(schema))
+    return asyncio.run(_ai_character_creation_async(schema, session_id))
 
 
 async def _ai_character_creation_async(
     schema: SettingSchema,
+    session_id: int | None = None,
 ) -> CharacterCreationState:
     """Async implementation of AI-assisted character creation.
 
@@ -1499,6 +1669,7 @@ async def _ai_character_creation_async(
 
     Args:
         schema: Setting schema.
+        session_id: Optional session ID for logging.
 
     Returns:
         CharacterCreationState with all fields populated.
@@ -1511,6 +1682,9 @@ async def _ai_character_creation_async(
     except ImportError:
         display_error("LLM providers not available. Use standard creation instead.")
         raise typer.Exit(1)
+
+    # Set audit context for logging
+    set_audit_context(session_id=session_id, call_type="character_creation")
 
     provider = get_cheap_provider()
 
@@ -1561,35 +1735,14 @@ When they provide information, output field_updates JSON to record it."""
             display_info("Character creation cancelled.")
             raise typer.Exit(0)
 
-        # Check for game-start intent
-        if _detect_game_start_intent(player_input):
-            # Try to extract name from history if missing
-            if not state.name:
-                extracted_name = _extract_name_from_history(state.conversation_history)
-                if extracted_name:
-                    state.name = extracted_name
-
-            if state.is_complete():
-                # All fields filled - show summary and confirm
-                _display_state_summary(state)
-
-                confirm = (
-                    console.input("\n[bold cyan]Create this character? (y/n): [/bold cyan]")
-                    .strip()
-                    .lower()
-                )
-                if confirm in ("y", "yes"):
-                    return state
-                else:
-                    console.print("[dim]Let's continue refining...[/dim]")
-                    continue
-            else:
-                # Show what's missing
-                missing = state.get_missing_groups()
-                console.print(
-                    f"[yellow]Almost there! Still need: {', '.join(missing)}[/yellow]"
-                )
-                continue
+        # Show current state on request
+        if player_input.lower() in ("status", "show", "state", "progress"):
+            console.print("\n[bold cyan]Current Character State:[/bold cyan]")
+            _display_state_summary(state)
+            missing = state.get_missing_groups()
+            if missing:
+                console.print(f"\n[yellow]Still need: {', '.join(missing)}[/yellow]")
+            continue
 
         state.conversation_history.append(f"Player: {player_input}")
 
@@ -1625,6 +1778,18 @@ When they provide information, output field_updates JSON to record it."""
 
                 _apply_field_updates(state, field_updates)
 
+                # Show what was captured
+                captured = ", ".join(f"{k}" for k in field_updates.keys())
+                console.print(f"[dim green]Saved: {captured}[/dim green]")
+
+            # Fallback: Try to extract name from player input if not in state
+            # This handles cases where AI doesn't output JSON but player gave a name
+            if not state.name:
+                extracted_name = _extract_name_from_input(player_input)
+                if extracted_name:
+                    state.name = extracted_name
+                    console.print(f"[dim green]Saved: name ({extracted_name})[/dim green]")
+
             # Also check for old-style suggested_attributes (backward compatibility)
             suggested = _parse_attribute_suggestion(ai_response)
             if suggested and not state.attributes:
@@ -1639,23 +1804,22 @@ When they provide information, output field_updates JSON to record it."""
                 if "backstory" in hidden:
                     state.hidden_backstory = hidden["backstory"]
 
-            # Display AI response (stripped of JSON)
-            display_ai_message(_strip_json_blocks(ai_response))
-
-            # Check if state is now complete
-            if state.is_complete():
-                console.print("\n[bold green]All fields complete![/bold green]")
-                _display_state_summary(state)
-
-                confirm = (
-                    console.input("\n[bold cyan]Create this character? (y/n): [/bold cyan]")
-                    .strip()
-                    .lower()
-                )
-                if confirm in ("y", "yes"):
+            # Check if AI signals ready to play
+            if _parse_ready_to_play(ai_response):
+                if state.is_complete():
+                    # AI confirmed player is ready and all fields filled
+                    display_ai_message(_strip_json_blocks(ai_response))
+                    console.print("\n[bold green]Character complete![/bold green]")
                     return state
                 else:
-                    console.print("[dim]Let's continue refining...[/dim]")
+                    # AI thinks we're ready but fields are missing - show what's needed
+                    missing = state.get_missing_groups()
+                    console.print(
+                        f"[yellow]Almost there! Still need: {', '.join(missing)}[/yellow]"
+                    )
+
+            # Display AI response (stripped of JSON)
+            display_ai_message(_strip_json_blocks(ai_response))
 
         except Exception as e:
             display_error(f"AI error: {e}")
@@ -1775,7 +1939,7 @@ def create(
 
         if ai_assisted:
             # AI-assisted character creation - returns full state
-            creation_state = _ai_character_creation(schema)
+            creation_state = _ai_character_creation(schema, session_id=game_session.id)
             name = creation_state.name
             attributes = creation_state.attributes
             background = creation_state.background
@@ -1837,13 +2001,14 @@ def create(
                     character_name=name,
                     character_background=background or "",
                     setting_name=game_session.setting,
+                    session_id=game_session.id,
                 ))
                 if world_data:
                     _create_world_from_extraction(db, game_session, entity, world_data)
 
                 # Infer gameplay-relevant fields (skills, preferences, modifiers)
                 console.print("[dim]Inferring skills and preferences...[/dim]")
-                inference = asyncio.run(_infer_gameplay_fields(creation_state))
+                inference = asyncio.run(_infer_gameplay_fields(creation_state, session_id=game_session.id))
                 if inference:
                     _create_inferred_records(db, game_session, entity, inference)
 

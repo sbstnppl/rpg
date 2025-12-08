@@ -17,6 +17,7 @@ from src.agents.tools.executor import GMToolExecutor
 from src.database.models.session import GameSession
 from src.llm.factory import get_gm_provider
 from src.llm.message_types import Message
+from src.llm.audit_logger import set_audit_context
 
 
 # Template path
@@ -86,6 +87,15 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
     Returns:
         Partial state update.
     """
+    # Set audit context for logging
+    session_id = state.get("session_id")
+    turn_number = state.get("turn_number")
+    set_audit_context(
+        session_id=session_id,
+        turn_number=turn_number,
+        call_type="game_master",
+    )
+
     # Load and format template
     template = _load_template()
     prompt = template.format(

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Debug
     debug: bool = False
     log_llm_calls: bool = False
+    llm_log_dir: str = "logs/llm"
 
 
 @lru_cache

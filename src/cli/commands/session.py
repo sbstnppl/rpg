@@ -4,8 +4,6 @@ from typing import Optional
 
 import typer
 from rich.console import Console
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
 
 from src.cli.display import (
     display_error,
@@ -13,38 +11,12 @@ from src.cli.display import (
     display_session_list,
     display_success,
 )
-from src.database.models.base import Base
+from src.database.connection import get_db_session
 from src.database.models.session import GameSession
 from src.database.models.world import TimeState
 
 app = typer.Typer(help="Manage game sessions")
 console = Console()
-
-
-def get_db_session() -> Session:
-    """Get a database session.
-
-    Returns:
-        SQLAlchemy session.
-    """
-    # TODO: Use proper connection management
-    import os
-    from sqlalchemy import event
-
-    database_url = os.environ.get("DATABASE_URL", "sqlite:///rpg_game.db")
-    engine = create_engine(database_url)
-
-    # Enable foreign key constraints for SQLite
-    if database_url.startswith("sqlite"):
-        @event.listens_for(engine, "connect")
-        def set_sqlite_pragma(dbapi_connection, connection_record):
-            cursor = dbapi_connection.cursor()
-            cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.close()
-
-    Base.metadata.create_all(bind=engine)
-    SessionLocal = sessionmaker(bind=engine)
-    return SessionLocal()
 
 
 @app.command()
@@ -53,44 +25,39 @@ def start(
     setting: str = typer.Option("fantasy", "--setting", "-s", help="Game setting"),
 ) -> None:
     """Start a new game session."""
-    db = get_db_session()
-
     try:
-        # Create game session
-        session = GameSession(
-            session_name=name,
-            setting=setting,
-            status="active",
-            total_turns=0,
-            llm_provider="anthropic",
-            gm_model="claude-sonnet-4-20250514",
-        )
-        db.add(session)
-        db.flush()
+        with get_db_session() as db:
+            # Create game session
+            session = GameSession(
+                session_name=name,
+                setting=setting,
+                status="active",
+                total_turns=0,
+                llm_provider="anthropic",
+                gm_model="claude-sonnet-4-20250514",
+            )
+            db.add(session)
+            db.flush()
 
-        # Create initial time state
-        time_state = TimeState(
-            session_id=session.id,
-            current_day=1,
-            current_time="09:00",
-            day_of_week="Monday",
-            season="Spring",
-            weather="Clear",
-            temperature="Mild",
-        )
-        db.add(time_state)
-        db.commit()
+            # Create initial time state
+            time_state = TimeState(
+                session_id=session.id,
+                current_day=1,
+                current_time="09:00",
+                day_of_week="Monday",
+                season="Spring",
+                weather="Clear",
+                temperature="Mild",
+            )
+            db.add(time_state)
 
-        display_success(f"Created session '{name}' (ID: {session.id})")
-        display_info(f"Setting: {setting}")
-        display_info("Use 'rpg game play' to start playing!")
+            display_success(f"Created session '{name}' (ID: {session.id})")
+            display_info(f"Setting: {setting}")
+            display_info("Use 'rpg game play' to start playing!")
 
     except Exception as e:
-        db.rollback()
         display_error(f"Failed to create session: {e}")
         raise typer.Exit(1)
-    finally:
-        db.close()
 
 
 @app.command("list")
@@ -98,9 +65,7 @@ def list_sessions(
     status: Optional[str] = typer.Option(None, "--status", help="Filter by status"),
 ) -> None:
     """List all game sessions."""
-    db = get_db_session()
-
-    try:
+    with get_db_session() as db:
         query = db.query(GameSession)
         if status:
             query = query.filter(GameSession.status == status)
@@ -120,18 +85,13 @@ def list_sessions(
 
         display_session_list(session_dicts)
 
-    finally:
-        db.close()
-
 
 @app.command()
 def load(
     session_id: int = typer.Argument(..., help="Session ID to load"),
 ) -> None:
     """Load and display session info."""
-    db = get_db_session()
-
-    try:
+    with get_db_session() as db:
         session = db.query(GameSession).filter(GameSession.id == session_id).first()
 
         if not session:
@@ -146,9 +106,6 @@ def load(
         console.print(f"[bold]Turns:[/bold] {session.total_turns}")
         console.print()
 
-    finally:
-        db.close()
-
 
 @app.command()
 def delete(
@@ -156,34 +113,31 @@ def delete(
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ) -> None:
     """Delete a game session."""
-    db = get_db_session()
-
     try:
-        session = db.query(GameSession).filter(GameSession.id == session_id).first()
+        with get_db_session() as db:
+            session = db.query(GameSession).filter(GameSession.id == session_id).first()
 
-        if not session:
-            display_error(f"Session {session_id} not found")
-            raise typer.Exit(1)
+            if not session:
+                display_error(f"Session {session_id} not found")
+                raise typer.Exit(1)
 
-        if not force:
-            confirm = typer.confirm(
-                f"Delete session '{session.session_name}' (ID: {session_id})?"
-            )
-            if not confirm:
-                display_info("Cancelled")
-                return
+            if not force:
+                confirm = typer.confirm(
+                    f"Delete session '{session.session_name}' (ID: {session_id})?"
+                )
+                if not confirm:
+                    display_info("Cancelled")
+                    return
 
-        db.delete(session)
-        db.commit()
+            db.delete(session)
 
-        display_success(f"Deleted session {session_id}")
+            display_success(f"Deleted session {session_id}")
 
+    except typer.Exit:
+        raise
     except Exception as e:
-        db.rollback()
         display_error(f"Failed to delete session: {e}")
         raise typer.Exit(1)
-    finally:
-        db.close()
 
 
 @app.command("continue")
@@ -191,9 +145,7 @@ def continue_session(
     session_id: Optional[int] = typer.Argument(None, help="Session ID to continue"),
 ) -> None:
     """Continue the most recent or specified session."""
-    db = get_db_session()
-
-    try:
+    with get_db_session() as db:
         if session_id:
             session = db.query(GameSession).filter(GameSession.id == session_id).first()
         else:
@@ -213,6 +165,3 @@ def continue_session(
         display_success(f"Continuing session: {session.session_name} (ID: {session.id})")
         display_info(f"Turn: {session.total_turns}")
         display_info("Use 'rpg game play' to start playing!")
-
-    finally:
-        db.close()

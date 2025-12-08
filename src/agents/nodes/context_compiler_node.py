@@ -41,6 +41,7 @@ async def context_compiler_node(state: GameState) -> dict[str, Any]:
         game_session=game_session,
         player_id=state["player_id"],
         player_location=state["player_location"],
+        turn_number=state.get("turn_number", 1),
     )
 
 
@@ -75,6 +76,7 @@ def create_context_compiler_node(
             game_session=game_session,
             player_id=state["player_id"],
             player_location=state["player_location"],
+            turn_number=state.get("turn_number", 1),
         )
 
     return node
@@ -85,6 +87,7 @@ async def _compile_context(
     game_session: GameSession,
     player_id: int,
     player_location: str,
+    turn_number: int = 1,
 ) -> dict[str, Any]:
     """Internal helper to compile context.
 
@@ -93,6 +96,7 @@ async def _compile_context(
         game_session: Current game session.
         player_id: Player entity ID.
         player_location: Current location key.
+        turn_number: Current turn number (1 = first turn).
 
     Returns:
         Partial state update.
@@ -102,6 +106,7 @@ async def _compile_context(
     scene_context = compiler.compile_scene(
         player_id=player_id,
         location_key=player_location,
+        turn_number=turn_number,
         include_secrets=True,
     )
 

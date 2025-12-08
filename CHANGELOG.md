@@ -8,6 +8,121 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **World map navigation system (Phases 1-7)** - Complete zone-based terrain for open world exploration
+  - `src/database/models/navigation.py` - 8 new models for navigation system:
+    - `TerrainZone` - explorable terrain segments (forests, roads, lakes, etc.)
+    - `ZoneConnection` - adjacencies between zones with direction, passability
+    - `LocationZonePlacement` - links locations to zones with visibility settings
+    - `TransportMode` - travel methods with terrain cost multipliers
+    - `ZoneDiscovery` / `LocationDiscovery` - fog of war (session-scoped)
+    - `MapItem` - physical maps that reveal locations when viewed
+    - `DigitalMapAccess` - modern/sci-fi digital map services
+  - New enums: `TerrainType` (14 types), `ConnectionType` (8 types), `TransportType` (9 types), `MapType`, `VisibilityRange`, `EncounterFrequency`, `DiscoveryMethod`, `PlacementType`
+  - `src/managers/zone_manager.py` - terrain zone operations:
+    - Zone CRUD: `get_zone()`, `create_zone()`, `get_all_zones()`
+    - Connections: `connect_zones()`, `get_adjacent_zones()`, `get_adjacent_zones_with_directions()`
+    - Location placement: `place_location_in_zone()`, `get_zone_locations()`, `get_location_zone()`
+    - Terrain costs: `get_terrain_cost()` with transport mode multipliers
+    - Accessibility: `check_accessibility()` with skill requirements
+    - Visibility: `get_visible_from_zone()`, `get_visible_locations_from_zone()`
+    - Transport: `get_transport_mode()`, `get_available_transport_modes()`
+  - `src/managers/pathfinding_manager.py` - A* pathfinding algorithm:
+    - `find_optimal_path()` with weighted A* considering terrain costs
+    - `find_path_via()` for routing through waypoints
+    - `get_route_summary()` for terrain breakdown and hazard identification
+    - Support for route preferences (avoid terrain types, prefer roads)
+    - Transport mode cost multipliers (mounted faster on roads, impassable in forests)
+    - Bidirectional and one-way connection handling
+  - `src/managers/travel_manager.py` - journey simulation:
+    - `start_journey()` initializes route with pathfinding
+    - `advance_travel()` moves through zones with encounter rolls
+    - `interrupt_travel()` / `resume_journey()` for mid-journey stops
+    - `detour_to_zone()` for exploring adjacent zones off-path
+    - Skill check detection for hazardous terrain
+    - `JourneyState` dataclass for tracking progress
+  - `src/managers/discovery_manager.py` - fog of war system:
+    - `discover_zone()` / `discover_location()` with method tracking
+    - `view_map()` for batch discovery from map items
+    - `auto_discover_surroundings()` on zone entry
+    - `check_digital_access()` for modern/sci-fi settings
+    - `get_known_zones()` / `get_known_locations()` with filtering
+    - Source tracking (NPC, map, visible from zone)
+  - `src/managers/map_manager.py` - map item operations:
+    - `create_map_item()` with zone/location reveal lists
+    - `get_map_item()`, `is_map_item()`, `get_all_maps()`
+    - `get_map_zones()`, `get_map_locations()` for querying contents
+    - `setup_digital_access()`, `setup_digital_access_for_setting()`
+    - `toggle_digital_access()` for enabling/disabling services
+    - Setting-based digital map configs (contemporary, scifi, cyberpunk, fantasy)
+  - `src/managers/context_compiler.py` - navigation context for GM:
+    - `_get_navigation_context()` method for current zone and adjacencies
+    - Filters to only show discovered zones/locations
+    - Terrain hazard warnings and skill requirements
+    - `SceneContext.navigation_context` field added
+  - `src/agents/tools/gm_tools.py` - 6 new navigation tools:
+    - `check_route` - pathfinding with travel time estimates
+    - `start_travel` - begin simulated journeys
+    - `move_to_zone` - immediate adjacent zone movement
+    - `check_terrain` - terrain accessibility checks
+    - `discover_zone` / `discover_location` - fog of war updates
+  - `src/agents/tools/executor.py` - navigation tool handlers:
+    - Route checking with discovery validation
+    - Travel initiation with TravelManager integration
+    - Zone movement with auto-discovery
+    - Terrain accessibility with skill requirements
+  - `data/templates/game_master.md` - navigation rules added:
+    - Guidelines for known location references
+    - Travel tool usage instructions
+    - Time estimates for different journey lengths
+  - `src/cli/commands/world.py` - new zone CLI commands:
+    - `world zones` - list terrain zones (discovered or all)
+    - `world create-zone` - create new terrain zone with terrain type and cost
+    - `world connect-zones` - connect zones with direction and crossing time
+    - `world place-location` - place location in a zone
+    - `world zone-info` - show detailed zone information with adjacencies
+    - `world discovered` - show all discovered zones and locations
+  - Alembic migration `005_add_navigation_system.py` with seeded transport modes
+  - 162 new tests (49 model, 32 zone, 20 pathfinding, 19 travel, 20 discovery, 14 map, 8 context)
+
+- **LLM audit logging to filesystem** - Log all LLM prompts and responses for debugging
+  - `src/llm/audit_logger.py` - Core logging infrastructure
+    - `LLMAuditContext` dataclass: session_id, turn_number, call_type
+    - `LLMAuditEntry` dataclass: full request/response data
+    - `LLMAuditLogger` class: async file writing, markdown formatting
+    - `set_audit_context()` / `get_audit_context()` context variable functions
+    - `get_audit_logger()` factory with configurable log directory
+  - `src/llm/logging_provider.py` - Wrapper provider that logs all calls
+    - `LoggingProvider` wraps any `LLMProvider` and delegates + logs
+    - Captures timing, all messages, tool calls, responses
+    - Logs to markdown files for human readability
+  - Log file structure: `logs/llm/session_{id}/turn_XXX_timestamp_calltype.md`
+  - Orphan calls (no session): `logs/llm/orphan/timestamp_calltype.md`
+  - Enable with `LOG_LLM_CALLS=true` in environment
+  - `llm_log_dir` config setting (default: `logs/llm`)
+  - 35 new tests for audit logging functionality
+
+### Fixed
+- **GM no longer re-introduces character every turn** - Added turn context to scene context
+  - `ContextCompiler._get_turn_context()` provides turn number and recent history
+  - First turn explicitly marked as "FIRST TURN. Introduce the player character."
+  - Continuation turns marked as "CONTINUATION. Do NOT re-introduce the character."
+  - Recent 3 turns of history included with smart truncation:
+    - Most recent turn: up to 1000 chars (captures full dialogue/NPC names)
+    - Older turns: up to 400 chars (for context efficiency)
+  - Updated GM template with clear Turn Handling section
+  - Context compiler node now passes `turn_number` from state
+
+### Changed
+- **Normalized need semantics** - All needs now follow consistent 0=bad, 100=good pattern
+  - Renamed `fatigue` → `energy` (0=exhausted, 100=energized)
+  - Renamed `pain` → `wellness` (0=agony, 100=pain-free)
+  - Inverted `intimacy` meaning (0=desperate, 100=content)
+  - Updated NeedsManager decay rates, satisfaction logic, and effect thresholds
+  - Updated display.py with consistent color coding (low=red, high=green)
+  - Updated InjuryManager to sync pain→wellness (wellness = 100 - total_pain)
+  - Alembic migration `004_normalize_need_semantics.py` for column renames and value inversion
+
+### Added
 - **Structured AI character creation with field tracking** - Complete redesign of character creation
   - `CharacterCreationState` dataclass tracks all required fields across 5 groups:
     - Name, Attributes, Appearance, Background, Personality

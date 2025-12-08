@@ -24,8 +24,8 @@ Be thorough - every named person, place, or relationship becomes part of the per
 Extract complete physical description of the player character:
 
 ```json
-{
-  "player_appearance": {
+{{
+  "player_appearance": {{
     "age": 25,
     "age_apparent": "mid-twenties",
     "gender": "male",
@@ -38,8 +38,8 @@ Extract complete physical description of the player character:
     "species": "human",
     "distinguishing_features": "scar above left eyebrow",
     "voice_description": "deep and calm"
-  }
-}
+  }}
+}}
 ```
 
 Use null for any field not mentioned. Infer reasonable values if clearly implied.
@@ -62,9 +62,9 @@ For each named entity:
 
 Example:
 ```json
-{
+{{
   "shadow_entities": [
-    {
+    {{
       "entity_key": "grandmother_elara",
       "display_name": "Grandmother Elara",
       "entity_type": "npc",
@@ -74,8 +74,8 @@ Example:
       "trust": 95,
       "liking": 90,
       "respect": 85
-    },
-    {
+    }},
+    {{
       "entity_key": "boss_janet",
       "display_name": "Janet",
       "entity_type": "npc",
@@ -85,9 +85,9 @@ Example:
       "trust": 50,
       "liking": 40,
       "respect": 60
-    }
+    }}
   ]
-}
+}}
 ```
 
 ### 3. Locations
@@ -103,26 +103,26 @@ Extract all locations mentioned in the backstory:
 
 Example:
 ```json
-{
+{{
   "locations": [
-    {
+    {{
       "location_key": "players_cottage",
       "display_name": "The Cottage",
       "location_type": "home",
       "description": "Small cottage on the edge of town where player lives with grandmother",
       "is_player_home": true,
       "is_player_workplace": false
-    },
-    {
+    }},
+    {{
       "location_key": "blackstone_smithy",
       "display_name": "Blackstone Smithy",
       "location_type": "workplace",
       "description": "The town's blacksmith shop where player apprentices",
       "is_player_home": false,
       "is_player_workplace": true
-    }
+    }}
   ]
-}
+}}
 ```
 
 ### 4. Starting Context
@@ -130,14 +130,14 @@ Example:
 Determine the initial game state:
 
 ```json
-{
-  "starting_context": {
+{{
+  "starting_context": {{
     "starting_location_key": "players_cottage",
     "time_of_day": "morning",
     "initial_activity": "just waking up",
     "opening_hook": "A messenger arrives with urgent news"
-  }
-}
+  }}
+}}
 ```
 
 ### 5. World Scope Assessment
@@ -145,12 +145,12 @@ Determine the initial game state:
 Analyze how embedded the player is in their community:
 
 ```json
-{
-  "world_scope": {
+{{
+  "world_scope": {{
     "scope_level": "embedded",
     "scope_notes": "Player has family, workplace, and community ties"
-  }
-}
+  }}
+}}
 ```
 
 scope_level options:
@@ -166,13 +166,13 @@ scope_level options:
 Return ONLY valid JSON combining all sections:
 
 ```json
-{
-  "player_appearance": { ... },
+{{
+  "player_appearance": {{ ... }},
   "shadow_entities": [ ... ],
   "locations": [ ... ],
-  "starting_context": { ... },
-  "world_scope": { ... }
-}
+  "starting_context": {{ ... }},
+  "world_scope": {{ ... }}
+}}
 ```
 
 Do not include explanation or markdown formatting around the JSON.

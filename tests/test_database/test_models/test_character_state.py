@@ -57,7 +57,7 @@ class TestCharacterNeeds:
         db_session.flush()
 
         assert needs.hunger == 50  # Satisfied
-        assert needs.fatigue == 20  # Rested
+        assert needs.energy == 80  # Energized
 
     def test_needs_tier2_comfort_defaults(
         self, db_session: Session, game_session: GameSession
@@ -73,7 +73,7 @@ class TestCharacterNeeds:
 
         assert needs.hygiene == 80  # Clean
         assert needs.comfort == 70  # Comfortable
-        assert needs.pain == 0  # No pain
+        assert needs.wellness == 100  # Pain-free
 
     def test_needs_tier3_psychological_defaults(
         self, db_session: Session, game_session: GameSession
@@ -90,7 +90,7 @@ class TestCharacterNeeds:
         assert needs.social_connection == 60
         assert needs.morale == 70
         assert needs.sense_of_purpose == 50
-        assert needs.intimacy == 30
+        assert needs.intimacy == 70
 
     def test_needs_custom_values(
         self, db_session: Session, game_session: GameSession
@@ -102,14 +102,14 @@ class TestCharacterNeeds:
             game_session,
             entity,
             hunger=20,  # Hungry
-            fatigue=80,  # Very tired
+            energy=20,  # Very tired
             morale=30,  # Low morale
         )
 
         db_session.refresh(needs)
 
         assert needs.hunger == 20
-        assert needs.fatigue == 80
+        assert needs.energy == 20
         assert needs.morale == 30
 
     def test_needs_timestamps(
@@ -173,14 +173,14 @@ class TestCharacterNeeds:
             game_session,
             entity,
             hunger=40,
-            fatigue=60,
+            energy=60,
             morale=75,
         )
 
         repr_str = repr(needs)
         assert "CharacterNeeds" in repr_str
         assert "H:40" in repr_str
-        assert "F:60" in repr_str
+        assert "E:60" in repr_str
         assert "M:75" in repr_str
 
 

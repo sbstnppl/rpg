@@ -14,6 +14,7 @@ from src.agents.schemas.extraction import ExtractionResult
 from src.database.models.session import GameSession
 from src.llm.factory import get_extraction_provider
 from src.llm.message_types import Message
+from src.llm.audit_logger import set_audit_context
 
 
 # Template path
@@ -81,6 +82,15 @@ async def _extract_entities(state: GameState) -> dict[str, Any]:
     Returns:
         Partial state update with extraction results.
     """
+    # Set audit context for logging
+    session_id = state.get("session_id")
+    turn_number = state.get("turn_number")
+    set_audit_context(
+        session_id=session_id,
+        turn_number=turn_number,
+        call_type="entity_extractor",
+    )
+
     gm_response = state.get("gm_response")
 
     # Skip extraction if no GM response

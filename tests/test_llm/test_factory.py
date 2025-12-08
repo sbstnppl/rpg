@@ -18,6 +18,7 @@ class TestGetProvider:
             mock_settings.llm_provider = "anthropic"
             mock_settings.anthropic_api_key = "test-key"
             mock_settings.gm_model = "claude-sonnet-4-20250514"
+            mock_settings.log_llm_calls = False
 
             provider = get_provider("anthropic")
             assert isinstance(provider, AnthropicProvider)
@@ -30,6 +31,7 @@ class TestGetProvider:
             mock_settings.openai_api_key = "test-key"
             mock_settings.openai_base_url = None
             mock_settings.gm_model = "gpt-4o"
+            mock_settings.log_llm_calls = False
 
             provider = get_provider("openai")
             assert isinstance(provider, OpenAIProvider)
@@ -41,6 +43,7 @@ class TestGetProvider:
             mock_settings.llm_provider = "anthropic"
             mock_settings.anthropic_api_key = "test-key"
             mock_settings.gm_model = "claude-sonnet-4-20250514"
+            mock_settings.log_llm_calls = False
 
             provider = get_provider()
             assert isinstance(provider, AnthropicProvider)
@@ -50,6 +53,7 @@ class TestGetProvider:
         with patch("src.llm.factory.settings") as mock_settings:
             mock_settings.anthropic_api_key = "test-key"
             mock_settings.gm_model = "claude-sonnet-4-20250514"
+            mock_settings.log_llm_calls = False
 
             provider = get_provider("anthropic", model="claude-3-haiku-20240307")
             assert provider.default_model == "claude-3-haiku-20240307"
@@ -60,6 +64,7 @@ class TestGetProvider:
             mock_settings.openai_api_key = "deepseek-key"
             mock_settings.openai_base_url = None
             mock_settings.gm_model = "gpt-4o"
+            mock_settings.log_llm_calls = False
 
             provider = get_provider(
                 "openai",
@@ -85,6 +90,7 @@ class TestConvenienceFunctions:
             mock_settings.llm_provider = "anthropic"
             mock_settings.anthropic_api_key = "test-key"
             mock_settings.gm_model = "claude-sonnet-4-20250514"
+            mock_settings.log_llm_calls = False
 
             provider = get_gm_provider()
             assert provider.default_model == "claude-sonnet-4-20250514"
@@ -95,6 +101,7 @@ class TestConvenienceFunctions:
             mock_settings.llm_provider = "anthropic"
             mock_settings.anthropic_api_key = "test-key"
             mock_settings.cheap_model = "claude-haiku-3"
+            mock_settings.log_llm_calls = False
 
             provider = get_cheap_provider()
             assert provider.default_model == "claude-haiku-3"
@@ -109,6 +116,7 @@ class TestProviderCaching:
             mock_settings.llm_provider = "anthropic"
             mock_settings.anthropic_api_key = "test-key"
             mock_settings.gm_model = "claude-sonnet-4-20250514"
+            mock_settings.log_llm_calls = False
 
             provider1 = get_provider()
             provider2 = get_provider()

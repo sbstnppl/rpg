@@ -5,8 +5,11 @@ from src.database.models.enums import (
     AlcoholTolerance,
     AppointmentStatus,
     BodyPart,
+    ConnectionType,
     DayOfWeek,
+    DiscoveryMethod,
     DriveLevel,
+    EncounterFrequency,
     EntityType,
     FactCategory,
     GriefStage,
@@ -15,13 +18,18 @@ from src.database.models.enums import (
     IntimacyStyle,
     ItemCondition,
     ItemType,
+    MapType,
     MentalConditionType,
     ModifierSource,
+    PlacementType,
     QuestStatus,
     RelationshipDimension,
     SocialTendency,
     StorageLocationType,
     TaskCategory,
+    TerrainType,
+    TransportType,
+    VisibilityRange,
     VitalStatus,
 )
 from src.database.models.entities import (
@@ -47,6 +55,18 @@ from src.database.models.character_preferences import (
 from src.database.models.injuries import ActivityRestriction, BodyInjury
 from src.database.models.mental_state import GriefCondition, MentalCondition
 from src.database.models.vital_state import EntityVitalState
+
+# Navigation models for world map system
+from src.database.models.navigation import (
+    DigitalMapAccess,
+    LocationDiscovery,
+    LocationZonePlacement,
+    MapItem,
+    TerrainZone,
+    TransportMode,
+    ZoneConnection,
+    ZoneDiscovery,
+)
 
 __all__ = [
     # Base
@@ -118,4 +138,22 @@ __all__ = [
     # Mental state (new)
     "MentalCondition",
     "GriefCondition",
+    # Navigation enums (new)
+    "TerrainType",
+    "ConnectionType",
+    "TransportType",
+    "MapType",
+    "VisibilityRange",
+    "EncounterFrequency",
+    "DiscoveryMethod",
+    "PlacementType",
+    # Navigation models (new)
+    "TerrainZone",
+    "ZoneConnection",
+    "LocationZonePlacement",
+    "TransportMode",
+    "ZoneDiscovery",
+    "LocationDiscovery",
+    "MapItem",
+    "DigitalMapAccess",
 ]
