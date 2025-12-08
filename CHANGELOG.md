@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Game management commands** - Complete game lifecycle from `rpg game`
+  - `rpg game list` - List all games with player character names
+  - `rpg game delete` - Delete a game with confirmation
+  - `rpg game start` - Unified wizard (already added)
+  - `rpg game play` - Continue/start game loop (already existed)
+
 - **Unified game start wizard** (`rpg game start`) - One-command setup for new games
   - Combines session creation, character creation, and game start into seamless wizard
   - Interactive setting selection menu (fantasy, contemporary, scifi)
@@ -22,6 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New parsing function: `_parse_point_buy_switch()` for attribute choice handling
   - Updated `character_creator.md` template with attribute choice instructions
 
+### Deprecated
+- **Session commands** - All `rpg session` commands now show deprecation warnings
+  - `rpg session start` → use `rpg game start`
+  - `rpg session list` → use `rpg game list`
+  - `rpg session load` → use `rpg game list`
+  - `rpg session delete` → use `rpg game delete`
+  - `rpg session continue` → use `rpg game play`
+- **Character create** - `rpg character create` → use `rpg game start`
+
+### Added (continued)
 - **World map navigation system (Phases 1-7)** - Complete zone-based terrain for open world exploration
   - `src/database/models/navigation.py` - 8 new models for navigation system:
     - `TerrainZone` - explorable terrain segments (forests, roads, lakes, etc.)

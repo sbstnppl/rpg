@@ -19,14 +19,19 @@ app = typer.Typer(help="Manage game sessions")
 console = Console()
 
 
+def _deprecation_warning(new_command: str) -> None:
+    """Display deprecation warning for session commands."""
+    console.print(f"[yellow]⚠ Deprecated: Use '{new_command}' instead[/yellow]")
+    console.print()
+
+
 @app.command()
 def start(
     name: str = typer.Option("New Adventure", "--name", "-n", help="Session name"),
     setting: str = typer.Option("fantasy", "--setting", "-s", help="Game setting"),
 ) -> None:
     """Start a new game session."""
-    display_info("Tip: Use 'rpg game start' for a guided setup wizard!")
-    console.print()
+    _deprecation_warning("rpg game start")
     try:
         with get_db_session() as db:
             # Create game session
@@ -67,6 +72,7 @@ def list_sessions(
     status: Optional[str] = typer.Option(None, "--status", help="Filter by status"),
 ) -> None:
     """List all game sessions."""
+    _deprecation_warning("rpg game list")
     with get_db_session() as db:
         query = db.query(GameSession)
         if status:
@@ -93,6 +99,7 @@ def load(
     session_id: int = typer.Argument(..., help="Session ID to load"),
 ) -> None:
     """Load and display session info."""
+    _deprecation_warning("rpg game list")
     with get_db_session() as db:
         session = db.query(GameSession).filter(GameSession.id == session_id).first()
 
@@ -115,6 +122,7 @@ def delete(
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
 ) -> None:
     """Delete a game session."""
+    _deprecation_warning("rpg game delete")
     try:
         with get_db_session() as db:
             session = db.query(GameSession).filter(GameSession.id == session_id).first()
@@ -147,6 +155,7 @@ def continue_session(
     session_id: Optional[int] = typer.Argument(None, help="Session ID to continue"),
 ) -> None:
     """Continue the most recent or specified session."""
+    _deprecation_warning("rpg game play")
     with get_db_session() as db:
         if session_id:
             session = db.query(GameSession).filter(GameSession.id == session_id).first()

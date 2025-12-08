@@ -252,6 +252,82 @@ async def _start_wizard_async(
         await _game_loop(db, game_session, entity)
 
 
+@app.command("list")
+def list_games(
+    status: Optional[str] = typer.Option(None, "--status", help="Filter by status (active, paused)"),
+) -> None:
+    """List all games."""
+    from rich.table import Table
+
+    with get_db_session() as db:
+        query = db.query(GameSession)
+        if status:
+            query = query.filter(GameSession.status == status)
+
+        sessions = query.order_by(GameSession.id.desc()).all()
+
+        if not sessions:
+            console.print("[dim]No games found.[/dim]")
+            return
+
+        table = Table(title="Games")
+        table.add_column("ID", style="cyan")
+        table.add_column("Name", style="white")
+        table.add_column("Setting", style="green")
+        table.add_column("Player", style="magenta")
+        table.add_column("Status", style="yellow")
+        table.add_column("Turns", justify="right")
+
+        for s in sessions:
+            # Get player name if exists
+            player = _get_player(db, s)
+            player_name = player.display_name if player else "[dim]-[/dim]"
+
+            status_style = "green" if s.status == "active" else "dim"
+            table.add_row(
+                str(s.id),
+                s.session_name,
+                s.setting,
+                player_name,
+                f"[{status_style}]{s.status}[/{status_style}]",
+                str(s.total_turns),
+            )
+
+        console.print(table)
+
+
+@app.command()
+def delete(
+    game_id: int = typer.Argument(..., help="Game ID to delete"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+) -> None:
+    """Delete a game and all its data."""
+    try:
+        with get_db_session() as db:
+            game_session = db.query(GameSession).filter(GameSession.id == game_id).first()
+
+            if not game_session:
+                display_error(f"Game {game_id} not found")
+                raise typer.Exit(1)
+
+            if not force:
+                confirm = typer.confirm(
+                    f"Delete game '{game_session.session_name}' (ID: {game_id})?"
+                )
+                if not confirm:
+                    display_info("Cancelled")
+                    return
+
+            db.delete(game_session)
+            display_success(f"Deleted game '{game_session.session_name}'")
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        display_error(f"Failed to delete game: {e}")
+        raise typer.Exit(1)
+
+
 @app.command()
 def play(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),

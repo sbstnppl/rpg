@@ -289,7 +289,9 @@
   - [x] Updated `character_creator.md` template
 - [x] Deferred DB commits (only after character confirmed)
 - [x] Automatic transition to game loop
-- [x] Deprecation hints on old commands
+- [x] `rpg game list` - List games with player names
+- [x] `rpg game delete` - Delete game with confirmation
+- [x] Deprecation warnings on session commands and character create
 
 ### 6.8 Rich Formatting
 - [x] Styled output for narrative (basic)

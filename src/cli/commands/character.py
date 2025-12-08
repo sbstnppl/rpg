@@ -1968,7 +1968,7 @@ def create(
 
     Use --ai for conversational AI-assisted creation, or --random for dice rolls.
     """
-    display_info("Tip: Use 'rpg game start' for a guided setup wizard!")
+    console.print("[yellow]⚠ Deprecated: Use 'rpg game start' instead[/yellow]")
     console.print()
     with get_db_session() as db:
         # Get session
