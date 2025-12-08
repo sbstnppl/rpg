@@ -1467,6 +1467,50 @@ def _parse_ready_to_play(response: str) -> bool:
     return False
 
 
+def _parse_point_buy_switch(response: str) -> bool:
+    """Parse switch_to_point_buy signal from AI response.
+
+    Looks for JSON blocks with switch_to_point_buy key set to true.
+    This signals that the player wants to manually distribute attribute points
+    instead of having the AI suggest them.
+
+    Args:
+        response: LLM response text.
+
+    Returns:
+        True if AI signals switch to point-buy, False otherwise.
+
+    Example response format:
+        {"switch_to_point_buy": true}
+    """
+    try:
+        # Look for switch_to_point_buy JSON in markdown code blocks
+        code_block_match = re.search(
+            r'```json\s*(\{[^`]*"switch_to_point_buy"[^`]*\})\s*```',
+            response,
+            re.DOTALL
+        )
+        if code_block_match:
+            json_str = _strip_json_comments(code_block_match.group(1))
+            json_str = _sanitize_json_string(json_str)
+            data = json.loads(json_str)
+            if data.get("switch_to_point_buy") is True:
+                return True
+
+        # Look for inline switch_to_point_buy JSON
+        inline_match = re.search(
+            r'\{"switch_to_point_buy":\s*(true|false)\s*\}',
+            response,
+            re.IGNORECASE
+        )
+        if inline_match:
+            return inline_match.group(1).lower() == "true"
+
+    except json.JSONDecodeError:
+        pass
+    return False
+
+
 def _apply_field_updates(state: CharacterCreationState, updates: dict) -> None:
     """Apply field updates to character creation state.
 
@@ -1517,6 +1561,7 @@ def _strip_json_blocks(text: str) -> str:
     text = re.sub(r'\{[^{}]*"field_updates"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
     text = re.sub(r'\{[^{}]*"hidden_content"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
     text = re.sub(r'\{[^{}]*"ready_to_play"[^{}]*\}', '', text)
+    text = re.sub(r'\{[^{}]*"switch_to_point_buy"[^{}]*\}', '', text)
     # Clean up extra whitespace left behind
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
@@ -1804,6 +1849,17 @@ When they provide information, output field_updates JSON to record it."""
                 if "backstory" in hidden:
                     state.hidden_backstory = hidden["backstory"]
 
+            # Check if AI signals switch to point-buy mode
+            if _parse_point_buy_switch(ai_response) and not state.attributes:
+                # Display the AI message first (explains why switching)
+                display_ai_message(_strip_json_blocks(ai_response))
+                console.print("\n[bold cyan]Entering Point-Buy Mode...[/bold cyan]")
+                state.attributes = _point_buy_interactive(schema)
+                console.print("[dim green]Saved: attributes[/dim green]")
+                console.print("[dim]Returning to character creation...[/dim]\n")
+                # Continue the conversation - AI will move to next group
+                continue
+
             # Check if AI signals ready to play
             if _parse_ready_to_play(ai_response):
                 if state.is_complete():
@@ -1912,6 +1968,8 @@ def create(
 
     Use --ai for conversational AI-assisted creation, or --random for dice rolls.
     """
+    display_info("Tip: Use 'rpg game start' for a guided setup wizard!")
+    console.print()
     with get_db_session() as db:
         # Get session
         if session_id:

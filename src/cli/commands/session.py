@@ -25,6 +25,8 @@ def start(
     setting: str = typer.Option("fantasy", "--setting", "-s", help="Game setting"),
 ) -> None:
     """Start a new game session."""
+    display_info("Tip: Use 'rpg game start' for a guided setup wizard!")
+    console.print()
     try:
         with get_db_session() as db:
             # Create game session

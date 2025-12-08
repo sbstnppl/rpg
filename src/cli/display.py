@@ -686,3 +686,88 @@ def progress_bar(description: str, total: int = 100):
     ) as progress:
         task = progress.add_task(description, total=total)
         yield progress, task
+
+
+def display_game_wizard_welcome() -> None:
+    """Display welcome banner for the game start wizard."""
+    console.print()
+    console.print(Panel(
+        "[bold cyan]Welcome to RPG Game[/bold cyan]\n\n"
+        "[dim]Let's set up your adventure![/dim]",
+        style="cyan",
+        padding=(1, 2),
+    ))
+    console.print()
+
+
+def display_setting_menu(settings: list[dict]) -> None:
+    """Display setting selection menu.
+
+    Args:
+        settings: List of dicts with 'key', 'name', 'description'.
+    """
+    console.print("[bold]Choose a setting:[/bold]\n")
+    for i, setting in enumerate(settings, 1):
+        console.print(f"  [cyan][{i}][/cyan] {setting['name']}")
+        console.print(f"      [dim]{setting['description']}[/dim]")
+    console.print()
+
+
+def prompt_setting_choice(settings: list[dict], default: str = "fantasy") -> str:
+    """Prompt user to select a setting.
+
+    Args:
+        settings: List of setting dicts with 'key', 'name', 'description'.
+        default: Default setting key if user presses Enter.
+
+    Returns:
+        Selected setting key.
+    """
+    display_setting_menu(settings)
+
+    # Find default index for display
+    default_idx = next(
+        (i for i, s in enumerate(settings, 1) if s['key'] == default),
+        1
+    )
+
+    while True:
+        choice = console.input(
+            f"[bold cyan]Your choice (1-{len(settings)}, Enter for {default.title()}): [/bold cyan]"
+        ).strip()
+
+        if not choice:
+            return default
+
+        # Try as number
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(settings):
+                return settings[idx - 1]['key']
+            console.print(f"[red]Please enter a number between 1 and {len(settings)}[/red]")
+            continue
+        except ValueError:
+            pass
+
+        # Try as name
+        choice_lower = choice.lower()
+        for setting in settings:
+            if setting['key'].lower() == choice_lower or setting['name'].lower().startswith(choice_lower):
+                return setting['key']
+
+        console.print("[red]Invalid choice. Enter a number or setting name.[/red]")
+
+
+def prompt_session_name(default: str = "New Adventure") -> str:
+    """Prompt for session/adventure name.
+
+    Args:
+        default: Default name if user presses Enter.
+
+    Returns:
+        Session name.
+    """
+    name = console.input(
+        f"[bold cyan]What would you like to call this adventure? ({default}): [/bold cyan]"
+    ).strip()
+    return name if name else default

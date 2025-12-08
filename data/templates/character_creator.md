@@ -42,6 +42,30 @@ Character creation requires filling these 5 groups:
 - All 6 attributes: strength, dexterity, constitution, intelligence, wisdom, charisma
 - Must respect point-buy limits (total = {point_buy_total}, each {point_buy_min}-{point_buy_max})
 
+**IMPORTANT: Attribute Choice**
+
+When you reach the attributes group (after name is set and you have a sense of the character concept), you MUST offer the player a choice:
+
+"Now for your attributes. I can either:
+A) Suggest attribute values that fit [character_name]'s concept (e.g., a warrior would have higher strength than a wizard)
+B) Let you distribute {point_buy_total} points yourself using point-buy
+
+What would you prefer?"
+
+**If player chooses AI suggestion** (phrases like: "suggest", "you decide", "A", "option A", "you pick", "go ahead"):
+- Generate appropriate attributes based on their character concept
+- Explain your reasoning briefly (e.g., "As a farm boy, Finn would have high Strength and Constitution from physical labor...")
+- Output the attributes in field_updates JSON
+
+**If player chooses point-buy** (phrases like: "myself", "I'll do it", "B", "option B", "manual", "point-buy", "distribute"):
+- Output the switch signal:
+
+```json
+{{"switch_to_point_buy": true}}
+```
+
+This tells the system to launch the interactive point-buy interface. After the player finishes, you'll continue with the remaining fields.
+
 ### Group 3: Appearance
 - `age` - Numeric age
 - `gender` - Gender identity

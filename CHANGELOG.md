@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Unified game start wizard** (`rpg game start`) - One-command setup for new games
+  - Combines session creation, character creation, and game start into seamless wizard
+  - Interactive setting selection menu (fantasy, contemporary, scifi)
+  - Session name prompt with sensible defaults
+  - AI-guided character creation with hybrid attribute handling:
+    - Player can choose AI-suggested attributes based on character concept
+    - Or switch to manual point-buy mid-conversation
+  - Automatic world extraction and skill inference after character creation
+  - Graceful cancellation (no DB changes until character confirmed)
+  - Deprecation hints on `rpg session start` and `rpg character create`
+  - New display helpers: `display_game_wizard_welcome()`, `prompt_setting_choice()`, `prompt_session_name()`
+  - New parsing function: `_parse_point_buy_switch()` for attribute choice handling
+  - Updated `character_creator.md` template with attribute choice instructions
+
 - **World map navigation system (Phases 1-7)** - Complete zone-based terrain for open world exploration
   - `src/database/models/navigation.py` - 8 new models for navigation system:
     - `TerrainZone` - explorable terrain segments (forests, roads, lakes, etc.)

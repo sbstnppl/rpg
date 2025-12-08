@@ -1,6 +1,8 @@
 """Game commands including the main game loop."""
 
 import asyncio
+import json
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -8,17 +10,22 @@ from rich.console import Console
 
 from src.cli.display import (
     display_error,
+    display_game_wizard_welcome,
     display_info,
     display_narrative,
+    display_starting_equipment,
     display_success,
     display_welcome,
     progress_spinner,
     prompt_input,
+    prompt_session_name,
+    prompt_setting_choice,
 )
 from src.database.connection import get_db_session
 from src.database.models.entities import Entity
 from src.database.models.enums import EntityType
 from src.database.models.session import GameSession
+from src.database.models.world import TimeState
 
 app = typer.Typer(help="Game commands")
 console = Console()
@@ -44,6 +51,205 @@ def _get_player(db, game_session: GameSession) -> Entity | None:
         )
         .first()
     )
+
+
+def _get_available_settings() -> list[dict]:
+    """Get list of available settings with descriptions.
+
+    Scans the data/settings directory for JSON files.
+
+    Returns:
+        List of dicts with 'key', 'name', 'description'.
+    """
+    settings_dir = Path(__file__).parent.parent.parent.parent / "data" / "settings"
+    settings = []
+
+    if settings_dir.exists():
+        for json_file in sorted(settings_dir.glob("*.json")):
+            try:
+                with open(json_file) as f:
+                    data = json.load(f)
+                    settings.append({
+                        "key": data.get("name", json_file.stem),
+                        "name": data.get("name", json_file.stem).title(),
+                        "description": data.get("description", "No description available."),
+                    })
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+    # Fallback if no JSON files found
+    if not settings:
+        settings = [
+            {
+                "key": "fantasy",
+                "name": "Fantasy",
+                "description": "Swords, magic, and medieval adventure.",
+            }
+        ]
+
+    return settings
+
+
+@app.command()
+def start(
+    name: Optional[str] = typer.Option(None, "--name", "-n", help="Session name"),
+    setting: Optional[str] = typer.Option(None, "--setting", help="Setting (fantasy, contemporary, scifi)"),
+) -> None:
+    """Start a new game with guided setup wizard.
+
+    Creates a new session and guides you through character creation
+    in one seamless flow, then starts the game.
+    """
+    try:
+        asyncio.run(_start_wizard_async(name, setting))
+    except KeyboardInterrupt:
+        display_info("\nWizard cancelled. No changes were saved.")
+
+
+async def _start_wizard_async(
+    preset_name: str | None = None,
+    preset_setting: str | None = None,
+) -> None:
+    """Run the full game start wizard.
+
+    Guides through session setup, character creation, and starts the game.
+
+    Args:
+        preset_name: Optional preset session name (skips prompt).
+        preset_setting: Optional preset setting (skips prompt).
+    """
+    from src.cli.commands.character import (
+        CharacterCreationState,
+        _ai_character_creation_async,
+        _create_character_records,
+        _create_starting_equipment,
+        _create_intimacy_profile,
+        _extract_world_data,
+        _create_world_from_extraction,
+        _infer_gameplay_fields,
+        _create_inferred_records,
+    )
+    from src.schemas.settings import get_setting_schema
+    from src.llm.audit_logger import set_audit_context
+
+    # Phase 1: Welcome and Session Setup
+    display_game_wizard_welcome()
+
+    # Get available settings
+    available_settings = _get_available_settings()
+
+    # Select setting
+    if preset_setting and any(s["key"] == preset_setting for s in available_settings):
+        selected_setting = preset_setting
+    else:
+        selected_setting = prompt_setting_choice(available_settings, default="fantasy")
+
+    # Get session name
+    if preset_name:
+        session_name = preset_name
+    else:
+        session_name = prompt_session_name(default="New Adventure")
+
+    console.print(f"\n[dim]Creating adventure '{session_name}' in {selected_setting} setting...[/dim]")
+
+    # Phase 2: Character Creation (before DB commit)
+    schema = get_setting_schema(selected_setting)
+
+    console.print()  # Spacing before character creation
+    creation_state = await _ai_character_creation_async(schema, session_id=None)
+
+    if not creation_state or not creation_state.is_complete():
+        display_error("Character creation was not completed.")
+        return
+
+    # Phase 3: Create all DB records (only after character confirmed)
+    with get_db_session() as db:
+        # Create game session
+        game_session = GameSession(
+            session_name=session_name,
+            setting=selected_setting,
+            status="active",
+            total_turns=0,
+            llm_provider="anthropic",
+            gm_model="claude-sonnet-4-20250514",
+        )
+        db.add(game_session)
+        db.flush()
+
+        # Create time state
+        time_state = TimeState(
+            session_id=game_session.id,
+            current_day=1,
+            current_time="09:00",
+            day_of_week="Monday",
+            season="Spring",
+            weather="Clear",
+        )
+        db.add(time_state)
+
+        # Set audit context now that we have session ID
+        set_audit_context(session_id=game_session.id, call_type="game_start")
+
+        # Create character records
+        entity = _create_character_records(
+            db=db,
+            game_session=game_session,
+            name=creation_state.name,
+            attributes=creation_state.attributes,
+            background=creation_state.background or "",
+            creation_state=creation_state,
+        )
+
+        # Create starting equipment
+        starting_items = _create_starting_equipment(
+            db=db,
+            game_session=game_session,
+            entity=entity,
+            schema=schema,
+        )
+
+        # Create intimacy profile
+        _create_intimacy_profile(db, game_session, entity)
+
+        # Extract world data (NPCs, locations from backstory)
+        console.print("[dim]Extracting world from backstory...[/dim]")
+        conversation_history = "\n".join(creation_state.conversation_history)
+        world_data = await _extract_world_data(
+            character_output=conversation_history,
+            character_name=creation_state.name,
+            character_background=creation_state.background or "",
+            setting_name=selected_setting,
+            session_id=game_session.id,
+        )
+        if world_data:
+            _create_world_from_extraction(db, game_session, entity, world_data)
+
+        # Infer gameplay fields (skills, preferences, modifiers)
+        console.print("[dim]Inferring skills and preferences...[/dim]")
+        inference = await _infer_gameplay_fields(creation_state, session_id=game_session.id)
+        if inference:
+            _create_inferred_records(db, game_session, entity, inference)
+
+        db.commit()
+
+        console.print()
+        display_success(f"Character '{creation_state.name}' created successfully!")
+
+        # Display starting equipment
+        if starting_items:
+            item_dicts = [
+                {
+                    "name": item.display_name,
+                    "type": item.item_type.value if item.item_type else "misc",
+                    "slot": item.body_slot,
+                }
+                for item in starting_items
+            ]
+            display_starting_equipment(item_dicts)
+
+        # Phase 4: Start the game loop directly
+        console.print()
+        await _game_loop(db, game_session, entity)
 
 
 @app.command()

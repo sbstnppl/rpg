@@ -279,7 +279,19 @@
 - [x] AI-assisted attribute assignment
 - [x] Starting equipment selection
 
-### 6.7 Rich Formatting
+### 6.7 Unified Game Start Wizard
+- [x] Create `rpg game start` command combining session + character + play
+- [x] Interactive setting selection menu
+- [x] Session name prompt with defaults
+- [x] Hybrid attribute handling (AI-suggest or point-buy)
+  - [x] `_parse_point_buy_switch()` function
+  - [x] Mid-conversation switch to point-buy
+  - [x] Updated `character_creator.md` template
+- [x] Deferred DB commits (only after character confirmed)
+- [x] Automatic transition to game loop
+- [x] Deprecation hints on old commands
+
+### 6.8 Rich Formatting
 - [x] Styled output for narrative (basic)
 - [x] Tables for stats/inventory
 - [x] Progress bars for loading
@@ -287,7 +299,7 @@
 ## Phase 7: Polish & Testing
 
 ### 7.1 Tests
-- [x] Test database models (1226 tests total)
+- [x] Test database models (1637 tests total)
 - [x] Test managers
 - [x] Test agent tools
 - [x] Integration tests
