@@ -21,6 +21,136 @@ DC_VERY_HARD = 25  # Requires expertise
 DC_LEGENDARY = 30  # Nearly impossible
 
 
+# Proficiency tiers (for display)
+PROFICIENCY_TIERS = {
+    0: "Novice",
+    1: "Apprentice",
+    2: "Competent",
+    3: "Expert",
+    4: "Master",
+    5: "Legendary",
+}
+
+
+def proficiency_to_modifier(proficiency_level: int) -> int:
+    """Convert proficiency level (1-100) to a skill modifier.
+
+    Uses tiered conversion: every 20 points of proficiency = +1 modifier.
+
+    Args:
+        proficiency_level: The proficiency level (1-100 scale).
+
+    Returns:
+        The skill modifier (+0 to +5).
+
+    Examples:
+        >>> proficiency_to_modifier(15)
+        0
+        >>> proficiency_to_modifier(45)
+        2
+        >>> proficiency_to_modifier(100)
+        5
+    """
+    # Clamp to valid range
+    level = max(0, min(100, proficiency_level))
+    return level // 20
+
+
+def get_proficiency_tier_name(proficiency_level: int) -> str:
+    """Get the tier name for a proficiency level.
+
+    Args:
+        proficiency_level: The proficiency level (1-100 scale).
+
+    Returns:
+        Tier name (Novice, Apprentice, Competent, Expert, Master, Legendary).
+
+    Examples:
+        >>> get_proficiency_tier_name(15)
+        'Novice'
+        >>> get_proficiency_tier_name(45)
+        'Competent'
+    """
+    modifier = proficiency_to_modifier(proficiency_level)
+    return PROFICIENCY_TIERS.get(modifier, "Unknown")
+
+
+def assess_difficulty(
+    dc: int,
+    skill_modifier: int = 0,
+    attribute_modifier: int = 0,
+) -> str:
+    """Assess how difficult a check appears based on character's abilities.
+
+    Calculates expected outcome and returns a qualitative assessment
+    from the character's perspective.
+
+    Args:
+        dc: The Difficulty Class to assess against.
+        skill_modifier: Modifier from skill proficiency.
+        attribute_modifier: Modifier from relevant attribute.
+
+    Returns:
+        A qualitative difficulty assessment string.
+
+    Examples:
+        >>> assess_difficulty(dc=10, skill_modifier=3, attribute_modifier=2)
+        'trivial'
+        >>> assess_difficulty(dc=20, skill_modifier=0, attribute_modifier=0)
+        'very hard'
+    """
+    total_modifier = skill_modifier + attribute_modifier
+    # Average d20 roll is 10.5
+    expected_total = 10.5 + total_modifier
+    margin = expected_total - dc
+
+    if margin >= 10:
+        return "trivial"
+    elif margin >= 5:
+        return "easy"
+    elif margin >= 0:
+        return "moderate"
+    elif margin >= -5:
+        return "challenging"
+    elif margin >= -10:
+        return "very hard"
+    else:
+        return "nearly impossible"
+
+
+def get_difficulty_description(
+    dc: int,
+    skill_modifier: int = 0,
+    attribute_modifier: int = 0,
+) -> str:
+    """Get a narrative description of difficulty from character's perspective.
+
+    Args:
+        dc: The Difficulty Class to assess against.
+        skill_modifier: Modifier from skill proficiency.
+        attribute_modifier: Modifier from relevant attribute.
+
+    Returns:
+        A narrative description suitable for player display.
+
+    Examples:
+        >>> get_difficulty_description(dc=10, skill_modifier=3, attribute_modifier=2)
+        'This looks trivial for someone with your skill'
+    """
+    assessment = assess_difficulty(dc, skill_modifier, attribute_modifier)
+
+    descriptions = {
+        "trivial": "This looks trivial for someone with your skill",
+        "easy": "You're confident this should be easy",
+        "moderate": "You have a decent chance at this",
+        "challenging": "This will be challenging",
+        "very hard": "This looks very difficult",
+        "nearly impossible": "This seems nearly impossible",
+    }
+
+    return descriptions.get(assessment, "You're uncertain about your chances")
+
+
 def calculate_ability_modifier(ability_score: int) -> int:
     """Convert D&D ability score to modifier.
 

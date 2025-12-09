@@ -67,8 +67,34 @@ class TestToolExecutor:
     """Test GMToolExecutor execution."""
 
     def test_execute_skill_check(self, db_session: Session, game_session: GameSession):
-        """Execute skill_check tool."""
+        """Execute skill_check tool with entity lookup."""
         from src.agents.tools.executor import GMToolExecutor
+        from src.database.models.entities import EntityAttribute, EntitySkill
+
+        # Create a player entity with attributes and skills
+        player = create_entity(
+            db_session,
+            game_session,
+            entity_key="player",
+            entity_type=EntityType.PLAYER,
+        )
+
+        # Add a dexterity attribute (stealth uses dexterity)
+        attr = EntityAttribute(
+            entity_id=player.id,
+            attribute_key="dexterity",
+            value=14,
+        )
+        db_session.add(attr)
+
+        # Add stealth skill
+        skill = EntitySkill(
+            entity_id=player.id,
+            skill_key="stealth",
+            proficiency_level=40,  # Competent (+2)
+        )
+        db_session.add(skill)
+        db_session.flush()
 
         executor = GMToolExecutor(db_session, game_session)
 
@@ -82,14 +108,18 @@ class TestToolExecutor:
             )
 
             result = executor.execute("skill_check", {
+                "entity_key": "player",
                 "dc": 15,
                 "skill_name": "stealth",
-                "attribute_modifier": 2,
             })
 
         assert result["success"] is True
         assert result["roll"] == 18
-        assert "stealth" in result["description"].lower()
+        assert result["skill_name"] == "stealth"
+        # Check modifiers were looked up
+        assert result["attribute_modifier"] == 2  # (14-10)//2 = 2
+        assert result["skill_modifier"] == 2  # 40//20 = 2
+        assert result["skill_tier"] == "Competent"
 
     def test_execute_attack_roll_hit(self, db_session: Session, game_session: GameSession):
         """Execute attack_roll tool that hits."""

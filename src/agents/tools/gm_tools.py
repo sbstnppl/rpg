@@ -73,10 +73,16 @@ SKILL_CHECK_TOOL = ToolDefinition(
     name="skill_check",
     description=(
         "Roll a skill check against a difficulty class (DC). Use this when the player "
-        "attempts an action that requires a roll, like picking a lock, persuading an NPC, "
-        "or climbing a wall."
+        "or an NPC attempts an action that requires a roll, like picking a lock, "
+        "persuading someone, or climbing a wall. The system will automatically look up "
+        "the character's skill proficiency and relevant attribute modifier."
     ),
     parameters=[
+        ToolParameter(
+            name="entity_key",
+            param_type="string",
+            description="Entity key of who is making the check (e.g., 'player', 'npc_guard')",
+        ),
         ToolParameter(
             name="dc",
             param_type="integer",
@@ -88,11 +94,16 @@ SKILL_CHECK_TOOL = ToolDefinition(
             description="Name of the skill being tested (e.g., 'stealth', 'persuasion', 'athletics')",
         ),
         ToolParameter(
-            name="attribute_modifier",
-            param_type="integer",
-            description="Modifier from relevant attribute (typically -5 to +5)",
+            name="description",
+            param_type="string",
+            description="Brief description of the action being attempted (shown to player)",
             required=False,
-            default=0,
+        ),
+        ToolParameter(
+            name="attribute_key",
+            param_type="string",
+            description="Override the default governing attribute (e.g., use 'strength' for a brute-force lockpick)",
+            required=False,
         ),
         ToolParameter(
             name="advantage",

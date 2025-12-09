@@ -199,6 +199,11 @@
 - [x] Create `src/dice/checks.py` - Skill checks, saving throws, DC constants
 - [x] Create `src/dice/combat.py` - Attack rolls, damage, initiative
 - [x] Critical success/failure detection (natural 20/1)
+- [x] Create `src/dice/skills.py` - Skill-to-attribute mappings
+- [x] Add `proficiency_to_modifier()` - Convert proficiency (1-100) to modifier (+0 to +5)
+- [x] Add `get_proficiency_tier_name()` - Novice/Apprentice/Competent/Expert/Master/Legendary
+- [x] Add `assess_difficulty()` - Character-based difficulty perception
+- [x] Add `get_difficulty_description()` - Narrative difficulty text
 
 ## Phase 4: LangGraph Agents
 
@@ -226,6 +231,11 @@
 
 ### 4.6 Agent Tools
 - [x] Create `src/agents/tools/gm_tools.py`
+  - [x] `skill_check` tool with `entity_key` for proficiency lookup
+  - [x] `attribute_key` optional override for governing attribute
+- [x] Create `src/agents/tools/executor.py`
+  - [x] `_execute_skill_check()` queries EntitySkill and EntityAttribute
+  - [x] Returns full modifier breakdown for interactive display
 - [x] Create `src/agents/tools/extraction_tools.py`
 
 ## Phase 5: Advanced Features
@@ -258,6 +268,10 @@
 - [x] Create `src/main.py` - Entry point
 - [x] Create `src/cli/main.py` - Typer app
 - [x] Create `src/cli/display.py` - Display utilities
+  - [x] `display_skill_check_prompt()` - Pre-roll display with modifiers
+  - [x] `display_skill_check_result()` - Post-roll with DC, margin, outcome
+  - [x] `wait_for_roll()` - Interactive ENTER prompt
+  - [x] `display_rolling_animation()` - Dice tumbling animation
 
 ### 6.2 Session Commands
 - [x] Create `src/cli/commands/session.py`
@@ -273,6 +287,8 @@
 
 ### 6.5 Game Command
 - [x] Create `src/cli/commands/game.py` - Main game loop
+  - [x] `_display_skill_checks_interactive()` - Interactive dice rolling for skill checks
+  - [x] Skill checks displayed before narrative with ENTER to roll
 
 ### 6.6 Character Creation Flow
 - [x] Implement conversational character creation

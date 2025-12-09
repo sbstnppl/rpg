@@ -8,11 +8,18 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from src.database.models.entities import Entity
+from src.database.models.entities import Entity, EntityAttribute, EntitySkill
 from src.database.models.enums import DiscoveryMethod
 from src.database.models.session import GameSession
-from src.dice.checks import make_skill_check
+from src.dice.checks import (
+    calculate_ability_modifier,
+    get_difficulty_description,
+    get_proficiency_tier_name,
+    make_skill_check,
+    proficiency_to_modifier,
+)
 from src.dice.combat import make_attack_roll, roll_damage
+from src.dice.skills import get_attribute_for_skill
 from src.dice.types import AdvantageType
 from src.managers.discovery_manager import DiscoveryManager
 from src.managers.pathfinding_manager import PathfindingManager
@@ -98,29 +105,74 @@ class GMToolExecutor:
         return handler(arguments)
 
     def _execute_skill_check(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Execute a skill check.
+        """Execute a skill check with proficiency and attribute lookup.
 
         Args:
-            args: Tool arguments with dc, skill_name, attribute_modifier, advantage.
+            args: Tool arguments with entity_key, dc, skill_name, description,
+                  attribute_key (optional), advantage.
 
         Returns:
-            Result with success, roll, margin, and description.
+            Result with success, roll, margin, modifiers, and description.
         """
+        entity_key = args["entity_key"]
         dc = args["dc"]
         skill_name = args["skill_name"]
-        attribute_modifier = args.get("attribute_modifier", 0)
+        check_description = args.get("description", f"{skill_name.title()} check")
+        attribute_key_override = args.get("attribute_key")
         advantage_str = args.get("advantage", "normal")
 
+        # Get entity
+        entity = self._get_entity_by_key(entity_key)
+        if entity is None:
+            return {"error": f"Entity '{entity_key}' not found"}
+
+        # Determine which attribute governs this skill
+        attribute_key = attribute_key_override or get_attribute_for_skill(skill_name)
+
+        # Look up skill proficiency
+        skill_record = (
+            self.db.query(EntitySkill)
+            .filter(
+                EntitySkill.entity_id == entity.id,
+                EntitySkill.skill_key == skill_name.lower().replace(" ", "_"),
+            )
+            .first()
+        )
+        proficiency_level = skill_record.proficiency_level if skill_record else 0
+        skill_modifier = proficiency_to_modifier(proficiency_level)
+        skill_tier = get_proficiency_tier_name(proficiency_level)
+
+        # Look up attribute score
+        attr_record = (
+            self.db.query(EntityAttribute)
+            .filter(
+                EntityAttribute.entity_id == entity.id,
+                EntityAttribute.attribute_key == attribute_key.lower(),
+            )
+            .first()
+        )
+        attribute_score = attr_record.value if attr_record else 10
+        attribute_modifier = calculate_ability_modifier(attribute_score)
+
+        # Get difficulty assessment from character's perspective
+        difficulty_assessment = get_difficulty_description(
+            dc=dc,
+            skill_modifier=skill_modifier,
+            attribute_modifier=attribute_modifier,
+        )
+
+        # Parse advantage type
         advantage_type = self._parse_advantage(advantage_str)
 
+        # Make the roll
         result = make_skill_check(
             dc=dc,
             attribute_modifier=attribute_modifier,
-            skill_modifier=0,
+            skill_modifier=skill_modifier,
             advantage_type=advantage_type,
         )
 
-        # Build description
+        # Build outcome description
         if result.is_critical_success:
             outcome = "Critical Success!"
         elif result.is_critical_failure:
@@ -130,16 +182,33 @@ class GMToolExecutor:
         else:
             outcome = "Failure"
 
-        description = f"{skill_name.title()} check (DC {dc}): {outcome}"
+        total_modifier = attribute_modifier + skill_modifier
+        modifier_str = f"+{total_modifier}" if total_modifier >= 0 else str(total_modifier)
 
         return {
+            "entity_key": entity_key,
+            "skill_name": skill_name,
+            "description": check_description,
+            "dc": dc,
             "success": result.success,
             "roll": result.roll_result.total,
             "natural_roll": result.roll_result.individual_rolls[0],
             "margin": result.margin,
             "is_critical_success": result.is_critical_success,
             "is_critical_failure": result.is_critical_failure,
-            "description": description,
+            "outcome": outcome,
+            # Modifier breakdown
+            "attribute_key": attribute_key,
+            "attribute_score": attribute_score,
+            "attribute_modifier": attribute_modifier,
+            "proficiency_level": proficiency_level,
+            "skill_modifier": skill_modifier,
+            "skill_tier": skill_tier,
+            "total_modifier": total_modifier,
+            "modifier_string": modifier_str,
+            # Assessment (for player-facing display)
+            "difficulty_assessment": difficulty_assessment,
+            "roll_summary": f"Roll: {result.roll_result.individual_rolls[0]} {modifier_str} = {result.roll_result.total} vs DC {dc}",
         }
 
     def _execute_attack_roll(self, args: dict[str, Any]) -> dict[str, Any]:

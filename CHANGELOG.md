@@ -8,6 +8,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Skill Check System Overhaul** - Proficiency levels now affect skill checks
+  - `proficiency_to_modifier()` converts proficiency (1-100) to modifier (+0 to +5)
+  - Tier system: Novice → Apprentice → Competent → Expert → Master → Legendary
+  - `assess_difficulty()` calculates perceived difficulty from character's perspective
+  - `get_difficulty_description()` returns narrative text for player display
+  - New `src/dice/skills.py` module with skill-to-attribute mappings
+  - Default mappings for 70+ skills (stealth→DEX, persuasion→CHA, etc.)
+  - Unknown skills default to Intelligence
+
+- **Interactive Dice Rolling** - Player presses ENTER to roll for skill checks
+  - Pre-roll display shows skill name, modifiers, and difficulty assessment
+  - Rolling animation with dice faces
+  - Post-roll display shows natural roll, total, DC, margin, and outcome
+  - Critical success/failure highlighted
+  - DC hidden until after roll (revealed in result)
+
+- **GM Skill Check Integration** - GM now uses character proficiency
+  - `skill_check` tool requires `entity_key` parameter
+  - Executor queries `EntitySkill` for proficiency level
+  - Executor queries `EntityAttribute` for governing attribute
+  - Optional `attribute_key` parameter for override
+  - GM template updated with skill check guidance
+
+- **Character Skills in Context** - GM sees player's skills and attributes
+  - `_get_player_attributes()` shows attribute scores (STR 14, DEX 12, etc.)
+  - `_get_player_skills()` shows top skills above Novice (swimming (Expert), etc.)
+  - Player entity_key included in context
+
 - **Character Memory System** - Track significant memories for emotional scene reactions
   - New `CharacterMemory` model with subject, keywords, valence, emotion, context, intensity
   - `MemoryType` enum: person, item, place, event, creature, concept

@@ -5,8 +5,9 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from src.database.models.character_state import CharacterNeeds
-from src.database.models.entities import Entity, NPCExtension
+from src.database.models.entities import Entity, EntityAttribute, EntitySkill, NPCExtension
 from src.database.models.enums import EntityType
+from src.dice.checks import get_proficiency_tier_name
 from src.database.models.injuries import BodyInjury
 from src.database.models.navigation import ZoneDiscovery
 from src.database.models.relationships import Relationship
@@ -255,7 +256,7 @@ class ContextCompiler(BaseManager):
         return "\n".join(lines)
 
     def _get_player_context(self, player_id: int) -> str:
-        """Get player character context including needs, injuries, and equipment."""
+        """Get player character context including needs, injuries, equipment, and abilities."""
         player = (
             self.db.query(Entity)
             .filter(Entity.id == player_id)
@@ -267,6 +268,7 @@ class ContextCompiler(BaseManager):
 
         lines = ["## Player Character"]
         lines.append(f"- Name: {player.display_name}")
+        lines.append(f"- Entity Key: {player.entity_key}")
 
         # Appearance (includes age if set)
         if player.appearance:
@@ -284,7 +286,77 @@ class ContextCompiler(BaseManager):
         if condition:
             lines.append(f"- Condition: {condition}")
 
+        # Attributes
+        attributes = self._get_player_attributes(player_id)
+        if attributes:
+            lines.append(f"- Attributes: {attributes}")
+
+        # Skills
+        skills = self._get_player_skills(player_id)
+        if skills:
+            lines.append(f"- Skills: {skills}")
+
         return "\n".join(lines)
+
+    def _get_player_attributes(self, player_id: int) -> str:
+        """Get player's attribute scores for skill check context.
+
+        Args:
+            player_id: Player entity ID.
+
+        Returns:
+            Formatted attribute string (e.g., "STR 14, DEX 12, INT 16").
+        """
+        attributes = (
+            self.db.query(EntityAttribute)
+            .filter(EntityAttribute.entity_id == player_id)
+            .order_by(EntityAttribute.attribute_key)
+            .all()
+        )
+
+        if not attributes:
+            return ""
+
+        # Format as abbreviated key/value pairs
+        attr_strings = []
+        for attr in attributes:
+            # Use first 3 letters uppercase as abbreviation
+            abbrev = attr.attribute_key[:3].upper()
+            attr_strings.append(f"{abbrev} {attr.current_value}")
+
+        return ", ".join(attr_strings)
+
+    def _get_player_skills(self, player_id: int) -> str:
+        """Get player's notable skills for skill check context.
+
+        Args:
+            player_id: Player entity ID.
+
+        Returns:
+            Formatted skills string (e.g., "swimming (Expert), lockpicking (Apprentice)").
+        """
+        skills = (
+            self.db.query(EntitySkill)
+            .filter(EntitySkill.entity_id == player_id)
+            .order_by(EntitySkill.proficiency_level.desc())
+            .limit(10)  # Show top 10 skills by proficiency
+            .all()
+        )
+
+        if not skills:
+            return ""
+
+        skill_strings = []
+        for skill in skills:
+            tier = get_proficiency_tier_name(skill.proficiency_level)
+            # Only show skills above Novice level to avoid clutter
+            if skill.proficiency_level >= 20:
+                skill_strings.append(f"{skill.skill_key} ({tier})")
+
+        if not skill_strings:
+            return ""
+
+        return ", ".join(skill_strings)
 
     def _get_equipment_description(self, entity_id: int) -> str:
         """Get human-readable description of visible equipment/clothing.

@@ -1014,3 +1014,167 @@ def display_wizard_ai_thinking() -> None:
 def clear_wizard_ai_thinking() -> None:
     """Clear the thinking indicator."""
     console.print(" " * 20, end="\r")  # Clear the line
+
+
+# ==================== Skill Check Display ====================
+
+
+def display_skill_check_prompt(
+    description: str,
+    skill_name: str,
+    skill_tier: str,
+    skill_modifier: int,
+    attribute_key: str,
+    attribute_modifier: int,
+    total_modifier: int,
+    difficulty_assessment: str,
+) -> None:
+    """Display skill check prompt before rolling.
+
+    Shows the player what they're attempting and their modifiers,
+    without revealing the DC.
+
+    Args:
+        description: What the character is attempting.
+        skill_name: Name of the skill.
+        skill_tier: Tier name (Novice, Apprentice, etc.).
+        skill_modifier: Modifier from skill proficiency.
+        attribute_key: Governing attribute name.
+        attribute_modifier: Modifier from attribute.
+        total_modifier: Combined modifier.
+        difficulty_assessment: How difficult this appears to the character.
+    """
+    # Format modifiers as +/- strings
+    skill_mod_str = f"+{skill_modifier}" if skill_modifier >= 0 else str(skill_modifier)
+    attr_mod_str = f"+{attribute_modifier}" if attribute_modifier >= 0 else str(attribute_modifier)
+    total_mod_str = f"+{total_modifier}" if total_modifier >= 0 else str(total_modifier)
+
+    lines = [
+        f"[bold]{description}[/bold]",
+        "",
+        "[dim]Your modifiers:[/dim]",
+        f"  {skill_name.title()}: {skill_mod_str} ({skill_tier})",
+        f"  {attribute_key.title()}: {attr_mod_str}",
+        f"  [bold]Total: {total_mod_str}[/bold]",
+        "",
+        f"[italic]{difficulty_assessment}[/italic]",
+        "",
+        "[dim]Press ENTER to roll...[/dim]",
+    ]
+
+    panel = Panel(
+        "\n".join(lines),
+        title="[bold cyan]Skill Check[/bold cyan]",
+        border_style="cyan",
+        padding=(1, 2),
+    )
+    console.print()
+    console.print(panel)
+
+
+def display_skill_check_result(
+    success: bool,
+    natural_roll: int,
+    total_modifier: int,
+    total_roll: int,
+    dc: int,
+    margin: int,
+    is_critical_success: bool = False,
+    is_critical_failure: bool = False,
+) -> None:
+    """Display skill check result after rolling.
+
+    Shows the roll, total, DC, and outcome.
+
+    Args:
+        success: Whether the check succeeded.
+        natural_roll: The raw d20 roll.
+        total_modifier: Combined modifier applied.
+        total_roll: Final total (natural + modifier).
+        dc: Difficulty Class that was beaten/missed.
+        margin: How much over/under the DC.
+        is_critical_success: Whether this was a natural 20.
+        is_critical_failure: Whether this was a natural 1.
+    """
+    mod_str = f"+{total_modifier}" if total_modifier >= 0 else str(total_modifier)
+
+    # Format the roll line
+    if is_critical_success:
+        roll_style = "bold yellow"
+        roll_display = f"[{roll_style}]20[/{roll_style}] (CRITICAL!)"
+    elif is_critical_failure:
+        roll_style = "bold red"
+        roll_display = f"[{roll_style}]1[/{roll_style}] (CRITICAL!)"
+    else:
+        roll_display = str(natural_roll)
+
+    # Format the outcome
+    if is_critical_success:
+        outcome = "[bold yellow]CRITICAL SUCCESS![/bold yellow]"
+    elif is_critical_failure:
+        outcome = "[bold red]CRITICAL FAILURE![/bold red]"
+    elif success:
+        if margin >= 10:
+            outcome = "[bold green]SUCCESS![/bold green] (overwhelming)"
+        elif margin >= 5:
+            outcome = "[bold green]SUCCESS![/bold green] (clear)"
+        else:
+            outcome = "[green]SUCCESS[/green] (narrow)"
+    else:
+        if margin <= -10:
+            outcome = "[bold red]FAILURE[/bold red] (catastrophic)"
+        elif margin <= -5:
+            outcome = "[red]FAILURE[/red] (clear)"
+        else:
+            outcome = "[yellow]FAILURE[/yellow] (narrow)"
+
+    # Build result display
+    margin_str = f"+{margin}" if margin >= 0 else str(margin)
+    lines = [
+        f"Roll: {roll_display} {mod_str} = [bold]{total_roll}[/bold]",
+        f"vs DC {dc}",
+        "",
+        outcome,
+        f"[dim](margin: {margin_str})[/dim]",
+    ]
+
+    # Choose border color based on outcome
+    if is_critical_success or (success and margin >= 5):
+        border_style = "green"
+    elif is_critical_failure or (not success and margin <= -5):
+        border_style = "red"
+    elif success:
+        border_style = "green"
+    else:
+        border_style = "yellow"
+
+    panel = Panel(
+        "\n".join(lines),
+        title="[bold]Result[/bold]",
+        border_style=border_style,
+        padding=(0, 2),
+    )
+    console.print(panel)
+    console.print()
+
+
+def wait_for_roll() -> None:
+    """Wait for player to press ENTER to roll dice."""
+    console.input("")
+
+
+def display_rolling_animation() -> None:
+    """Display a brief rolling animation.
+
+    Uses a simple text-based animation for the dice roll.
+    """
+    import time
+    import random
+
+    # Quick animation showing dice tumbling
+    dice_faces = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
+    for _ in range(6):
+        face = random.choice(dice_faces)
+        console.print(f"  Rolling... {face}", end="\r")
+        time.sleep(0.08)
+    console.print(" " * 30, end="\r")  # Clear the line

@@ -114,6 +114,9 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
     if db is not None and game_session is not None:
         executor = GMToolExecutor(db, game_session)
 
+    # Track skill checks for interactive display
+    skill_checks: list[dict[str, Any]] = []
+
     # Tool calling loop - allow multiple rounds of tool use
     max_tool_rounds = 5
     for _ in range(max_tool_rounds):
@@ -147,6 +150,11 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
                 try:
                     result = executor.execute(tool_call.name, tool_call.arguments)
                     result_str = json.dumps(result)
+
+                    # Track skill checks for interactive display
+                    if tool_call.name == "skill_check" and "error" not in result:
+                        skill_checks.append(result)
+
                 except Exception as e:
                     result_str = json.dumps({"error": str(e)})
             else:
@@ -164,6 +172,7 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
         "location_changed": state_changes.get("location_changed", False),
         "player_location": state_changes.get("location_change") or state.get("player_location"),
         "combat_active": state_changes.get("combat_active", False),
+        "skill_checks": skill_checks,  # For interactive dice display
     }
 
 

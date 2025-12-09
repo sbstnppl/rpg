@@ -513,6 +513,11 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
                 game_session.total_turns -= 1
                 continue
 
+        # Display skill checks interactively (before the narrative)
+        skill_checks = result.get("skill_checks", [])
+        if skill_checks:
+            _display_skill_checks_interactive(skill_checks)
+
         # Display the response
         if result.get("gm_response"):
             display_narrative(result["gm_response"])
@@ -529,6 +534,51 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
 
         # Commit after each turn
         db.commit()
+
+
+def _display_skill_checks_interactive(skill_checks: list[dict]) -> None:
+    """Display skill checks interactively, letting player roll.
+
+    Args:
+        skill_checks: List of skill check result dicts from executor.
+    """
+    from src.cli.display import (
+        display_skill_check_prompt,
+        display_skill_check_result,
+        wait_for_roll,
+        display_rolling_animation,
+    )
+
+    for check in skill_checks:
+        # Show the pre-roll prompt
+        display_skill_check_prompt(
+            description=check.get("description", "Skill check"),
+            skill_name=check.get("skill_name", "unknown"),
+            skill_tier=check.get("skill_tier", "Novice"),
+            skill_modifier=check.get("skill_modifier", 0),
+            attribute_key=check.get("attribute_key", "unknown"),
+            attribute_modifier=check.get("attribute_modifier", 0),
+            total_modifier=check.get("total_modifier", 0),
+            difficulty_assessment=check.get("difficulty_assessment", ""),
+        )
+
+        # Wait for player to press ENTER
+        wait_for_roll()
+
+        # Show rolling animation
+        display_rolling_animation()
+
+        # Show the result
+        display_skill_check_result(
+            success=check.get("success", False),
+            natural_roll=check.get("natural_roll", 10),
+            total_modifier=check.get("total_modifier", 0),
+            total_roll=check.get("roll", 10),
+            dc=check.get("dc", 10),
+            margin=check.get("margin", 0),
+            is_critical_success=check.get("is_critical_success", False),
+            is_critical_failure=check.get("is_critical_failure", False),
+        )
 
 
 def _show_help() -> None:
