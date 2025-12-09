@@ -716,6 +716,7 @@ def _infer_initial_needs(
     backstory: str = "",
     age: int | None = None,
     occupation: str | None = None,
+    starting_scene: str = "",
 ) -> dict[str, int]:
     """Infer starting need values from character context.
 
@@ -726,6 +727,7 @@ def _infer_initial_needs(
         backstory: Character's backstory text.
         age: Character's age.
         occupation: Character's occupation.
+        starting_scene: Description of starting scene/situation.
 
     Returns:
         Dictionary of need_name -> initial_value (0-100).
@@ -745,6 +747,7 @@ def _infer_initial_needs(
     }
 
     backstory_lower = backstory.lower() if backstory else ""
+    combined_text = f"{backstory_lower} {starting_scene.lower()}" if starting_scene else backstory_lower
 
     # Adjust based on backstory context
     # Hardship indicators -> lower comfort/morale
@@ -808,7 +811,207 @@ def _infer_initial_needs(
         if occupation_lower in ["merchant", "innkeeper", "bard", "diplomat"]:
             needs["social_connection"] = min(75, needs["social_connection"] + 15)
 
+    # Situational adjustments from starting scene
+    # Wet indicators -> lower hygiene, lower comfort
+    wet_words = ["swimming", "swim", "lake", "river", "rain", "storm", "soaked", "drenched"]
+    if any(word in combined_text for word in wet_words):
+        needs["hygiene"] = max(40, needs["hygiene"] - 30)
+        needs["comfort"] = max(30, needs["comfort"] - 25)
+
+    # Cold indicators -> lower comfort, lower energy
+    cold_words = ["cold", "freezing", "frozen", "snow", "ice", "winter", "blizzard"]
+    if any(word in combined_text for word in cold_words):
+        needs["comfort"] = max(20, needs["comfort"] - 35)
+        needs["energy"] = max(50, needs["energy"] - 15)
+
+    # Dirty indicators -> lower hygiene
+    dirty_words = ["dirty", "filthy", "mud", "sewer", "dungeon", "prison", "mine"]
+    if any(word in combined_text for word in dirty_words):
+        needs["hygiene"] = max(20, needs["hygiene"] - 40)
+
     return needs
+
+
+def _infer_initial_vital_status(
+    backstory: str = "",
+    starting_scene: str = "",
+) -> VitalStatus:
+    """Infer starting vital status from character context.
+
+    Uses keyword-based heuristics to set appropriate health status
+    instead of always starting HEALTHY.
+
+    Args:
+        backstory: Character's backstory text.
+        starting_scene: Description of starting scene/situation.
+
+    Returns:
+        Appropriate VitalStatus enum value.
+    """
+    combined_text = f"{backstory} {starting_scene}".lower()
+
+    # Critical injury indicators -> WOUNDED
+    critical_words = [
+        "gravely wounded", "nearly died", "barely survived", "mortally",
+        "bleeding out", "dying", "on death's door", "fatal",
+    ]
+    if any(phrase in combined_text for phrase in critical_words):
+        return VitalStatus.WOUNDED
+
+    # Injury indicators -> WOUNDED
+    injury_words = [
+        "wounded", "injured", "hurt", "bleeding", "broken bone",
+        "stabbed", "shot", "beaten", "tortured", "burned",
+        "scarred", "limping", "crippled",
+    ]
+    if any(word in combined_text for word in injury_words):
+        return VitalStatus.WOUNDED
+
+    # Illness indicators -> WOUNDED (using WOUNDED as general "not healthy")
+    illness_words = [
+        "sick", "ill", "diseased", "poisoned", "infected",
+        "fever", "plague", "weakened", "frail",
+    ]
+    if any(word in combined_text for word in illness_words):
+        return VitalStatus.WOUNDED
+
+    # Recent hardship that might affect health
+    hardship_words = [
+        "starving", "malnourished", "dehydrated", "exhausted",
+        "collapsed", "fainted",
+    ]
+    if any(word in combined_text for word in hardship_words):
+        return VitalStatus.WOUNDED
+
+    return VitalStatus.HEALTHY
+
+
+def _infer_equipment_condition(
+    backstory: str = "",
+    occupation: str | None = None,
+) -> "ItemCondition":
+    """Infer starting equipment condition from character context.
+
+    Args:
+        backstory: Character's backstory text.
+        occupation: Character's occupation.
+
+    Returns:
+        Appropriate ItemCondition enum value for starting gear.
+    """
+    from src.database.models.enums import ItemCondition
+
+    backstory_lower = backstory.lower() if backstory else ""
+
+    # Wealthy/noble -> excellent equipment
+    wealthy_words = ["wealthy", "noble", "rich", "privileged", "aristocrat", "royal"]
+    if any(word in backstory_lower for word in wealthy_words):
+        return ItemCondition.PRISTINE
+
+    # Well-maintained professional -> good equipment
+    professional_words = ["soldier", "knight", "guard", "merchant", "craftsman"]
+    if occupation and occupation.lower() in professional_words:
+        return ItemCondition.GOOD
+
+    # Hardship -> worn or damaged equipment
+    hardship_words = [
+        "escaped", "fled", "refugee", "homeless", "poor", "beggar",
+        "wanderer", "exile", "outcast", "destitute",
+    ]
+    if any(word in backstory_lower for word in hardship_words):
+        return ItemCondition.WORN
+
+    # Disaster/combat -> damaged equipment
+    disaster_words = [
+        "disaster", "battle", "war", "burned", "fire", "flood",
+        "attacked", "ambushed", "shipwreck", "crash",
+    ]
+    if any(word in backstory_lower for word in disaster_words):
+        return ItemCondition.DAMAGED
+
+    # Poverty indicators -> worn
+    poverty_words = ["peasant", "servant", "slave", "urchin", "orphan"]
+    if any(word in backstory_lower for word in poverty_words):
+        return ItemCondition.WORN
+
+    # Default to good condition
+    return ItemCondition.GOOD
+
+
+def _infer_starting_situation(
+    backstory: str = "",
+    starting_scene: str = "",
+) -> dict:
+    """Infer starting situation details from context.
+
+    Returns a dict with situational modifiers that affect character state:
+    - is_wet: Character is wet (swimming, rain, etc.)
+    - is_cold: Character is cold (exposure, winter, etc.)
+    - is_dirty: Character is dirty (labor, prison, etc.)
+    - minimal_equipment: Character has minimal gear (swimming, prisoner, etc.)
+    - no_weapons: Character has no weapons (prisoner, peaceful, etc.)
+
+    Args:
+        backstory: Character's backstory text.
+        starting_scene: Description of starting scene.
+
+    Returns:
+        Dict of situational flags.
+    """
+    combined = f"{backstory} {starting_scene}".lower()
+
+    situation = {
+        "is_wet": False,
+        "is_cold": False,
+        "is_dirty": False,
+        "minimal_equipment": False,
+        "no_weapons": False,
+        "no_armor": False,
+    }
+
+    # Wet indicators
+    wet_words = [
+        "swimming", "swim", "lake", "river", "ocean", "sea", "rain",
+        "storm", "flood", "drowned", "soaked", "drenched", "shipwreck",
+        "waterfall", "underwater", "bath", "wading",
+    ]
+    if any(word in combined for word in wet_words):
+        situation["is_wet"] = True
+
+    # Cold indicators
+    cold_words = [
+        "cold", "freezing", "frozen", "snow", "ice", "winter", "blizzard",
+        "frost", "chilled", "hypothermia", "mountain", "tundra",
+    ]
+    if any(word in combined for word in cold_words):
+        situation["is_cold"] = True
+
+    # Dirty indicators
+    dirty_words = [
+        "dirty", "filthy", "mud", "grime", "soot", "coal", "mine",
+        "sewer", "dungeon", "prison", "slave", "labor", "dig",
+    ]
+    if any(word in combined for word in dirty_words):
+        situation["is_dirty"] = True
+
+    # Minimal equipment situations
+    minimal_words = [
+        "swimming", "bath", "prisoner", "captive", "slave", "stripped",
+        "naked", "undressed", "shipwreck", "washed ashore",
+    ]
+    if any(word in combined for word in minimal_words):
+        situation["minimal_equipment"] = True
+        situation["no_armor"] = True
+
+    # No weapons situations
+    no_weapon_words = [
+        "prisoner", "captive", "unarmed", "peaceful", "monk",
+        "pacifist", "disarmed", "confiscated",
+    ]
+    if any(word in combined for word in no_weapon_words):
+        situation["no_weapons"] = True
+
+    return situation
 
 
 def _create_character_records(
@@ -939,11 +1142,15 @@ def _create_character_records(
     )
     db.add(needs)
 
-    # Create vital state
+    # Create vital state with context-aware status
+    initial_vital_status = _infer_initial_vital_status(
+        backstory=background,
+        starting_scene="",  # Could be passed in from game start
+    )
     vital = EntityVitalState(
         session_id=game_session.id,
         entity_id=entity.id,
-        vital_status=VitalStatus.HEALTHY,
+        vital_status=initial_vital_status,
         death_saves_remaining=3,
         death_saves_failed=0,
         is_dead=False,
@@ -1013,14 +1220,21 @@ def _create_starting_equipment(
     game_session: GameSession,
     entity: Entity,
     schema: SettingSchema,
+    backstory: str = "",
+    starting_scene: str = "",
 ) -> list:
     """Create starting equipment for a new character.
+
+    Equipment condition and selection is context-aware based on backstory
+    and starting situation.
 
     Args:
         db: Database session.
         game_session: Game session.
         entity: The player entity.
         schema: Setting schema with starting equipment definitions.
+        backstory: Character's backstory for condition inference.
+        starting_scene: Starting scene description for situation inference.
 
     Returns:
         List of created Item objects.
@@ -1034,12 +1248,42 @@ def _create_starting_equipment(
     item_manager = ItemManager(db, game_session)
     created_items = []
 
+    # Infer equipment condition from backstory
+    equipment_condition = _infer_equipment_condition(
+        backstory=backstory,
+        occupation=entity.occupation,
+    )
+
+    # Infer situational constraints
+    situation = _infer_starting_situation(
+        backstory=backstory,
+        starting_scene=starting_scene,
+    )
+
     for equip in schema.starting_equipment:
         # Map string to ItemType enum
         try:
             item_type = ItemType(equip.item_type)
         except ValueError:
             item_type = ItemType.MISC
+
+        # Skip weapons if situation says no weapons
+        if situation["no_weapons"] and item_type == ItemType.WEAPON:
+            continue
+
+        # Skip armor if situation says no armor
+        if situation["no_armor"] and item_type == ItemType.ARMOR:
+            continue
+
+        # For minimal equipment situations, only keep basic clothing
+        if situation["minimal_equipment"]:
+            # Only allow clothing items in minimal situations
+            allowed_in_minimal = {
+                ItemType.CLOTHING,
+                ItemType.CONTAINER,  # Basic pouch/bag
+            }
+            if item_type not in allowed_in_minimal:
+                continue
 
         # Create unique key for this player
         unique_key = f"{entity.entity_key}_{equip.item_key}"
@@ -1052,7 +1296,7 @@ def _create_starting_equipment(
             holder_id=entity.id,
             description=equip.description or None,
             properties=equip.properties,
-            condition=ItemCondition.GOOD,
+            condition=equipment_condition,
         )
 
         # Equip if body_slot specified
@@ -2459,12 +2703,14 @@ def create(
                 creation_state=creation_state,  # Pass full state for AI mode
             )
 
-            # Create starting equipment
+            # Create starting equipment with context-aware condition
             starting_items = _create_starting_equipment(
                 db=db,
                 game_session=game_session,
                 entity=entity,
                 schema=schema,
+                backstory=background or "",
+                starting_scene="",  # Could be passed from game start
             )
 
             # Create character preferences with defaults

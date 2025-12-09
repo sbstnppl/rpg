@@ -49,6 +49,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Isolation words → lower social connection
   - Purpose words → higher sense of purpose
   - Age and occupation adjustments
+  - Starting scene affects needs (wet→hygiene, cold→comfort, dirty→hygiene)
+
+- **Context-aware vital status** - Health based on backstory
+  - `_infer_initial_vital_status()` detects injury/illness keywords
+  - Wounded/injured/sick/poisoned backstories start as WOUNDED
+  - Healthy backstories remain HEALTHY
+
+- **Context-aware equipment** - Condition and selection based on context
+  - `_infer_equipment_condition()` sets item condition from backstory
+  - Wealthy/noble → PRISTINE, escaped/refugee → WORN, disaster/battle → DAMAGED
+  - `_infer_starting_situation()` filters equipment by situation
+  - Swimming/prisoner/captive → minimal equipment, no armor
+  - Prisoner/monk/pacifist → no weapons
 
 - **Vital need death checks** - Scaling death save frequency
   - `check_vital_needs()` method with priority: thirst → hunger → energy
