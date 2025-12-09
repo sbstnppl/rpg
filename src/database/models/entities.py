@@ -473,6 +473,19 @@ class NPCExtension(Base, TimestampMixin):
         comment="Traits affecting relationships: suspicious, forgiving, shy, prideful, etc.",
     )
 
+    # Companion tracking (for NPCs traveling with player)
+    is_companion: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Whether NPC is currently traveling with player (needs decay tracked)",
+    )
+    companion_since_turn: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Turn when NPC joined as companion",
+    )
+
     # Relationships
     entity: Mapped["Entity"] = relationship(back_populates="npc_extension")
 

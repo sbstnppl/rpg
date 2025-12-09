@@ -76,6 +76,7 @@ def route_after_combat(state: GameState) -> Literal["entity_extractor", "game_ma
 from src.agents.nodes.context_compiler_node import context_compiler_node
 from src.agents.nodes.game_master_node import game_master_node
 from src.agents.nodes.entity_extractor_node import entity_extractor_node
+from src.agents.nodes.npc_generator_node import npc_generator_node
 from src.agents.nodes.persistence_node import persistence_node
 from src.agents.nodes.world_simulator_node import world_simulator_node
 from src.agents.nodes.combat_resolver_node import combat_resolver_node
@@ -86,6 +87,7 @@ AGENT_NODES = {
     "context_compiler": context_compiler_node,
     "game_master": game_master_node,
     "entity_extractor": entity_extractor_node,
+    "npc_generator": npc_generator_node,
     "combat_resolver": combat_resolver_node,
     "world_simulator": world_simulator_node,
     "persistence": persistence_node,
@@ -110,6 +112,9 @@ def build_game_graph() -> StateGraph:
         v      v       v
     combat  entity   world
     resolver extractor simulator
+        |      |       |
+        |      v       |
+        |  npc_generator
         |      |       |
         v      v       v
         [converge at persistence]
@@ -158,8 +163,11 @@ def build_game_graph() -> StateGraph:
     # world_simulator -> entity_extractor
     graph.add_edge("world_simulator", "entity_extractor")
 
-    # entity_extractor -> persistence
-    graph.add_edge("entity_extractor", "persistence")
+    # entity_extractor -> npc_generator
+    graph.add_edge("entity_extractor", "npc_generator")
+
+    # npc_generator -> persistence
+    graph.add_edge("npc_generator", "persistence")
 
     # persistence -> END
     graph.add_edge("persistence", END)

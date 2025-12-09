@@ -801,3 +801,64 @@ class EntityManager(BaseManager):
 
         self.db.flush()
         return entity
+
+    # ==================== Companion Methods ====================
+
+    def set_companion_status(
+        self,
+        entity_key: str,
+        is_companion: bool,
+        turn: int | None = None,
+    ) -> Entity:
+        """Set whether an NPC is traveling with the player.
+
+        Companion NPCs have their needs tracked with time-based decay,
+        while non-companion NPCs use contextual inference for their state.
+
+        Args:
+            entity_key: Entity key.
+            is_companion: Whether NPC is now a companion.
+            turn: Turn number when status changed (used when joining).
+
+        Returns:
+            Updated Entity.
+
+        Raises:
+            ValueError: If entity not found.
+        """
+        entity = self.get_entity(entity_key)
+        if entity is None:
+            raise ValueError(f"Entity not found: {entity_key}")
+
+        # Ensure NPC extension exists
+        if entity.npc_extension is None:
+            extension = NPCExtension(entity_id=entity.id)
+            self.db.add(extension)
+            self.db.flush()
+            self.db.refresh(entity)
+
+        entity.npc_extension.is_companion = is_companion
+        if is_companion and turn is not None:
+            entity.npc_extension.companion_since_turn = turn
+        elif not is_companion:
+            entity.npc_extension.companion_since_turn = None
+
+        self.db.flush()
+        return entity
+
+    def get_companions(self) -> list[Entity]:
+        """Get all NPCs currently traveling with the player.
+
+        Returns:
+            List of entities marked as companions.
+        """
+        return (
+            self.db.query(Entity)
+            .join(NPCExtension, Entity.id == NPCExtension.entity_id)
+            .filter(
+                Entity.session_id == self.session_id,
+                Entity.is_alive == True,
+                NPCExtension.is_companion == True,
+            )
+            .all()
+        )

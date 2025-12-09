@@ -1177,3 +1177,43 @@ class NeedsManager(BaseManager):
                 })
 
         return triggered_effects
+
+    def apply_companion_time_decay(
+        self,
+        hours: float,
+        activity: ActivityType = ActivityType.ACTIVE,
+    ) -> dict[str, CharacterNeeds | None]:
+        """Apply time-based need decay to all companion NPCs.
+
+        This method should be called during time progression (e.g., world simulation)
+        to update the needs of all NPCs traveling with the player.
+
+        Args:
+            hours: In-game hours that passed.
+            activity: Type of activity during this time.
+
+        Returns:
+            Dict mapping entity_key to updated CharacterNeeds (or None if no needs record).
+        """
+        from src.managers.entity_manager import EntityManager
+
+        entity_manager = EntityManager(self.db, self.game_session)
+        companions = entity_manager.get_companions()
+
+        results: dict[str, CharacterNeeds | None] = {}
+
+        for companion in companions:
+            # Check if companion has needs record
+            needs = self.get_needs(companion.id)
+            if needs:
+                updated = self.apply_time_decay(
+                    entity_id=companion.id,
+                    hours=hours,
+                    activity=activity,
+                    is_alone=False,  # Companions are with player
+                )
+                results[companion.entity_key] = updated
+            else:
+                results[companion.entity_key] = None
+
+        return results

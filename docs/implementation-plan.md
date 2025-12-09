@@ -317,7 +317,7 @@
 ## Phase 7: Polish & Testing
 
 ### 7.1 Tests
-- [x] Test database models (1637 tests total)
+- [x] Test database models (1825 tests total)
 - [x] Test managers
 - [x] Test agent tools
 - [x] Integration tests
@@ -422,3 +422,68 @@
 - [ ] CLI commands: `world create-zone`, `world connect-zones`, `world place-location`
 - [ ] Import from YAML/JSON templates
 - [ ] Bulk zone creation for regions
+
+## Phase 9: NPC Full Character Generation
+
+### 9.1 NPC Generation Schema
+- [x] Create `src/agents/schemas/npc_generation.py`
+  - `NPCAppearance` - 12 appearance fields
+  - `NPCBackground` - backstory, occupation, personality_notes
+  - `NPCSkill` - skill_key, proficiency_level
+  - `NPCInventoryItem` - item details
+  - `NPCPreferences` - social_tendency, drive_level, food prefs
+  - `NPCInitialNeeds` - need values dict
+  - `NPCGenerationResult` - combines all above
+
+### 9.2 NPC Generator Service
+- [x] Create `src/services/npc_generator.py`
+  - `NPCGeneratorService.generate_npc()` - Main generation method
+  - `_create_entity_with_appearance()` - Entity + appearance columns
+  - `_create_npc_extension()` - NPC-specific data
+  - `_create_npc_skills()` - EntitySkill records
+  - `_create_npc_inventory()` - Item records
+  - `_create_npc_preferences()` - CharacterPreferences record
+  - `_create_npc_needs()` - CharacterNeeds record
+  - `infer_npc_initial_needs()` - Time/occupation-based inference
+  - `OCCUPATION_SKILLS` - Skill templates for 15+ occupations
+  - `OCCUPATION_INVENTORY` - Inventory templates for 15+ occupations
+
+### 9.3 NPC Generator LangGraph Node
+- [x] Create `src/agents/nodes/npc_generator_node.py`
+  - `npc_generator_node()` - Process extracted entities
+  - Filter for new NPCs only
+  - Call LLM for each NPC
+  - Graceful fallback on errors
+
+### 9.4 Prompt Template
+- [x] Create `data/templates/npc_generator.md`
+  - NPC context (name, description, traits)
+  - Game context (setting, time, scene)
+  - Occupation templates as guidance
+  - Output JSON matching schema
+
+### 9.5 Agent Integration
+- [x] Update `src/agents/state.py`
+  - Add `generated_npcs` field
+  - Add `npc_generator` to `AgentName`
+- [x] Update `src/agents/graph.py`
+  - Add npc_generator node
+  - Change edge: entity_extractor → npc_generator → persistence
+- [x] Update `src/agents/nodes/persistence_node.py`
+  - Skip pre-generated NPCs (avoid duplicates)
+
+### 9.6 Companion Tracking
+- [x] Add to `NPCExtension` model:
+  - `is_companion: bool`
+  - `companion_since_turn: int`
+- [x] Create migration `010_add_companion_tracking.py`
+- [x] Add `EntityManager.set_companion_status()` method
+- [x] Add `EntityManager.get_companions()` method
+- [x] Add `NeedsManager.apply_companion_time_decay()` method
+
+### 9.7 Tests
+- [x] Create `tests/test_services/test_npc_generator.py` (18 tests)
+  - Service method tests
+  - Needs inference tests
+  - Occupation template tests
+  - Integration tests with mocked LLM
