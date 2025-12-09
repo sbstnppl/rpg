@@ -1,17 +1,15 @@
-"""Tests for CharacterNeeds and IntimacyProfile models."""
+"""Tests for CharacterNeeds model."""
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from src.database.models.character_state import CharacterNeeds, IntimacyProfile
-from src.database.models.enums import DriveLevel, IntimacyStyle
+from src.database.models.character_state import CharacterNeeds
 from src.database.models.session import GameSession
 from tests.factories import (
     create_character_needs,
     create_entity,
     create_game_session,
-    create_intimacy_profile,
 )
 
 
@@ -182,133 +180,3 @@ class TestCharacterNeeds:
         assert "H:40" in repr_str
         assert "E:60" in repr_str
         assert "M:75" in repr_str
-
-
-class TestIntimacyProfile:
-    """Tests for IntimacyProfile model."""
-
-    def test_create_intimacy_profile_required_fields(
-        self, db_session: Session, game_session: GameSession
-    ):
-        """Verify IntimacyProfile creation with required fields."""
-        entity = create_entity(db_session, game_session)
-        profile = IntimacyProfile(
-            entity_id=entity.id,
-            session_id=game_session.id,
-        )
-        db_session.add(profile)
-        db_session.flush()
-
-        assert profile.id is not None
-        assert profile.entity_id == entity.id
-
-    def test_intimacy_profile_one_to_one(
-        self, db_session: Session, game_session: GameSession
-    ):
-        """Verify unique entity_id constraint."""
-        entity = create_entity(db_session, game_session)
-        create_intimacy_profile(db_session, game_session, entity)
-
-        with pytest.raises(IntegrityError):
-            create_intimacy_profile(db_session, game_session, entity)
-
-    def test_intimacy_drive_level_enum(
-        self, db_session: Session, game_session: GameSession
-    ):
-        """Verify DriveLevel enum storage."""
-        for drive in DriveLevel:
-            entity = create_entity(db_session, game_session)
-            profile = create_intimacy_profile(
-                db_session, game_session, entity, drive_level=drive
-            )
-            db_session.refresh(profile)
-            assert profile.drive_level == drive
-
-    def test_intimacy_style_enum(
-        self, db_session: Session, game_session: GameSession
-    ):
-        """Verify IntimacyStyle enum storage."""
-        for style in IntimacyStyle:
-            entity = create_entity(db_session, game_session)
-            profile = create_intimacy_profile(
-                db_session, game_session, entity, intimacy_style=style
-            )
-            db_session.refresh(profile)
-            assert profile.intimacy_style == style
-
-    def test_intimacy_preferences_json(
-        self, db_session: Session, game_session: GameSession
-    ):
-        """Verify attraction_preferences JSON field."""
-        entity = create_entity(db_session, game_session)
-        preferences = {
-            "gender": "any",
-            "age_range": [25, 40],
-            "traits": ["confident", "kind", "intelligent"],
-        }
-        profile = create_intimacy_profile(
-            db_session, game_session, entity, attraction_preferences=preferences
-        )
-
-        db_session.refresh(profile)
-
-        assert profile.attraction_preferences == preferences
-        assert profile.attraction_preferences["traits"] == ["confident", "kind", "intelligent"]
-
-    def test_intimacy_status_flags(
-        self, db_session: Session, game_session: GameSession
-    ):
-        """Verify has_regular_partner and is_actively_seeking flags."""
-        entity = create_entity(db_session, game_session)
-        profile = create_intimacy_profile(
-            db_session,
-            game_session,
-            entity,
-            has_regular_partner=True,
-            is_actively_seeking=False,
-        )
-
-        db_session.refresh(profile)
-
-        assert profile.has_regular_partner is True
-        assert profile.is_actively_seeking is False
-
-    def test_intimacy_drive_threshold(
-        self, db_session: Session, game_session: GameSession
-    ):
-        """Verify drive_threshold field."""
-        entity = create_entity(db_session, game_session)
-        profile = create_intimacy_profile(
-            db_session, game_session, entity, drive_threshold=70
-        )
-
-        db_session.refresh(profile)
-        assert profile.drive_threshold == 70
-
-    def test_intimacy_entity_relationship(
-        self, db_session: Session, game_session: GameSession
-    ):
-        """Verify profile has back reference to entity."""
-        entity = create_entity(db_session, game_session)
-        profile = create_intimacy_profile(db_session, game_session, entity)
-
-        assert profile.entity is not None
-        assert profile.entity.id == entity.id
-
-    def test_intimacy_repr(
-        self, db_session: Session, game_session: GameSession
-    ):
-        """Verify string representation."""
-        entity = create_entity(db_session, game_session)
-        profile = create_intimacy_profile(
-            db_session,
-            game_session,
-            entity,
-            drive_level=DriveLevel.HIGH,
-            intimacy_style=IntimacyStyle.CASUAL,
-        )
-
-        repr_str = repr(profile)
-        assert "IntimacyProfile" in repr_str
-        assert "high" in repr_str
-        assert "casual" in repr_str

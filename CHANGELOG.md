@@ -8,6 +8,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Character Memory System** - Track significant memories for emotional scene reactions
+  - New `CharacterMemory` model with subject, keywords, valence, emotion, context, intensity
+  - `MemoryType` enum: person, item, place, event, creature, concept
+  - `EmotionalValence` enum: positive, negative, mixed, neutral
+  - Alembic migration `009_add_character_memory.py`
+  - `MemoryManager` for CRUD operations, trigger tracking, keyword matching
+  - Memory extraction from backstory during character creation (rule-based)
+  - `create_character_memory()` factory function for tests
+
+- **Thirst need** - New vital need separate from hunger
+  - Added `thirst` column to `CharacterNeeds` (default 80)
+  - Added `last_drink_turn` tracking column
+  - Decay rates: active=-10, resting=-5, sleeping=-2, combat=-15 (faster than hunger)
+  - Satisfaction catalog: sip/drink/large_drink/drink_deeply actions
+  - Effects at 20/10/5 thresholds (speed, CON/WIS penalties, death saves)
+
+- **Craving system** - Stimulus-based psychological urgency for needs
+  - 5 craving columns: hunger_craving, thirst_craving, energy_craving, social_craving, intimacy_craving
+  - Formula: `effective_need = max(0, need_value - craving_value)`
+  - Cravings boost when seeing relevant stimuli (capped at 50)
+  - Cravings decay -20 per 30 minutes when stimulus removed
+  - Cravings reset on need satisfaction
+
+- **SceneInterpreter service** - Analyze scenes for character-relevant reactions
+  - Detects need stimuli (food → hunger craving, water → thirst craving)
+  - Detects memory triggers with emotional effects (grief, nostalgia, fear)
+  - Detects professional interests (fisherman notices quality rod)
+  - Returns `SceneReaction` objects with narrative hints for GM
+
+- **MemoryExtractor service** - Create memories from backstory and gameplay
+  - Async LLM-based extraction with structured prompts
+  - Sync rule-based fallback for offline/testing
+  - Backstory extraction during character creation
+  - Gameplay extraction after significant events
+
+- **Context-aware need initialization** - Starting values based on backstory
+  - `_infer_initial_needs()` analyzes backstory for context clues
+  - Hardship words → lower comfort/morale/hunger/hygiene
+  - Isolation words → lower social connection
+  - Purpose words → higher sense of purpose
+  - Age and occupation adjustments
+
+- **Vital need death checks** - Scaling death save frequency
+  - `check_vital_needs()` method with priority: thirst → hunger → energy
+  - Need < 5: hourly checks, < 3: every 30min, = 0: every turn
+  - Returns death save requirements for world simulator
+
+- **Probability-based accumulation** - Non-vital need effects
+  - `check_accumulation_effects()` for daily probability rolls
+  - Formula: `daily_chance = (100 - need_value) / 4`
+  - Effects: illness (hygiene), depression (social), etc.
+
+- **GM Tools** - New and updated tools for the Game Master LLM
+  - Added `thirst` to `satisfy_need` tool enum
+  - New `apply_stimulus` tool for scene-triggered cravings
+    - Stimulus types: food_sight, drink_sight, rest_opportunity, social_atmosphere, intimacy_trigger, memory_trigger
+    - Intensity levels: mild, moderate, strong
+    - Memory emotion parameter for morale effects
+
+- **Comprehensive test coverage** - Tests for Character Needs System Enhancement (97 new tests)
+  - `test_character_memory.py` - CharacterMemory model tests (11 tests)
+  - `test_memory_manager.py` - MemoryManager CRUD, matching, trigger tracking tests (20 tests)
+  - `test_scene_interpreter.py` - SceneInterpreter need stimuli, memory triggers, professional interest tests (29 tests)
+  - `test_character_needs_init.py` - Context-aware initialization tests (37 tests)
+
+- **Character creation wizard** - Structured wizard replacing free-form conversational creation
+  - Menu-based navigation with 6 sections: Name & Species, Appearance, Background, Personality, Attributes, Review
+  - Section-scoped conversation history prevents AI forgetting facts between sections
+  - Explicit `section_complete` JSON signals eliminate endless loops
+  - `--wizard/--conversational` flag on `rpg game start` (wizard is default)
+  - Two-tier attribute system:
+    - Hidden potential stats (rolled 4d6-drop-lowest, stored but never shown to player)
+    - Visible current stats calculated from: `Potential + Age Modifier + Occupation Modifier + Lifestyle`
+    - Natural "twist" narratives when dice rolls conflict with occupation expectations
+  - `src/services/attribute_calculator.py` - Attribute calculation service:
+    - `roll_potential_stats()` - Roll hidden potential with 4d6-drop-lowest
+    - `calculate_current_stats()` - Apply age/occupation/lifestyle modifiers
+    - `get_twist_narrative()` - Generate narrative explanations for stat anomalies
+    - Age brackets: Child, Adolescent, Young Adult, Experienced, Middle Age, Elderly
+    - Occupation modifiers for 13 professions (farmer, blacksmith, scholar, soldier, etc.)
+    - Lifestyle modifiers (malnourished, sedentary, hardship, privileged_education, etc.)
+  - New Entity model columns: `potential_strength`, `potential_dexterity`, `potential_constitution`,
+    `potential_intelligence`, `potential_wisdom`, `potential_charisma`, `occupation`, `occupation_years`
+  - Alembic migration `006_add_potential_stats.py` for new columns
+  - `WizardSectionName` enum, `WizardSection` and `CharacterWizardState` dataclasses
+  - Wizard prompt templates in `data/templates/wizard/`:
+    - `wizard_name.md`, `wizard_appearance.md`, `wizard_background.md`,
+      `wizard_personality.md`, `wizard_attributes.md`
+  - New display functions: `display_character_wizard_menu()`, `prompt_wizard_section_choice()`,
+    `display_section_header()`, `display_section_complete()`, `display_character_review()`,
+    `prompt_review_confirmation()`
+  - `_wizard_character_creation_async()` main wizard loop
+  - `_run_section_conversation()` section handler with max turn limits
+  - `_create_character_records()` updated to persist potential stats and occupation
+
 - **Game management commands** - Complete game lifecycle from `rpg game`
   - `rpg game list` - List all games with player character names
   - `rpg game delete` - Delete a game with confirmation
@@ -27,6 +122,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New display helpers: `display_game_wizard_welcome()`, `prompt_setting_choice()`, `prompt_session_name()`
   - New parsing function: `_parse_point_buy_switch()` for attribute choice handling
   - Updated `character_creator.md` template with attribute choice instructions
+
+### Removed
+- **IntimacyProfile table** - Removed duplicate table superseded by `CharacterPreferences`
+  - `IntimacyProfile` model removed from `src/database/models/character_state.py`
+  - `_create_intimacy_profile()` replaced with `_create_character_preferences()`
+  - `NeedsManager.get_intimacy_profile()` replaced with `get_preferences()`
+  - Alembic migration `007_remove_intimacy_profiles.py` drops the `intimacy_profiles` table
+  - All intimacy settings now consolidated in `CharacterPreferences` table
 
 ### Deprecated
 - **Session commands** - All `rpg session` commands now show deprecation warnings
@@ -141,6 +244,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Older turns: up to 400 chars (for context efficiency)
   - Updated GM template with clear Turn Handling section
   - Context compiler node now passes `turn_number` from state
+- **Character name extraction from conversation history** - Dead code now used
+  - `_extract_name_from_history()` was defined but never called
+  - Now used as fallback when AI mentions a name (e.g., "Finn is a...") but forgets to output JSON
+  - Fixes issue where AI would ask for character name even though it had been discussed
 
 ### Changed
 - **Normalized need semantics** - All needs now follow consistent 0=bad, 100=good pattern

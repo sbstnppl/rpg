@@ -5,8 +5,9 @@ import random
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import typer
 from rich.console import Console
@@ -30,14 +31,10 @@ from src.cli.display import (
     prompt_character_name,
 )
 from src.database.connection import get_db_session
-from src.database.models.character_state import (
-    CharacterNeeds,
-    IntimacyProfile,
-    DriveLevel,
-    IntimacyStyle,
-)
+from src.database.models.character_preferences import CharacterPreferences
+from src.database.models.character_state import CharacterNeeds
 from src.database.models.entities import Entity, EntityAttribute
-from src.database.models.enums import EntityType, VitalStatus
+from src.database.models.enums import DriveLevel, EntityType, IntimacyStyle, VitalStatus
 from src.database.models.items import Item
 from src.database.models.relationships import Relationship
 from src.database.models.session import GameSession
@@ -186,6 +183,241 @@ class CharacterCreationState:
             lines.append("\n**All required fields complete!**")
 
         return "\n".join(lines)
+
+
+# ==================== Wizard Mode Dataclasses ====================
+
+
+class WizardSectionName(str, Enum):
+    """Names of wizard sections in order."""
+
+    NAME = "name"
+    APPEARANCE = "appearance"
+    BACKGROUND = "background"
+    PERSONALITY = "personality"
+    ATTRIBUTES = "attributes"
+    REVIEW = "review"
+
+
+# Section display order
+WIZARD_SECTION_ORDER = [
+    WizardSectionName.NAME,
+    WizardSectionName.APPEARANCE,
+    WizardSectionName.BACKGROUND,
+    WizardSectionName.PERSONALITY,
+    WizardSectionName.ATTRIBUTES,
+    WizardSectionName.REVIEW,
+]
+
+# Section display names
+WIZARD_SECTION_TITLES = {
+    WizardSectionName.NAME: "Name & Species",
+    WizardSectionName.APPEARANCE: "Appearance",
+    WizardSectionName.BACKGROUND: "Background",
+    WizardSectionName.PERSONALITY: "Personality",
+    WizardSectionName.ATTRIBUTES: "Attributes",
+    WizardSectionName.REVIEW: "Review & Confirm",
+}
+
+# Required fields per section
+WIZARD_SECTION_REQUIREMENTS: dict[WizardSectionName, list[str]] = {
+    WizardSectionName.NAME: ["name"],
+    WizardSectionName.APPEARANCE: ["age", "gender", "build", "hair_color", "eye_color"],
+    WizardSectionName.BACKGROUND: ["background"],
+    WizardSectionName.PERSONALITY: ["personality_notes"],
+    WizardSectionName.ATTRIBUTES: ["attributes"],
+    WizardSectionName.REVIEW: [],  # No fields, just confirmation
+}
+
+
+@dataclass
+class WizardSection:
+    """Tracks state of a single wizard section.
+
+    Each section has its own conversation history to prevent
+    context pollution between sections.
+    """
+
+    name: WizardSectionName
+    status: Literal["not_started", "in_progress", "complete"] = "not_started"
+    conversation_history: list[str] = field(default_factory=list)
+
+    # Section-specific extracted data
+    data: dict = field(default_factory=dict)
+
+    def is_complete(self, character_state: "CharacterCreationState") -> bool:
+        """Check if this section's requirements are met.
+
+        Args:
+            character_state: The overall character state to check against.
+
+        Returns:
+            True if all required fields for this section are filled.
+        """
+        requirements = WIZARD_SECTION_REQUIREMENTS.get(self.name, [])
+
+        for field_name in requirements:
+            if field_name == "attributes":
+                # Special case: attributes is a dict
+                if not character_state.attributes:
+                    return False
+            else:
+                value = getattr(character_state, field_name, None)
+                if value is None or value == "":
+                    return False
+
+        return True
+
+    def get_missing_fields(self, character_state: "CharacterCreationState") -> list[str]:
+        """Get list of fields still needed for this section.
+
+        Args:
+            character_state: The overall character state to check against.
+
+        Returns:
+            List of field names that are not yet filled.
+        """
+        missing = []
+        requirements = WIZARD_SECTION_REQUIREMENTS.get(self.name, [])
+
+        for field_name in requirements:
+            if field_name == "attributes":
+                if not character_state.attributes:
+                    missing.append(field_name)
+            else:
+                value = getattr(character_state, field_name, None)
+                if value is None or value == "":
+                    missing.append(field_name)
+
+        return missing
+
+
+@dataclass
+class CharacterWizardState:
+    """Tracks the overall state of the wizard-based character creation.
+
+    Manages section navigation and aggregates character data.
+    """
+
+    # Section states
+    sections: dict[WizardSectionName, WizardSection] = field(default_factory=dict)
+
+    # Current section being edited
+    current_section: WizardSectionName | None = None
+
+    # The actual character data being built
+    character: CharacterCreationState = field(default_factory=CharacterCreationState)
+
+    # Hidden potential stats (rolled, never shown to player)
+    potential_stats: dict[str, int] | None = None
+
+    # Extracted occupation for attribute calculation
+    occupation: str | None = None
+    occupation_years: int | None = None
+
+    # Lifestyle tags extracted from background
+    lifestyles: list[str] = field(default_factory=list)
+
+    def __post_init__(self):
+        """Initialize all sections if not already done."""
+        if not self.sections:
+            for section_name in WIZARD_SECTION_ORDER:
+                self.sections[section_name] = WizardSection(name=section_name)
+
+    def get_section_status(
+        self, section_name: WizardSectionName
+    ) -> Literal["not_started", "in_progress", "complete"]:
+        """Get the status of a section.
+
+        Args:
+            section_name: The section to check.
+
+        Returns:
+            Status string.
+        """
+        section = self.sections.get(section_name)
+        if section is None:
+            return "not_started"
+
+        # Check actual completion based on character state
+        if section.is_complete(self.character):
+            return "complete"
+        elif section.status == "in_progress" or section.conversation_history:
+            return "in_progress"
+        return "not_started"
+
+    def get_next_incomplete_section(self) -> WizardSectionName | None:
+        """Get the next section that needs to be completed.
+
+        Returns:
+            Next incomplete section name, or None if all complete.
+        """
+        for section_name in WIZARD_SECTION_ORDER:
+            # Skip review - it's always last and doesn't have requirements
+            if section_name == WizardSectionName.REVIEW:
+                continue
+            if self.get_section_status(section_name) != "complete":
+                return section_name
+        return WizardSectionName.REVIEW
+
+    def is_ready_for_review(self) -> bool:
+        """Check if all sections except review are complete.
+
+        Returns:
+            True if character can proceed to review.
+        """
+        for section_name in WIZARD_SECTION_ORDER:
+            if section_name == WizardSectionName.REVIEW:
+                continue
+            if self.get_section_status(section_name) != "complete":
+                return False
+        return True
+
+    def get_completed_data_summary(self) -> str:
+        """Generate a summary of all completed character data.
+
+        Used to provide context to section prompts.
+
+        Returns:
+            Formatted summary string.
+        """
+        lines = []
+
+        if self.character.name:
+            lines.append(f"Name: {self.character.name}")
+        if self.character.species:
+            lines.append(f"Species: {self.character.species}")
+        if self.character.age:
+            lines.append(f"Age: {self.character.age}")
+        if self.character.gender:
+            lines.append(f"Gender: {self.character.gender}")
+        if self.character.build:
+            lines.append(f"Build: {self.character.build}")
+        if self.character.hair_color:
+            hair = self.character.hair_color
+            if self.character.hair_style:
+                hair = f"{self.character.hair_style} {hair}"
+            lines.append(f"Hair: {hair}")
+        if self.character.eye_color:
+            lines.append(f"Eyes: {self.character.eye_color}")
+        if self.character.background:
+            # Truncate for context
+            bg = self.character.background
+            if len(bg) > 200:
+                bg = bg[:200] + "..."
+            lines.append(f"Background: {bg}")
+        if self.occupation:
+            occ = self.occupation
+            if self.occupation_years:
+                occ += f" ({self.occupation_years} years)"
+            lines.append(f"Occupation: {occ}")
+        if self.character.personality_notes:
+            lines.append(f"Personality: {self.character.personality_notes}")
+        if self.character.attributes:
+            attrs = ", ".join(f"{k.upper()[:3]}:{v}" for k, v in self.character.attributes.items())
+            lines.append(f"Attributes: {attrs}")
+
+        return "\n".join(lines) if lines else "No data yet."
 
 
 def _get_active_session(db) -> GameSession | None:
@@ -480,6 +712,105 @@ def slugify(name: str) -> str:
     return re.sub(r"\s+", "_", cleaned.strip())
 
 
+def _infer_initial_needs(
+    backstory: str = "",
+    age: int | None = None,
+    occupation: str | None = None,
+) -> dict[str, int]:
+    """Infer starting need values from character context.
+
+    Uses keyword-based heuristics to set context-appropriate initial values
+    instead of arbitrary defaults.
+
+    Args:
+        backstory: Character's backstory text.
+        age: Character's age.
+        occupation: Character's occupation.
+
+    Returns:
+        Dictionary of need_name -> initial_value (0-100).
+    """
+    # Start with reasonable defaults
+    needs = {
+        "hunger": 80,
+        "thirst": 80,
+        "energy": 80,
+        "hygiene": 80,
+        "comfort": 70,
+        "wellness": 100,
+        "social_connection": 50,
+        "morale": 70,
+        "sense_of_purpose": 60,
+        "intimacy": 80,
+    }
+
+    backstory_lower = backstory.lower() if backstory else ""
+
+    # Adjust based on backstory context
+    # Hardship indicators -> lower comfort/morale
+    hardship_words = ["escaped", "fled", "lost", "disaster", "homeless", "poor", "starving"]
+    if any(word in backstory_lower for word in hardship_words):
+        needs["comfort"] = max(30, needs["comfort"] - 30)
+        needs["morale"] = max(40, needs["morale"] - 20)
+        needs["hunger"] = max(40, needs["hunger"] - 30)
+        needs["thirst"] = max(50, needs["thirst"] - 20)
+        needs["hygiene"] = max(40, needs["hygiene"] - 30)
+
+    # Isolation indicators -> lower social
+    isolation_words = ["alone", "solitary", "hermit", "isolated", "exile", "wanderer", "loner"]
+    if any(word in backstory_lower for word in isolation_words):
+        needs["social_connection"] = max(20, needs["social_connection"] - 30)
+
+    # Social/community indicators -> higher social
+    social_words = ["family", "friends", "community", "beloved", "popular", "well-liked"]
+    if any(word in backstory_lower for word in social_words):
+        needs["social_connection"] = min(80, needs["social_connection"] + 20)
+
+    # Purpose indicators -> higher sense of purpose
+    purpose_words = ["mission", "destiny", "quest", "calling", "duty", "sworn", "devoted"]
+    if any(word in backstory_lower for word in purpose_words):
+        needs["sense_of_purpose"] = min(90, needs["sense_of_purpose"] + 25)
+
+    # Trauma indicators -> lower morale, potentially lower wellness
+    trauma_words = ["traumatic", "nightmare", "haunted", "wounded", "scarred", "injured"]
+    if any(word in backstory_lower for word in trauma_words):
+        needs["morale"] = max(40, needs["morale"] - 20)
+        needs["wellness"] = max(70, needs["wellness"] - 20)
+
+    # Comfortable life indicators -> higher comfort
+    comfort_words = ["wealthy", "noble", "privileged", "comfortable", "luxurious", "pampered"]
+    if any(word in backstory_lower for word in comfort_words):
+        needs["comfort"] = min(95, needs["comfort"] + 20)
+        needs["hygiene"] = min(95, needs["hygiene"] + 10)
+
+    # Age-based adjustments
+    if age:
+        if age < 18:
+            # Young -> more energy, higher social needs
+            needs["energy"] = min(95, needs["energy"] + 10)
+            needs["social_connection"] = min(70, needs["social_connection"] + 10)
+        elif age > 60:
+            # Elderly -> less energy, potentially lower intimacy drive
+            needs["energy"] = max(60, needs["energy"] - 15)
+            needs["intimacy"] = min(90, needs["intimacy"] + 10)  # More content
+
+    # Occupation-based adjustments
+    if occupation:
+        occupation_lower = occupation.lower()
+        # Physical jobs start well-fed and hydrated (workers eat/drink)
+        if occupation_lower in ["farmer", "smith", "soldier", "miner", "laborer"]:
+            needs["hunger"] = min(90, needs["hunger"] + 5)
+            needs["thirst"] = min(90, needs["thirst"] + 5)
+        # Scholarly/indoor jobs -> potentially lower energy
+        if occupation_lower in ["scholar", "scribe", "wizard", "librarian"]:
+            needs["energy"] = max(70, needs["energy"] - 5)
+        # Social jobs -> higher social satisfaction
+        if occupation_lower in ["merchant", "innkeeper", "bard", "diplomat"]:
+            needs["social_connection"] = min(75, needs["social_connection"] + 15)
+
+    return needs
+
+
 def _create_character_records(
     db: Session,
     game_session: GameSession,
@@ -487,6 +818,9 @@ def _create_character_records(
     attributes: dict[str, int],
     background: str = "",
     creation_state: CharacterCreationState | None = None,
+    potential_stats: dict[str, int] | None = None,
+    occupation: str | None = None,
+    occupation_years: int | None = None,
 ) -> Entity:
     """Create all database records for a new character.
 
@@ -497,6 +831,10 @@ def _create_character_records(
         attributes: Dict of attribute_key to value.
         background: Optional background text.
         creation_state: Optional full state from AI-assisted creation.
+        potential_stats: Hidden potential stats from wizard mode (e.g.,
+            {"strength": 14, "dexterity": 12, ...}). Stored but never shown.
+        occupation: Character's occupation (e.g., "blacksmith", "farmer").
+        occupation_years: Years spent in the occupation.
 
     Returns:
         Created Entity.
@@ -550,6 +888,21 @@ def _create_character_records(
         if creation_state.hidden_backstory:
             entity.hidden_backstory = creation_state.hidden_backstory
 
+    # Apply occupation (from wizard mode)
+    if occupation:
+        entity.occupation = occupation
+    if occupation_years is not None:
+        entity.occupation_years = occupation_years
+
+    # Apply hidden potential stats (from wizard mode)
+    if potential_stats:
+        entity.potential_strength = potential_stats.get("strength")
+        entity.potential_dexterity = potential_stats.get("dexterity")
+        entity.potential_constitution = potential_stats.get("constitution")
+        entity.potential_intelligence = potential_stats.get("intelligence")
+        entity.potential_wisdom = potential_stats.get("wisdom")
+        entity.potential_charisma = potential_stats.get("charisma")
+
     db.add(entity)
     db.flush()
 
@@ -563,20 +916,26 @@ def _create_character_records(
         )
         db.add(attr)
 
-    # Create character needs with defaults
+    # Create character needs with context-aware values
     # All needs: 0 = bad (action required), 100 = good (no action needed)
+    initial_needs = _infer_initial_needs(
+        backstory=background,
+        age=entity.age,
+        occupation=entity.occupation,
+    )
     needs = CharacterNeeds(
         session_id=game_session.id,
         entity_id=entity.id,
-        hunger=80,
-        energy=80,
-        hygiene=80,
-        comfort=70,
-        wellness=100,
-        social_connection=50,
-        morale=70,
-        sense_of_purpose=60,
-        intimacy=80,
+        hunger=initial_needs.get("hunger", 80),
+        thirst=initial_needs.get("thirst", 80),
+        energy=initial_needs.get("energy", 80),
+        hygiene=initial_needs.get("hygiene", 80),
+        comfort=initial_needs.get("comfort", 70),
+        wellness=initial_needs.get("wellness", 100),
+        social_connection=initial_needs.get("social_connection", 50),
+        morale=initial_needs.get("morale", 70),
+        sense_of_purpose=initial_needs.get("sense_of_purpose", 60),
+        intimacy=initial_needs.get("intimacy", 80),
     )
     db.add(needs)
 
@@ -594,7 +953,59 @@ def _create_character_records(
     db.add(vital)
 
     db.flush()
+
+    # Extract memories from backstory (synchronous, rule-based)
+    if background or (creation_state and creation_state.hidden_backstory):
+        _extract_backstory_memories(
+            db=db,
+            game_session=game_session,
+            entity_id=entity.id,
+            backstory=background or "",
+            hidden_backstory=(
+                creation_state.hidden_backstory if creation_state else ""
+            ) or "",
+        )
+
     return entity
+
+
+def _extract_backstory_memories(
+    db: Session,
+    game_session: GameSession,
+    entity_id: int,
+    backstory: str,
+    hidden_backstory: str = "",
+) -> None:
+    """Extract significant memories from backstory and create CharacterMemory records.
+
+    Uses rule-based extraction (no LLM required) to identify potential memories
+    from the character's backstory.
+
+    Args:
+        db: Database session.
+        game_session: Game session.
+        entity_id: The character entity ID.
+        backstory: Visible backstory text.
+        hidden_backstory: Hidden backstory (GM secrets).
+    """
+    from src.services.memory_extractor import MemoryExtractor
+
+    extractor = MemoryExtractor(db, game_session)
+
+    # Use synchronous rule-based extraction
+    extracted = extractor.extract_from_backstory_sync(
+        entity_id=entity_id,
+        backstory=backstory,
+        hidden_backstory=hidden_backstory,
+    )
+
+    # Create database records
+    if extracted:
+        extractor.create_memories_from_extracted(
+            entity_id=entity_id,
+            extracted=extracted,
+            source="backstory",
+        )
 
 
 def _create_starting_equipment(
@@ -1167,33 +1578,38 @@ def _create_world_from_extraction(
         console.print(f"[dim]Created {len(created_entities)} backstory connections[/dim]")
 
 
-def _create_intimacy_profile(
+def _create_character_preferences(
     db: Session,
     game_session: GameSession,
     entity: Entity,
-) -> IntimacyProfile:
-    """Create intimacy profile with default values.
+) -> CharacterPreferences:
+    """Create character preferences with default values.
+
+    This creates the consolidated preferences record that includes
+    intimacy, food, drink, social, and stamina preferences.
 
     Args:
         db: Database session.
         game_session: Game session.
-        entity: The entity to create profile for.
+        entity: The entity to create preferences for.
 
     Returns:
-        Created IntimacyProfile.
+        Created CharacterPreferences.
     """
-    profile = IntimacyProfile(
+    prefs = CharacterPreferences(
         session_id=game_session.id,
         entity_id=entity.id,
+        # Intimacy defaults (previously in IntimacyProfile)
         drive_level=DriveLevel.MODERATE,
         drive_threshold=50,
         intimacy_style=IntimacyStyle.EMOTIONAL,
         has_regular_partner=False,
         is_actively_seeking=False,
+        # Other defaults are set by model
     )
-    db.add(profile)
+    db.add(prefs)
     db.flush()
-    return profile
+    return prefs
 
 
 def _parse_attribute_suggestion(response: str) -> dict[str, int] | None:
@@ -1835,6 +2251,13 @@ When they provide information, output field_updates JSON to record it."""
                     state.name = extracted_name
                     console.print(f"[dim green]Saved: name ({extracted_name})[/dim green]")
 
+            # Also try extracting name from conversation history (when AI uses name but forgets JSON)
+            if not state.name:
+                extracted_name = _extract_name_from_history(state.conversation_history)
+                if extracted_name:
+                    state.name = extracted_name
+                    console.print(f"[dim green]Saved: name ({extracted_name})[/dim green]")
+
             # Also check for old-style suggested_attributes (backward compatibility)
             suggested = _parse_attribute_suggestion(ai_response)
             if suggested and not state.attributes:
@@ -2044,8 +2467,8 @@ def create(
                 schema=schema,
             )
 
-            # Create intimacy profile with defaults
-            _create_intimacy_profile(db, game_session, entity)
+            # Create character preferences with defaults
+            _create_character_preferences(db, game_session, entity)
 
             # If AI-assisted, extract world data and infer gameplay fields
             if ai_assisted and creation_state:
@@ -2090,3 +2513,447 @@ def create(
         except ValueError as e:
             display_error(str(e))
             raise typer.Exit(1)
+
+
+# ==================== Wizard Mode Implementation ====================
+
+
+def _load_wizard_template(section_name: str) -> str:
+    """Load a wizard section prompt template.
+
+    Args:
+        section_name: Name of the section (e.g., "name", "appearance").
+
+    Returns:
+        Template string, or empty string if not found.
+    """
+    template_path = (
+        Path(__file__).parent.parent.parent.parent
+        / "data"
+        / "templates"
+        / "wizard"
+        / f"wizard_{section_name}.md"
+    )
+    if template_path.exists():
+        return template_path.read_text()
+    return ""
+
+
+def _parse_wizard_response(response: str) -> tuple[dict | None, dict | None, bool]:
+    """Parse AI response for field updates and section completion.
+
+    Args:
+        response: AI response text.
+
+    Returns:
+        Tuple of (field_updates dict, section_data dict, section_complete bool).
+    """
+    field_updates = None
+    section_data = None
+    section_complete = False
+
+    # Look for field_updates JSON
+    field_match = re.search(
+        r'```json\s*\n?\s*\{["\']?field_updates["\']?\s*:\s*(\{[^}]+\})\s*\}\s*```',
+        response,
+        re.DOTALL,
+    )
+    if field_match:
+        try:
+            field_updates = json.loads(field_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Look for section_complete JSON
+    complete_match = re.search(
+        r'```json\s*\n?\s*\{[^}]*["\']?section_complete["\']?\s*:\s*true[^}]*\}',
+        response,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if complete_match:
+        section_complete = True
+        # Try to extract data from the same block
+        data_match = re.search(
+            r'```json\s*\n?\s*(\{[^`]+\})\s*```',
+            response,
+            re.DOTALL,
+        )
+        if data_match:
+            try:
+                parsed = json.loads(_strip_json_comments(data_match.group(1)))
+                section_data = parsed.get("data", {})
+            except json.JSONDecodeError:
+                pass
+
+    return field_updates, section_data, section_complete
+
+
+async def _run_section_conversation(
+    wizard_state: CharacterWizardState,
+    section_name: WizardSectionName,
+    schema: SettingSchema,
+    session_id: int | None = None,
+) -> bool:
+    """Run a conversation loop for a single wizard section.
+
+    Args:
+        wizard_state: The overall wizard state.
+        section_name: Which section to run.
+        schema: Setting schema.
+        session_id: Optional session ID for logging.
+
+    Returns:
+        True if section completed successfully, False if cancelled.
+    """
+    from src.llm.factory import get_cheap_provider
+    from src.llm.message_types import Message, MessageRole
+    from src.cli.display import (
+        display_section_header,
+        display_section_complete,
+        display_ai_message,
+        prompt_ai_input,
+    )
+
+    provider = get_cheap_provider()
+    section = wizard_state.sections[section_name]
+    section.status = "in_progress"
+
+    # Load template
+    template = _load_wizard_template(section_name.value)
+    if not template:
+        display_error(f"Template not found for section: {section_name.value}")
+        return False
+
+    # Display section header
+    title = WIZARD_SECTION_TITLES.get(section_name, section_name.value.title())
+    display_section_header(title)
+
+    # Get available species for name section
+    available_species = "Human only"  # Default
+    if hasattr(schema, 'species') and schema.species:
+        available_species = ", ".join(schema.species)
+
+    # Section-specific context preparation
+    extra_context = {}
+    if section_name == WizardSectionName.ATTRIBUTES:
+        # For attributes, we need to roll potential and calculate current
+        from src.services.attribute_calculator import (
+            roll_potential_stats,
+            calculate_current_stats,
+            AttributeCalculator,
+        )
+
+        # Roll potential if not already done
+        if wizard_state.potential_stats is None:
+            potential = roll_potential_stats()
+            wizard_state.potential_stats = potential.to_dict()
+
+        # Calculate current stats
+        current = calculate_current_stats(
+            potential=wizard_state.potential_stats,
+            age=wizard_state.character.age or 25,
+            occupation=wizard_state.occupation or "commoner",
+            occupation_years=wizard_state.occupation_years,
+            lifestyles=wizard_state.lifestyles,
+        )
+
+        # Store calculated attributes
+        wizard_state.character.attributes = current.to_dict()
+
+        # Get twist narratives
+        twists = AttributeCalculator.get_twist_narrative(
+            current, wizard_state.occupation or "commoner"
+        )
+
+        # Format for template
+        attrs_display = "\n".join(
+            f"- {name.title()}: {value}"
+            for name, value in current.to_dict().items()
+        )
+        attrs_narrative = f"Based on {wizard_state.character.name}'s background as a {wizard_state.occupation or 'commoner'}, these attributes reflect their life experience."
+        twist_text = "\n".join(f"- {stat}: {text}" for stat, text in twists.items()) if twists else "No significant twists."
+
+        extra_context = {
+            "attributes_display": attrs_display,
+            "attributes_narrative": attrs_narrative,
+            "twist_narratives": twist_text,
+            "attributes_json": json.dumps(current.to_dict()),
+        }
+
+    # Initial greeting for new sections
+    if not section.conversation_history:
+        initial_prompt = template.format(
+            setting_name=schema.name,
+            setting_description=f"{schema.name.title()} setting",
+            completed_data_summary=wizard_state.get_completed_data_summary(),
+            available_species=available_species,
+            section_conversation_history="[First turn - greet the player]",
+            player_input="[Starting section]",
+            **extra_context,
+        )
+
+        try:
+            messages = [Message(role=MessageRole.USER, content=initial_prompt)]
+            response = await provider.complete(messages)
+            display_ai_message(_strip_json_blocks(response.content))
+            section.conversation_history.append(f"Assistant: {response.content}")
+        except Exception as e:
+            display_error(f"AI error: {e}")
+            return False
+
+    # Conversation loop
+    max_turns = 10
+    for turn in range(max_turns):
+        player_input = prompt_ai_input()
+
+        if player_input.lower() in ("quit", "exit", "cancel", "back", "menu"):
+            display_info("Returning to menu...")
+            return False
+
+        section.conversation_history.append(f"Player: {player_input}")
+
+        # Build prompt
+        prompt = template.format(
+            setting_name=schema.name,
+            setting_description=f"{schema.name.title()} setting",
+            completed_data_summary=wizard_state.get_completed_data_summary(),
+            available_species=available_species,
+            section_conversation_history="\n".join(section.conversation_history[-8:]),
+            player_input=player_input,
+            **extra_context,
+        )
+
+        try:
+            messages = [Message(role=MessageRole.USER, content=prompt)]
+            response = await provider.complete(messages)
+            ai_response = response.content
+
+            section.conversation_history.append(f"Assistant: {ai_response}")
+
+            # Parse response
+            field_updates, section_data, section_complete = _parse_wizard_response(ai_response)
+
+            # Display response (without JSON)
+            display_ai_message(_strip_json_blocks(ai_response))
+
+            # Apply field updates
+            if field_updates:
+                _apply_wizard_field_updates(wizard_state, section_name, field_updates)
+                captured = ", ".join(field_updates.keys())
+                console.print(f"[dim green]Saved: {captured}[/dim green]")
+
+            # Handle section completion
+            if section_complete:
+                if section_data:
+                    _apply_wizard_section_data(wizard_state, section_name, section_data)
+                section.status = "complete"
+                display_section_complete(title)
+                return True
+
+        except Exception as e:
+            display_error(f"AI error: {e}")
+            continue
+
+    # Max turns reached
+    display_info("Section taking too long. Returning to menu...")
+    return False
+
+
+def _apply_wizard_field_updates(
+    wizard_state: CharacterWizardState,
+    section_name: WizardSectionName,
+    updates: dict,
+) -> None:
+    """Apply field updates from AI response to wizard state.
+
+    Args:
+        wizard_state: Wizard state to update.
+        section_name: Current section.
+        updates: Dict of field_name -> value.
+    """
+    char = wizard_state.character
+
+    # Map field names to character state
+    field_mapping = {
+        "name": "name",
+        "species": "species",
+        "age": "age",
+        "gender": "gender",
+        "build": "build",
+        "hair_color": "hair_color",
+        "hair_style": "hair_style",
+        "eye_color": "eye_color",
+        "skin_tone": "skin_tone",
+        "background": "background",
+        "personality_notes": "personality_notes",
+    }
+
+    for key, value in updates.items():
+        if key in field_mapping:
+            setattr(char, field_mapping[key], value)
+        elif key == "attributes" and isinstance(value, dict):
+            char.attributes = value
+        elif key == "occupation":
+            wizard_state.occupation = value
+        elif key == "occupation_years":
+            wizard_state.occupation_years = value
+        elif key == "lifestyles" and isinstance(value, list):
+            wizard_state.lifestyles = value
+
+
+def _apply_wizard_section_data(
+    wizard_state: CharacterWizardState,
+    section_name: WizardSectionName,
+    data: dict,
+) -> None:
+    """Apply section completion data to wizard state.
+
+    Args:
+        wizard_state: Wizard state to update.
+        section_name: Completed section.
+        data: Section data dict from AI.
+    """
+    char = wizard_state.character
+
+    # Apply all fields from data
+    for key, value in data.items():
+        if key == "hidden_backstory":
+            char.hidden_backstory = value
+        elif key == "occupation":
+            wizard_state.occupation = value
+        elif key == "occupation_years":
+            wizard_state.occupation_years = value
+        elif key == "lifestyles" and isinstance(value, list):
+            wizard_state.lifestyles = value
+        elif key == "attributes" and isinstance(value, dict):
+            char.attributes = value
+        elif hasattr(char, key):
+            setattr(char, key, value)
+
+
+async def _wizard_character_creation_async(
+    schema: SettingSchema,
+    session_id: int | None = None,
+) -> CharacterWizardState | None:
+    """Run the wizard-based character creation flow.
+
+    Args:
+        schema: Setting schema.
+        session_id: Optional session ID for logging.
+
+    Returns:
+        CharacterWizardState with completed character, or None if cancelled.
+    """
+    from src.cli.display import (
+        display_character_wizard_menu,
+        prompt_wizard_section_choice,
+        display_character_review,
+        prompt_review_confirmation,
+    )
+
+    # Set audit context
+    set_audit_context(session_id=session_id, call_type="character_wizard")
+
+    # Initialize wizard state
+    wizard_state = CharacterWizardState()
+
+    console.print("\n[bold magenta]Character Creation Wizard[/bold magenta]")
+    console.print("[dim]Complete each section to create your character.[/dim]")
+    console.print("[dim]Type 'back' or 'menu' during any section to return here.[/dim]\n")
+
+    while True:
+        # Build section statuses
+        statuses = {
+            section.value: wizard_state.get_section_status(section)
+            for section in WIZARD_SECTION_ORDER
+        }
+        titles = {
+            section.value: title
+            for section, title in WIZARD_SECTION_TITLES.items()
+        }
+        order = [section.value for section in WIZARD_SECTION_ORDER]
+
+        # Display menu
+        display_character_wizard_menu(statuses, titles, order)
+
+        # Check if ready for review
+        can_review = wizard_state.is_ready_for_review()
+
+        # Get user choice
+        choice = prompt_wizard_section_choice(order, can_review)
+
+        if choice == 'q':
+            display_info("Character creation cancelled.")
+            return None
+
+        # Convert choice to section name
+        section_idx = choice - 1 if isinstance(choice, int) else len(order) - 1
+        section_name = WIZARD_SECTION_ORDER[section_idx]
+
+        # Handle review section
+        if section_name == WizardSectionName.REVIEW:
+            if not can_review:
+                display_error("Complete all sections before review.")
+                continue
+
+            # Show character review
+            char = wizard_state.character
+            hair_desc = char.hair_color
+            if char.hair_style:
+                hair_desc = f"{char.hair_style} {char.hair_color}"
+
+            display_character_review(
+                name=char.name or "Unknown",
+                species=char.species,
+                age=char.age,
+                gender=char.gender,
+                build=char.build,
+                hair_description=hair_desc,
+                eye_color=char.eye_color,
+                background=char.background,
+                occupation=wizard_state.occupation,
+                personality=char.personality_notes,
+                attributes=char.attributes,
+            )
+
+            # Confirm or edit
+            result = prompt_review_confirmation()
+            if result == 'confirm':
+                console.print("\n[bold green]Character creation complete![/bold green]")
+                return wizard_state
+            elif result == 'quit':
+                display_info("Character creation cancelled.")
+                return None
+            # 'edit' continues the loop
+
+        else:
+            # Run section conversation
+            completed = await _run_section_conversation(
+                wizard_state=wizard_state,
+                section_name=section_name,
+                schema=schema,
+                session_id=session_id,
+            )
+
+            if completed:
+                # Auto-advance to next section if appropriate
+                next_section = wizard_state.get_next_incomplete_section()
+                if next_section and next_section != WizardSectionName.REVIEW:
+                    console.print(f"[dim]Moving to next section: {WIZARD_SECTION_TITLES[next_section]}[/dim]")
+
+
+def wizard_character_creation(
+    schema: SettingSchema,
+    session_id: int | None = None,
+) -> CharacterWizardState | None:
+    """Synchronous wrapper for wizard character creation.
+
+    Args:
+        schema: Setting schema.
+        session_id: Optional session ID for logging.
+
+    Returns:
+        CharacterWizardState with completed character, or None if cancelled.
+    """
+    import asyncio
+    return asyncio.run(_wizard_character_creation_async(schema, session_id))

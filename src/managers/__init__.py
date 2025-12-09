@@ -11,6 +11,7 @@ from src.managers.grief import GriefManager, GriefStageInfo
 from src.managers.injuries import ActivityImpact, InjuryManager, InjuryRecoveryTime
 from src.managers.item_manager import ItemManager
 from src.managers.location_manager import LocationManager
+from src.managers.memory_manager import MemoryManager
 from src.managers.needs import ActivityType, NeedDecayRates, NeedEffect, NeedsManager
 from src.managers.relationship_manager import (
     PersonalityModifiers,
@@ -37,6 +38,8 @@ __all__ = [
     "NeedEffect",
     "NeedDecayRates",
     "ActivityType",
+    # Memory
+    "MemoryManager",
     # Injuries
     "InjuryManager",
     "ActivityImpact",

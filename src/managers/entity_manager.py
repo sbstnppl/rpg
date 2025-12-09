@@ -709,3 +709,95 @@ class EntityManager(BaseManager):
             **kwargs,
         )
         return entity, True
+
+    # ==================== Potential Stats Methods ====================
+
+    def set_potential_stats(
+        self,
+        entity_key: str,
+        potential_stats: dict[str, int],
+    ) -> Entity:
+        """Set hidden potential stats for an entity.
+
+        Args:
+            entity_key: Entity key.
+            potential_stats: Dict of potential stat values.
+                Valid keys: strength, dexterity, constitution,
+                intelligence, wisdom, charisma.
+
+        Returns:
+            Updated Entity.
+
+        Raises:
+            ValueError: If entity not found or invalid stat name.
+        """
+        entity = self.get_entity(entity_key)
+        if entity is None:
+            raise ValueError(f"Entity not found: {entity_key}")
+
+        valid_stats = {
+            "strength", "dexterity", "constitution",
+            "intelligence", "wisdom", "charisma",
+        }
+        for stat, value in potential_stats.items():
+            if stat not in valid_stats:
+                raise ValueError(f"Invalid potential stat: {stat}")
+            setattr(entity, f"potential_{stat}", value)
+
+        self.db.flush()
+        return entity
+
+    def get_potential_stats(self, entity_key: str) -> dict[str, int | None]:
+        """Get hidden potential stats for an entity.
+
+        Args:
+            entity_key: Entity key.
+
+        Returns:
+            Dict of potential stat values (may contain None for unset stats).
+
+        Raises:
+            ValueError: If entity not found.
+        """
+        entity = self.get_entity(entity_key)
+        if entity is None:
+            raise ValueError(f"Entity not found: {entity_key}")
+
+        return {
+            "strength": entity.potential_strength,
+            "dexterity": entity.potential_dexterity,
+            "constitution": entity.potential_constitution,
+            "intelligence": entity.potential_intelligence,
+            "wisdom": entity.potential_wisdom,
+            "charisma": entity.potential_charisma,
+        }
+
+    def set_occupation(
+        self,
+        entity_key: str,
+        occupation: str,
+        years: int | None = None,
+    ) -> Entity:
+        """Set occupation for an entity.
+
+        Args:
+            entity_key: Entity key.
+            occupation: Occupation name (e.g., 'blacksmith', 'farmer').
+            years: Years spent in the occupation.
+
+        Returns:
+            Updated Entity.
+
+        Raises:
+            ValueError: If entity not found.
+        """
+        entity = self.get_entity(entity_key)
+        if entity is None:
+            raise ValueError(f"Entity not found: {entity_key}")
+
+        entity.occupation = occupation
+        if years is not None:
+            entity.occupation_years = years
+
+        self.db.flush()
+        return entity

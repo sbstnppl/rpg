@@ -140,6 +140,51 @@ class Entity(Base, TimestampMixin):
         comment="Secret backstory elements (destiny, hidden powers) - never shown to player",
     )
 
+    # Hidden potential stats (innate genetic gifts, rolled randomly, never shown to player)
+    # Used for character growth mechanics - current stats are calculated from these
+    potential_strength: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Innate strength potential (hidden from player)",
+    )
+    potential_dexterity: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Innate dexterity potential (hidden from player)",
+    )
+    potential_constitution: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Innate constitution potential (hidden from player)",
+    )
+    potential_intelligence: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Innate intelligence potential (hidden from player)",
+    )
+    potential_wisdom: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Innate wisdom potential (hidden from player)",
+    )
+    potential_charisma: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Innate charisma potential (hidden from player)",
+    )
+
+    # Occupation data for attribute calculation
+    occupation: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Primary occupation/profession (e.g., 'blacksmith', 'farmer', 'scholar')",
+    )
+    occupation_years: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Years spent in the occupation (affects attribute modifiers)",
+    )
+
     # Status
     is_alive: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

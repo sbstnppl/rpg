@@ -771,3 +771,246 @@ def prompt_session_name(default: str = "New Adventure") -> str:
         f"[bold cyan]What would you like to call this adventure? ({default}): [/bold cyan]"
     ).strip()
     return name if name else default
+
+
+# ==================== Character Creation Wizard Display ====================
+
+
+def display_character_wizard_menu(
+    section_statuses: dict[str, str],
+    section_titles: dict[str, str],
+    section_order: list[str],
+) -> None:
+    """Display the character creation wizard menu.
+
+    Args:
+        section_statuses: Dict of section_name -> status ("not_started", "in_progress", "complete")
+        section_titles: Dict of section_name -> display title
+        section_order: List of section names in display order
+    """
+    console.print()
+
+    # Build the menu content
+    lines = []
+    for i, section_name in enumerate(section_order, 1):
+        title = section_titles.get(section_name, section_name.title())
+        status = section_statuses.get(section_name, "not_started")
+
+        # Status indicator
+        if status == "complete":
+            status_text = "[green][✓][/green]"
+        elif status == "in_progress":
+            status_text = "[yellow][~][/yellow]"
+        else:
+            status_text = "[dim][ ][/dim]"
+
+        lines.append(f"  [cyan][{i}][/cyan] {title:<20} {status_text}")
+
+    content = "\n".join(lines)
+
+    panel = Panel(
+        content,
+        title="[bold cyan]Character Creation[/bold cyan]",
+        border_style="cyan",
+        padding=(1, 2),
+    )
+    console.print(panel)
+    console.print()
+
+
+def prompt_wizard_section_choice(
+    section_order: list[str],
+    can_review: bool = False,
+) -> int | str:
+    """Prompt user to select a wizard section.
+
+    Args:
+        section_order: List of section names in order.
+        can_review: Whether the review option is available.
+
+    Returns:
+        Section index (1-based) or 'q' for quit.
+    """
+    num_sections = len(section_order)
+
+    while True:
+        prompt = f"[bold cyan]Select section (1-{num_sections})"
+        if can_review:
+            prompt += ", or [r]eview"
+        prompt += ", or [q]uit: [/bold cyan]"
+
+        choice = console.input(prompt).strip().lower()
+
+        if choice == 'q':
+            return 'q'
+
+        if choice == 'r' and can_review:
+            # Return the index of review section
+            return num_sections  # Review is always last
+
+        try:
+            idx = int(choice)
+            if 1 <= idx <= num_sections:
+                return idx
+            console.print(f"[red]Please enter a number between 1 and {num_sections}[/red]")
+        except ValueError:
+            console.print("[red]Invalid choice. Enter a number, 'r' for review, or 'q' to quit.[/red]")
+
+
+def display_section_header(section_title: str) -> None:
+    """Display header when entering a wizard section.
+
+    Args:
+        section_title: Display title of the section.
+    """
+    console.print()
+    console.print(Panel(
+        f"[bold]{section_title}[/bold]",
+        style="cyan",
+        padding=(0, 2),
+    ))
+    console.print()
+
+
+def display_section_complete(section_title: str) -> None:
+    """Display message when section is completed.
+
+    Args:
+        section_title: Display title of the section.
+    """
+    console.print()
+    console.print(f"[green]✓ {section_title} complete![/green]")
+    console.print()
+
+
+def display_character_review(
+    name: str,
+    species: str | None,
+    age: int | None,
+    gender: str | None,
+    build: str | None,
+    hair_description: str | None,
+    eye_color: str | None,
+    background: str | None,
+    occupation: str | None,
+    personality: str | None,
+    attributes: dict[str, int] | None,
+) -> None:
+    """Display the full character review before confirmation.
+
+    Args:
+        name: Character name.
+        species: Species (e.g., "human", "elf").
+        age: Age in years.
+        gender: Gender.
+        build: Body build.
+        hair_description: Hair color/style.
+        eye_color: Eye color.
+        background: Backstory summary.
+        occupation: Primary occupation.
+        personality: Personality traits.
+        attributes: Dict of attribute name -> value.
+    """
+    console.print()
+
+    # Identity section
+    identity_lines = [f"[bold]{name}[/bold]"]
+    if species and species.lower() != "human":
+        identity_lines[0] += f" ({species})"
+    if age:
+        identity_lines.append(f"Age: {age}")
+    if gender:
+        identity_lines.append(f"Gender: {gender}")
+
+    # Appearance section
+    appearance_parts = []
+    if build:
+        appearance_parts.append(f"{build} build")
+    if hair_description:
+        appearance_parts.append(f"{hair_description} hair")
+    if eye_color:
+        appearance_parts.append(f"{eye_color} eyes")
+
+    # Attributes table
+    if attributes:
+        attr_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 1))
+        attr_table.add_column("Stat", style="cyan")
+        attr_table.add_column("Value", justify="right")
+
+        for attr_name in ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]:
+            value = attributes.get(attr_name, "?")
+            # Color code by value
+            if isinstance(value, int):
+                if value >= 14:
+                    val_style = "green"
+                elif value <= 8:
+                    val_style = "red"
+                else:
+                    val_style = "white"
+            else:
+                val_style = "dim"
+            attr_table.add_row(attr_name.upper()[:3], f"[{val_style}]{value}[/{val_style}]")
+
+    # Build the review panel
+    content = "\n".join(identity_lines)
+    if appearance_parts:
+        content += f"\n\n[dim]Appearance:[/dim] {', '.join(appearance_parts)}"
+    if occupation:
+        content += f"\n[dim]Occupation:[/dim] {occupation}"
+    if background:
+        bg_preview = background[:300] + "..." if len(background) > 300 else background
+        content += f"\n\n[dim]Background:[/dim]\n{bg_preview}"
+    if personality:
+        content += f"\n\n[dim]Personality:[/dim] {personality}"
+
+    panel = Panel(
+        content,
+        title="[bold cyan]Character Review[/bold cyan]",
+        border_style="cyan",
+        padding=(1, 2),
+    )
+    console.print(panel)
+
+    # Attributes as separate table
+    if attributes:
+        console.print()
+        console.print("[dim]Attributes:[/dim]")
+        console.print(attr_table)
+
+    console.print()
+
+
+def prompt_review_confirmation() -> str:
+    """Prompt user to confirm or edit character.
+
+    Returns:
+        'confirm' to proceed, 'edit' to go back, 'quit' to cancel.
+    """
+    console.print("[dim]Ready to begin your adventure?[/dim]")
+    console.print()
+    console.print("  [cyan][1][/cyan] Start adventure")
+    console.print("  [cyan][2][/cyan] Edit character")
+    console.print("  [cyan][q][/cyan] Cancel")
+    console.print()
+
+    while True:
+        choice = console.input("[bold cyan]Your choice: [/bold cyan]").strip().lower()
+
+        if choice in ('1', 'y', 'yes', 'start', 's'):
+            return 'confirm'
+        elif choice in ('2', 'e', 'edit'):
+            return 'edit'
+        elif choice in ('q', 'quit', 'cancel'):
+            return 'quit'
+        else:
+            console.print("[red]Please enter 1, 2, or q[/red]")
+
+
+def display_wizard_ai_thinking() -> None:
+    """Display thinking indicator for AI processing."""
+    console.print("[dim]Thinking...[/dim]", end="\r")
+
+
+def clear_wizard_ai_thinking() -> None:
+    """Clear the thinking indicator."""
+    console.print(" " * 20, end="\r")  # Clear the line

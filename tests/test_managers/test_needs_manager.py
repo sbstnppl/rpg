@@ -3,7 +3,8 @@
 import pytest
 from sqlalchemy.orm import Session
 
-from src.database.models.character_state import CharacterNeeds, IntimacyProfile
+from src.database.models.character_state import CharacterNeeds
+from src.database.models.character_preferences import CharacterPreferences
 from src.database.models.enums import DriveLevel
 from src.database.models.session import GameSession
 from src.managers.needs import ActivityType, NeedsManager
@@ -11,8 +12,8 @@ from src.database.models.character_preferences import NeedAdaptation, NeedModifi
 from src.database.models.enums import ModifierSource
 from tests.factories import (
     create_character_needs,
+    create_character_preferences,
     create_entity,
-    create_intimacy_profile,
     create_need_modifier,
     create_need_adaptation,
 )
@@ -72,28 +73,28 @@ class TestNeedsManagerBasics:
         assert result.id == needs.id
         assert result.hunger == 75
 
-    def test_get_intimacy_profile_returns_none_when_missing(
+    def test_get_preferences_returns_none_when_missing(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify get_intimacy_profile returns None when not exists."""
+        """Verify get_preferences returns None when not exists."""
         entity = create_entity(db_session, game_session)
         manager = NeedsManager(db_session, game_session)
 
-        result = manager.get_intimacy_profile(entity.id)
+        result = manager.get_preferences(entity.id)
 
         assert result is None
 
-    def test_get_intimacy_profile_returns_existing(
+    def test_get_preferences_returns_existing(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify get_intimacy_profile returns existing profile."""
+        """Verify get_preferences returns existing CharacterPreferences."""
         entity = create_entity(db_session, game_session)
-        profile = create_intimacy_profile(
+        prefs = create_character_preferences(
             db_session, game_session, entity, drive_level=DriveLevel.HIGH
         )
         manager = NeedsManager(db_session, game_session)
 
-        result = manager.get_intimacy_profile(entity.id)
+        result = manager.get_preferences(entity.id)
 
         assert result is not None
         assert result.drive_level == DriveLevel.HIGH
@@ -210,7 +211,7 @@ class TestNeedsDecay:
         """Verify intimacy decreases based on drive level (0=desperate, 100=content)."""
         entity = create_entity(db_session, game_session)
         create_character_needs(db_session, game_session, entity, intimacy=80)
-        create_intimacy_profile(
+        create_character_preferences(
             db_session, game_session, entity, drive_level=DriveLevel.HIGH
         )
         manager = NeedsManager(db_session, game_session)
@@ -765,7 +766,7 @@ class TestDecayWithModifiers:
             source_detail="age_10",
             max_intensity_cap=20,
         )
-        create_intimacy_profile(
+        create_character_preferences(
             db_session, game_session, entity, drive_level=DriveLevel.HIGH
         )
         manager = NeedsManager(db_session, game_session)

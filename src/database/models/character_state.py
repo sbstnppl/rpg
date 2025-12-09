@@ -1,22 +1,17 @@
-"""Character state models (needs, intimacy profile)."""
+"""Character state models (needs)."""
 
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     DateTime,
-    Enum,
-    Float,
     ForeignKey,
     Integer,
-    JSON,
-    String,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.models.base import Base, TimestampMixin
-from src.database.models.enums import DriveLevel, IntimacyStyle
 
 if TYPE_CHECKING:
     from src.database.models.entities import Entity
@@ -46,6 +41,11 @@ class CharacterNeeds(Base, TimestampMixin):
         default=50,
         nullable=False,
         comment="0=starving, 50=satisfied, 100=stuffed. Optimal: 30-70",
+    )
+    thirst: Mapped[int] = mapped_column(
+        default=80,
+        nullable=False,
+        comment="0=dehydrated, 50=satisfied, 100=well-hydrated. Optimal: 40-80",
     )
     energy: Mapped[int] = mapped_column(
         default=80,
@@ -92,13 +92,43 @@ class CharacterNeeds(Base, TimestampMixin):
         comment="0=desperate, 100=content. Intimacy fulfillment level.",
     )
 
-    # Timestamps for decay calculation
+    # === CRAVING MODIFIERS (temporary psychological urgency) ===
+    # Cravings intensify when encountering relevant stimuli (seeing food, etc.)
+    # Formula: effective_need = max(0, need_value - craving_value)
+    hunger_craving: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+        comment="Temporary hunger urgency boost from stimuli (0-100)",
+    )
+    thirst_craving: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+        comment="Temporary thirst urgency boost from stimuli (0-100)",
+    )
+    energy_craving: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+        comment="Temporary fatigue urgency boost from stimuli (0-100)",
+    )
+    social_craving: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+        comment="Temporary social urgency boost from stimuli (0-100)",
+    )
+    intimacy_craving: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+        comment="Temporary intimacy urgency boost from stimuli (0-100)",
+    )
+
+    # Timestamps for decay calculation and deduplication
     last_updated: Mapped[datetime] = mapped_column(
         DateTime,
         default=func.now(),
         nullable=False,
     )
     last_meal_turn: Mapped[int | None] = mapped_column(nullable=True)
+    last_drink_turn: Mapped[int | None] = mapped_column(nullable=True)
     last_sleep_turn: Mapped[int | None] = mapped_column(nullable=True)
     last_bath_turn: Mapped[int | None] = mapped_column(nullable=True)
     last_social_turn: Mapped[int | None] = mapped_column(nullable=True)
@@ -110,71 +140,35 @@ class CharacterNeeds(Base, TimestampMixin):
     def __repr__(self) -> str:
         return (
             f"<CharacterNeeds entity={self.entity_id} "
-            f"H:{self.hunger} E:{self.energy} M:{self.morale}>"
+            f"H:{self.hunger} T:{self.thirst} E:{self.energy} M:{self.morale}>"
         )
 
+    def get_effective_need(self, need_name: str) -> int:
+        """Get effective need value accounting for craving modifier.
 
-class IntimacyProfile(Base, TimestampMixin):
-    """Intimacy preferences and drive characteristics."""
+        The effective need is the perceived urgency, which may be higher
+        than the actual physiological state due to cravings triggered by stimuli.
 
-    __tablename__ = "intimacy_profiles"
+        Args:
+            need_name: Name of the need (hunger, thirst, energy, social_connection, intimacy)
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    entity_id: Mapped[int] = mapped_column(
-        ForeignKey("entities.id", ondelete="CASCADE"),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
-    session_id: Mapped[int] = mapped_column(
-        ForeignKey("game_sessions.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
+        Returns:
+            Effective need value (0-100), where lower = more urgent
+        """
+        need_value = getattr(self, need_name, 0)
 
-    # Drive characteristics
-    drive_level: Mapped[DriveLevel] = mapped_column(
-        Enum(DriveLevel, values_callable=lambda obj: [e.value for e in obj]),
-        default=DriveLevel.MODERATE,
-        nullable=False,
-        comment="Affects intimacy need decay rate",
-    )
-    drive_threshold: Mapped[int] = mapped_column(
-        default=50,
-        nullable=False,
-        comment="When need triggers behavior (0-100)",
-    )
+        # Map need names to their craving fields
+        craving_map = {
+            "hunger": "hunger_craving",
+            "thirst": "thirst_craving",
+            "energy": "energy_craving",
+            "social_connection": "social_craving",
+            "intimacy": "intimacy_craving",
+        }
 
-    # Preferences
-    intimacy_style: Mapped[IntimacyStyle] = mapped_column(
-        Enum(IntimacyStyle, values_callable=lambda obj: [e.value for e in obj]),
-        default=IntimacyStyle.EMOTIONAL,
-        nullable=False,
-        comment="casual, emotional, monogamous, polyamorous",
-    )
+        craving_field = craving_map.get(need_name)
+        if craving_field:
+            craving_value = getattr(self, craving_field, 0)
+            return max(0, need_value - craving_value)
 
-    # Attraction preferences (for AI to use in matchmaking)
-    attraction_preferences: Mapped[dict | None] = mapped_column(
-        JSON,
-        nullable=True,
-        comment="Preferred traits: {gender: any, age_range: [25,40], traits: [confident, kind]}",
-    )
-
-    # Current status
-    has_regular_partner: Mapped[bool] = mapped_column(
-        default=False,
-        nullable=False,
-    )
-    is_actively_seeking: Mapped[bool] = mapped_column(
-        default=False,
-        nullable=False,
-    )
-
-    # Relationships
-    entity: Mapped["Entity"] = relationship(foreign_keys=[entity_id])
-
-    def __repr__(self) -> str:
-        return (
-            f"<IntimacyProfile entity={self.entity_id} "
-            f"drive={self.drive_level.value} style={self.intimacy_style.value}>"
-        )
+        return need_value

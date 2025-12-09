@@ -82,6 +82,7 @@ class GMToolExecutor:
             "get_npc_attitude": self._execute_get_npc_attitude,
             "update_npc_attitude": self._execute_update_npc_attitude,
             "satisfy_need": self._execute_satisfy_need,
+            "apply_stimulus": self._execute_apply_stimulus,
             "check_route": self._execute_check_route,
             "start_travel": self._execute_start_travel,
             "move_to_zone": self._execute_move_to_zone,
@@ -399,6 +400,102 @@ class GMToolExecutor:
             "new_value": new_value,
             "delta": new_value - old_value,
         }
+
+    def _execute_apply_stimulus(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Apply a stimulus effect to character needs (craving boost).
+
+        Args:
+            args: Tool arguments with entity_key, stimulus_type, stimulus_description,
+                  intensity, memory_emotion.
+
+        Returns:
+            Result with need affected, craving boost applied, and effects.
+        """
+        from src.managers.needs import NeedsManager
+
+        entity_key = args["entity_key"]
+        stimulus_type = args["stimulus_type"]
+        stimulus_description = args["stimulus_description"]
+        intensity = args.get("intensity", "moderate")
+        memory_emotion = args.get("memory_emotion")
+
+        # Get entity
+        entity = self._get_entity_by_key(entity_key)
+        if entity is None:
+            return {"error": f"Entity '{entity_key}' not found"}
+
+        # Map intensity to relevance factor
+        intensity_map = {
+            "mild": 0.3,
+            "moderate": 0.6,
+            "strong": 0.9,
+        }
+        relevance = intensity_map.get(intensity, 0.6)
+
+        # Map stimulus type to need
+        stimulus_to_need = {
+            "food_sight": "hunger",
+            "drink_sight": "thirst",
+            "rest_opportunity": "energy",
+            "social_atmosphere": "social_connection",
+            "intimacy_trigger": "intimacy",
+            "memory_trigger": None,  # Affects morale, not a specific need
+        }
+
+        need_affected = stimulus_to_need.get(stimulus_type)
+        needs_mgr = NeedsManager(self.db, self.game_session)
+
+        result: dict[str, Any] = {
+            "entity_key": entity_key,
+            "stimulus_type": stimulus_type,
+            "stimulus_description": stimulus_description,
+            "intensity": intensity,
+        }
+
+        if need_affected:
+            # Apply craving boost to the need
+            craving_boost = needs_mgr.apply_craving(entity.id, need_affected, relevance)
+            result["need_affected"] = need_affected
+            result["craving_boost"] = craving_boost
+            result["message"] = (
+                f"Applied {intensity} {stimulus_type} stimulus. "
+                f"{need_affected} craving boosted by {craving_boost}."
+            )
+        elif stimulus_type == "memory_trigger":
+            # Memory triggers affect morale directly
+            # Negative emotions reduce morale, positive ones boost it
+            needs = needs_mgr.get_needs(entity.id)
+            if needs:
+                negative_emotions = ["grief", "fear", "anger", "shame", "guilt", "sadness"]
+                positive_emotions = ["joy", "pride", "love", "nostalgia", "hope"]
+
+                morale_change = 0
+                if memory_emotion:
+                    emotion_lower = memory_emotion.lower()
+                    if any(neg in emotion_lower for neg in negative_emotions):
+                        morale_change = -int(relevance * 15)  # Up to -15 morale
+                    elif any(pos in emotion_lower for pos in positive_emotions):
+                        morale_change = int(relevance * 10)  # Up to +10 morale
+
+                if morale_change != 0:
+                    old_morale = needs.morale
+                    needs.morale = max(0, min(100, needs.morale + morale_change))
+                    self.db.flush()
+
+                    result["memory_emotion"] = memory_emotion
+                    result["morale_change"] = morale_change
+                    result["old_morale"] = old_morale
+                    result["new_morale"] = needs.morale
+                    result["message"] = (
+                        f"Memory trigger ({memory_emotion}) affected morale: "
+                        f"{old_morale} → {needs.morale}."
+                    )
+                else:
+                    result["message"] = f"Memory trigger noted but had no mechanical effect."
+        else:
+            result["message"] = f"Unknown stimulus type: {stimulus_type}"
+
+        return result
 
     # =========================================================================
     # Navigation Tool Handlers

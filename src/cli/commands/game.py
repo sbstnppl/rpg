@@ -94,14 +94,17 @@ def _get_available_settings() -> list[dict]:
 def start(
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Session name"),
     setting: Optional[str] = typer.Option(None, "--setting", help="Setting (fantasy, contemporary, scifi)"),
+    wizard: bool = typer.Option(True, "--wizard/--conversational", help="Use wizard mode (default) or conversational AI"),
 ) -> None:
     """Start a new game with guided setup wizard.
 
     Creates a new session and guides you through character creation
     in one seamless flow, then starts the game.
+
+    Use --conversational for the old freeform AI character creation style.
     """
     try:
-        asyncio.run(_start_wizard_async(name, setting))
+        asyncio.run(_start_wizard_async(name, setting, use_wizard=wizard))
     except KeyboardInterrupt:
         display_info("\nWizard cancelled. No changes were saved.")
 
@@ -109,6 +112,7 @@ def start(
 async def _start_wizard_async(
     preset_name: str | None = None,
     preset_setting: str | None = None,
+    use_wizard: bool = True,
 ) -> None:
     """Run the full game start wizard.
 
@@ -117,13 +121,16 @@ async def _start_wizard_async(
     Args:
         preset_name: Optional preset session name (skips prompt).
         preset_setting: Optional preset setting (skips prompt).
+        use_wizard: If True, use step-by-step wizard; if False, use conversational AI.
     """
     from src.cli.commands.character import (
         CharacterCreationState,
+        CharacterWizardState,
         _ai_character_creation_async,
+        _wizard_character_creation_async,
         _create_character_records,
         _create_starting_equipment,
-        _create_intimacy_profile,
+        _create_character_preferences,
         _extract_world_data,
         _create_world_from_extraction,
         _infer_gameplay_fields,
@@ -156,7 +163,24 @@ async def _start_wizard_async(
     schema = get_setting_schema(selected_setting)
 
     console.print()  # Spacing before character creation
-    creation_state = await _ai_character_creation_async(schema, session_id=None)
+
+    # Use wizard or conversational mode
+    if use_wizard:
+        wizard_state = await _wizard_character_creation_async(schema, session_id=None)
+        if wizard_state is None:
+            display_info("Character creation cancelled.")
+            return
+        # Convert wizard state to creation state for compatibility
+        creation_state = wizard_state.character
+        # Store potential stats and occupation for later
+        potential_stats = wizard_state.potential_stats
+        occupation = wizard_state.occupation
+        occupation_years = wizard_state.occupation_years
+    else:
+        creation_state = await _ai_character_creation_async(schema, session_id=None)
+        potential_stats = None
+        occupation = None
+        occupation_years = None
 
     if not creation_state or not creation_state.is_complete():
         display_error("Character creation was not completed.")
@@ -198,6 +222,9 @@ async def _start_wizard_async(
             attributes=creation_state.attributes,
             background=creation_state.background or "",
             creation_state=creation_state,
+            potential_stats=potential_stats,
+            occupation=occupation,
+            occupation_years=occupation_years,
         )
 
         # Create starting equipment
@@ -208,8 +235,8 @@ async def _start_wizard_async(
             schema=schema,
         )
 
-        # Create intimacy profile
-        _create_intimacy_profile(db, game_session, entity)
+        # Create character preferences (includes intimacy settings)
+        _create_character_preferences(db, game_session, entity)
 
         # Extract world data (NPCs, locations from backstory)
         console.print("[dim]Extracting world from backstory...[/dim]")

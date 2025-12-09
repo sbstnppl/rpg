@@ -363,3 +363,28 @@ class PlacementType(str, Enum):
     WITHIN = "within"  # Fully inside the zone
     EDGE = "edge"  # At zone boundary
     LANDMARK = "landmark"  # Visible from afar
+
+
+# =============================================================================
+# Character Memory Enums
+# =============================================================================
+
+
+class MemoryType(str, Enum):
+    """Types of memorable elements that can trigger emotional reactions."""
+
+    PERSON = "person"  # Mother, friend, enemy, mentor
+    ITEM = "item"  # Mother's hat, heirloom sword, childhood toy
+    PLACE = "place"  # Hometown, battlefield, childhood home
+    EVENT = "event"  # House fire, wedding, battle
+    CREATURE = "creature"  # Red chicken, pet dog, monster that attacked
+    CONCEPT = "concept"  # War, love, betrayal, magic
+
+
+class EmotionalValence(str, Enum):
+    """Emotional quality/direction of the memory."""
+
+    POSITIVE = "positive"  # Joy, love, pride, gratitude
+    NEGATIVE = "negative"  # Grief, fear, shame, anger
+    MIXED = "mixed"  # Bittersweet, complex feelings
+    NEUTRAL = "neutral"  # Curious, interesting but not emotional

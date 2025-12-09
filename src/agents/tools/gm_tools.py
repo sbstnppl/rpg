@@ -254,6 +254,7 @@ SATISFY_NEED_TOOL = ToolDefinition(
             description="Which need is being satisfied",
             enum=[
                 "hunger",
+                "thirst",
                 "energy",
                 "hygiene",
                 "comfort",
@@ -472,6 +473,59 @@ DISCOVER_LOCATION_TOOL = ToolDefinition(
 )
 
 
+# Apply Stimulus Tool
+APPLY_STIMULUS_TOOL = ToolDefinition(
+    name="apply_stimulus",
+    description=(
+        "Apply a stimulus effect to a character's needs when describing scenes that "
+        "would trigger cravings or emotional reactions. Use when the scene contains "
+        "something that would naturally make a character crave something: seeing food "
+        "when hungry, seeing a comfortable bed when tired, seeing something that "
+        "reminds them of a painful memory. The stimulus creates a craving boost that "
+        "makes the need feel more urgent than its actual physiological level."
+    ),
+    parameters=[
+        ToolParameter(
+            name="entity_key",
+            param_type="string",
+            description="Entity key of the character affected (e.g., 'player', 'npc_guard')",
+        ),
+        ToolParameter(
+            name="stimulus_type",
+            param_type="string",
+            description="What kind of stimulus is affecting the character",
+            enum=[
+                "food_sight",  # Seeing/smelling food
+                "drink_sight",  # Seeing drinks/water
+                "rest_opportunity",  # Seeing bed/rest area
+                "social_atmosphere",  # Warm social environment
+                "intimacy_trigger",  # Romantic/attractive presence
+                "memory_trigger",  # Something triggering a memory
+            ],
+        ),
+        ToolParameter(
+            name="stimulus_description",
+            param_type="string",
+            description="Brief description of the stimulus (e.g., 'a plate of fresh roast chicken', 'a wide-brimmed straw hat')",
+        ),
+        ToolParameter(
+            name="intensity",
+            param_type="string",
+            description="How strongly this affects the character",
+            required=False,
+            enum=["mild", "moderate", "strong"],
+            default="moderate",
+        ),
+        ToolParameter(
+            name="memory_emotion",
+            param_type="string",
+            description="For memory triggers: the emotion evoked (grief, nostalgia, fear, joy, etc.)",
+            required=False,
+        ),
+    ],
+)
+
+
 # All GM tools
 GM_TOOLS = [
     SKILL_CHECK_TOOL,
@@ -480,6 +534,7 @@ GM_TOOLS = [
     GET_NPC_ATTITUDE_TOOL,
     UPDATE_NPC_ATTITUDE_TOOL,
     SATISFY_NEED_TOOL,
+    APPLY_STIMULUS_TOOL,
     CHECK_ROUTE_TOOL,
     START_TRAVEL_TOOL,
     MOVE_TO_ZONE_TOOL,

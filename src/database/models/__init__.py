@@ -9,6 +9,7 @@ from src.database.models.enums import (
     DayOfWeek,
     DiscoveryMethod,
     DriveLevel,
+    EmotionalValence,
     EncounterFrequency,
     EntityType,
     FactCategory,
@@ -19,6 +20,7 @@ from src.database.models.enums import (
     ItemCondition,
     ItemType,
     MapType,
+    MemoryType,
     MentalConditionType,
     ModifierSource,
     PlacementType,
@@ -46,7 +48,8 @@ from src.database.models.tasks import Appointment, Quest, QuestStage, Task
 from src.database.models.world import Fact, Location, Schedule, TimeState, WorldEvent
 
 # New models for realism system
-from src.database.models.character_state import CharacterNeeds, IntimacyProfile
+from src.database.models.character_state import CharacterNeeds
+from src.database.models.character_memory import CharacterMemory
 from src.database.models.character_preferences import (
     CharacterPreferences,
     NeedAdaptation,
@@ -97,6 +100,9 @@ __all__ = [
     "AlcoholTolerance",
     "SocialTendency",
     "ModifierSource",
+    # Character memory enums
+    "MemoryType",
+    "EmotionalValence",
     # Session
     "GameSession",
     "Turn",
@@ -125,7 +131,8 @@ __all__ = [
     "QuestStage",
     # Character state (new)
     "CharacterNeeds",
-    "IntimacyProfile",
+    # Character memory (new)
+    "CharacterMemory",
     # Character preferences (new)
     "CharacterPreferences",
     "NeedModifier",

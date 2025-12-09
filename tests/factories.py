@@ -14,6 +14,7 @@ from src.database.models.enums import (
     DayOfWeek,
     DiscoveryMethod,
     DriveLevel,
+    EmotionalValence,
     EncounterFrequency,
     EntityType,
     FactCategory,
@@ -24,6 +25,7 @@ from src.database.models.enums import (
     ItemCondition,
     ItemType,
     MapType,
+    MemoryType,
     MentalConditionType,
     ModifierSource,
     PlacementType,
@@ -48,7 +50,8 @@ from src.database.models.relationships import Relationship, RelationshipChange
 from src.database.models.items import Item, StorageLocation
 from src.database.models.world import Fact, Location, Schedule, TimeState, WorldEvent
 from src.database.models.tasks import Appointment, Quest, QuestStage, Task
-from src.database.models.character_state import CharacterNeeds, IntimacyProfile
+from src.database.models.character_state import CharacterNeeds
+from src.database.models.character_memory import CharacterMemory
 from src.database.models.character_preferences import (
     CharacterPreferences,
     NeedAdaptation,
@@ -538,6 +541,7 @@ def create_character_needs(
         "session_id": game_session.id,
         "entity_id": entity.id,
         "hunger": 80,
+        "thirst": 80,
         "energy": 80,
         "hygiene": 80,
         "comfort": 70,
@@ -546,34 +550,18 @@ def create_character_needs(
         "morale": 70,
         "sense_of_purpose": 60,
         "intimacy": 80,
+        # Craving modifiers (default to 0)
+        "hunger_craving": 0,
+        "thirst_craving": 0,
+        "energy_craving": 0,
+        "social_craving": 0,
+        "intimacy_craving": 0,
     }
     defaults.update(overrides)
     needs = CharacterNeeds(**defaults)
     db.add(needs)
     db.flush()
     return needs
-
-
-def create_intimacy_profile(
-    db: Session,
-    game_session: GameSession,
-    entity: Entity,
-    **overrides: Any,
-) -> IntimacyProfile:
-    """Create an IntimacyProfile with sensible defaults."""
-    defaults = {
-        "session_id": game_session.id,
-        "entity_id": entity.id,
-        "drive_level": DriveLevel.MODERATE,
-        "intimacy_style": IntimacyStyle.EMOTIONAL,
-        "has_regular_partner": False,
-        "is_actively_seeking": False,
-    }
-    defaults.update(overrides)
-    profile = IntimacyProfile(**defaults)
-    db.add(profile)
-    db.flush()
-    return profile
 
 
 # =============================================================================
@@ -989,3 +977,37 @@ def create_digital_map_access(
     db.add(access)
     db.flush()
     return access
+
+
+# =============================================================================
+# Character Memory Factories
+# =============================================================================
+
+
+def create_character_memory(
+    db: Session,
+    game_session: GameSession,
+    entity: Entity,
+    **overrides: Any,
+) -> CharacterMemory:
+    """Create a CharacterMemory with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "entity_id": entity.id,
+        "subject": "mother's hat",
+        "subject_type": MemoryType.ITEM,
+        "keywords": ["hat", "wide-brimmed", "straw"],
+        "valence": EmotionalValence.NEGATIVE,
+        "emotion": "grief",
+        "context": "Mother wore this hat every summer before she died.",
+        "source": "backstory",
+        "intensity": 7,
+        "created_turn": None,
+        "last_triggered_turn": None,
+        "trigger_count": 0,
+    }
+    defaults.update(overrides)
+    memory = CharacterMemory(**defaults)
+    db.add(memory)
+    db.flush()
+    return memory

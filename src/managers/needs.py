@@ -11,7 +11,7 @@ from src.database.models.character_preferences import (
     NeedAdaptation,
     NeedModifier,
 )
-from src.database.models.character_state import CharacterNeeds, IntimacyProfile
+from src.database.models.character_state import CharacterNeeds
 from src.database.models.entities import Entity
 from src.database.models.enums import DriveLevel, IntimacyStyle, ModifierSource, SocialTendency
 from src.database.models.session import GameSession
@@ -56,6 +56,8 @@ class NeedDecayRates:
 DECAY_RATES: dict[str, NeedDecayRates] = {
     # Hunger: 0=starving, 100=stuffed. Decreases over time.
     "hunger": NeedDecayRates(active=-6, resting=-3, sleeping=-1, combat=-6),
+    # Thirst: 0=dehydrated, 100=well-hydrated. Decays faster than hunger (vital).
+    "thirst": NeedDecayRates(active=-10, resting=-5, sleeping=-2, combat=-15),
     # Energy: 0=exhausted, 100=energized. Decreases with activity.
     "energy": NeedDecayRates(active=-12, resting=5, sleeping=15, combat=-20),
     # Hygiene: 0=filthy, 100=clean. Decreases over time.
@@ -94,6 +96,12 @@ ACTION_SATISFACTION_CATALOG: dict[str, dict[str, int]] = {
         "full_meal": 40, "meal": 40, "dinner": 40,
         "feast": 65, "gorge": 65, "banquet": 65,
         "ration": 15, "trail_ration": 15,
+    },
+    "thirst": {
+        "sip": 8, "small_drink": 8, "taste": 5,
+        "drink": 25, "water": 25, "ale": 25, "tea": 25, "juice": 25,
+        "large_drink": 45, "gulp": 45, "chug": 45,
+        "drink_deeply": 70, "quench": 70, "drain": 70,
     },
     "energy": {
         "quick_nap": 15, "nap": 15, "doze": 15,
@@ -308,13 +316,20 @@ class NeedsManager(BaseManager):
             self.db.flush()
         return needs
 
-    def get_intimacy_profile(self, entity_id: int) -> IntimacyProfile | None:
-        """Get intimacy profile for an entity."""
+    def get_preferences(self, entity_id: int) -> CharacterPreferences | None:
+        """Get character preferences for an entity.
+
+        Args:
+            entity_id: Entity to get preferences for.
+
+        Returns:
+            CharacterPreferences or None if not found.
+        """
         return (
-            self.db.query(IntimacyProfile)
+            self.db.query(CharacterPreferences)
             .filter(
-                IntimacyProfile.entity_id == entity_id,
-                IntimacyProfile.session_id == self.session_id,
+                CharacterPreferences.entity_id == entity_id,
+                CharacterPreferences.session_id == self.session_id,
             )
             .first()
         )
@@ -369,9 +384,9 @@ class NeedsManager(BaseManager):
 
         # Handle intimacy separately (daily decay based on drive)
         # Intimacy decreases over time (0 = desperate, 100 = content)
-        profile = self.get_intimacy_profile(entity_id)
-        if profile:
-            daily_rate = INTIMACY_DAILY_DECAY.get(profile.drive_level, 5)
+        prefs = self.get_preferences(entity_id)
+        if prefs:
+            daily_rate = INTIMACY_DAILY_DECAY.get(prefs.drive_level, 5)
             # Apply decay multiplier for intimacy too
             decay_multiplier = self.get_decay_multiplier(entity_id, "intimacy")
             hourly_rate = (daily_rate / 24) * decay_multiplier
@@ -395,6 +410,14 @@ class NeedsManager(BaseManager):
             morale_modifier -= 20
         elif needs.hunger < 30:
             morale_modifier -= 10
+
+        # Thirst effects on morale (vital - affects morale significantly)
+        if needs.thirst < 5:
+            morale_modifier -= 25
+        elif needs.thirst < 15:
+            morale_modifier -= 15
+        elif needs.thirst < 30:
+            morale_modifier -= 5
 
         # Energy effects on morale (low energy = exhausted)
         if needs.energy < 20:
@@ -473,6 +496,7 @@ class NeedsManager(BaseManager):
         # Track last satisfaction turn
         turn_tracking = {
             "hunger": "last_meal_turn",
+            "thirst": "last_drink_turn",
             "energy": "last_sleep_turn",
             "hygiene": "last_bath_turn",
             "social_connection": "last_social_turn",
@@ -480,6 +504,17 @@ class NeedsManager(BaseManager):
         }
         if need_name in turn_tracking and turn is not None:
             setattr(needs, turn_tracking[need_name], turn)
+
+        # Reset craving when need is satisfied
+        craving_map = {
+            "hunger": "hunger_craving",
+            "thirst": "thirst_craving",
+            "energy": "energy_craving",
+            "social_connection": "social_craving",
+            "intimacy": "intimacy_craving",
+        }
+        if need_name in craving_map:
+            setattr(needs, craving_map[need_name], 0)
 
         self.db.flush()
         return needs
@@ -514,6 +549,40 @@ class NeedsManager(BaseManager):
                     description="Very hungry - weakened",
                     stat_penalties={"STR": -1, "DEX": -1},
                     morale_modifier=-10,
+                )
+            )
+
+        # Thirst effects (vital - more severe than hunger)
+        if needs.thirst < 5:
+            effects.append(
+                NeedEffect(
+                    need_name="thirst",
+                    threshold_name="severely_dehydrated",
+                    description="Severely dehydrated - death imminent",
+                    stat_penalties={"CON": -4, "WIS": -4, "STR": -2},
+                    morale_modifier=-25,
+                    special_effects={"death_save_required": 1.0, "movement_penalty": 0.5},
+                )
+            )
+        elif needs.thirst < 15:
+            effects.append(
+                NeedEffect(
+                    need_name="thirst",
+                    threshold_name="dehydrated",
+                    description="Dehydrated - lightheaded and weak",
+                    stat_penalties={"CON": -2, "WIS": -2},
+                    morale_modifier=-15,
+                    special_effects={"movement_penalty": 0.25},
+                )
+            )
+        elif needs.thirst < 30:
+            effects.append(
+                NeedEffect(
+                    need_name="thirst",
+                    threshold_name="thirsty",
+                    description="Thirsty - distracted by need for water",
+                    stat_penalties={"WIS": -1},
+                    morale_modifier=-5,
                 )
             )
 
@@ -644,6 +713,7 @@ class NeedsManager(BaseManager):
         return {
             "has_needs": True,
             "hunger": needs.hunger,
+            "thirst": needs.thirst,
             "energy": needs.energy,
             "hygiene": needs.hygiene,
             "comfort": needs.comfort,
@@ -652,6 +722,10 @@ class NeedsManager(BaseManager):
             "morale": needs.morale,
             "sense_of_purpose": needs.sense_of_purpose,
             "intimacy": needs.intimacy,
+            # Include effective needs (accounting for cravings)
+            "effective_hunger": needs.get_effective_need("hunger"),
+            "effective_thirst": needs.get_effective_need("thirst"),
+            "effective_energy": needs.get_effective_need("energy"),
             "critical_states": [e.threshold_name for e in effects],
             "stat_modifiers": self.calculate_stat_modifiers(entity_id),
             "check_penalty": self.calculate_check_penalty(entity_id),
@@ -670,11 +744,13 @@ class NeedsManager(BaseManager):
 
         # Calculate urgency for each need (0-100)
         # All needs: 0 = bad state, so urgency = 100 - value
+        # Use effective needs (accounting for cravings) for urgency calculation
         urgencies: dict[str, int] = {
-            "hunger": max(0, 100 - needs.hunger),
-            "energy": max(0, 100 - needs.energy),
-            "social_connection": max(0, 100 - needs.social_connection),
-            "intimacy": max(0, 100 - needs.intimacy),
+            "hunger": max(0, 100 - needs.get_effective_need("hunger")),
+            "thirst": max(0, 100 - needs.get_effective_need("thirst")),
+            "energy": max(0, 100 - needs.get_effective_need("energy")),
+            "social_connection": max(0, 100 - needs.get_effective_need("social_connection")),
+            "intimacy": max(0, 100 - needs.get_effective_need("intimacy")),
         }
 
         # Find most urgent
@@ -852,3 +928,252 @@ class NeedsManager(BaseManager):
         self.db.add(adaptation)
         self.db.flush()
         return adaptation
+
+    # =========================================================================
+    # Vital Need Death Checks
+    # =========================================================================
+
+    def check_vital_needs(
+        self,
+        entity_id: int,
+        minutes_passed: float,
+    ) -> list[dict]:
+        """Check if vital needs are critically low and require death saves.
+
+        Vital needs: thirst, hunger, energy (in priority order)
+        Scaling frequency:
+        - Need < 5: check every hour
+        - Need < 3: check every 30 minutes
+        - Need = 0: check every turn (5 minutes)
+
+        Args:
+            entity_id: Entity to check.
+            minutes_passed: Minutes since last check.
+
+        Returns:
+            List of death save requirements with need name and DC.
+        """
+        needs = self.get_needs(entity_id)
+        if needs is None:
+            return []
+
+        death_saves_required: list[dict] = []
+
+        # Check in priority order: thirst (fastest killer), hunger, energy
+        vital_needs = [
+            ("thirst", needs.thirst, "dehydration"),
+            ("hunger", needs.hunger, "starvation"),
+            ("energy", needs.energy, "exhaustion"),
+        ]
+
+        for need_name, value, cause in vital_needs:
+            if value >= 5:
+                continue  # Not critical
+
+            # Determine check frequency based on severity
+            if value == 0:
+                check_interval = 5  # Every turn
+                dc = 18  # Very hard
+            elif value < 3:
+                check_interval = 30  # Every 30 minutes
+                dc = 15  # Hard
+            else:  # value < 5
+                check_interval = 60  # Every hour
+                dc = 12  # Medium
+
+            # Check if enough time has passed for this check
+            if minutes_passed >= check_interval:
+                death_saves_required.append({
+                    "need_name": need_name,
+                    "value": value,
+                    "cause": cause,
+                    "dc": dc,
+                    "description": f"Death save required due to {cause} ({need_name}={value})",
+                })
+
+        return death_saves_required
+
+    # =========================================================================
+    # Craving/Stimulus Methods
+    # =========================================================================
+
+    def apply_craving(
+        self,
+        entity_id: int,
+        need_name: str,
+        relevance: float,
+        attention: float = 0.6,
+    ) -> int:
+        """Apply a craving boost to a need based on stimulus.
+
+        Cravings intensify the perceived urgency of a need without changing
+        the actual physiological value. Higher craving = feels more urgent.
+
+        Formula: boost = relevance × attention × base_craving × 0.6
+        where base_craving = 100 - current_need
+
+        Args:
+            entity_id: Entity to apply craving to.
+            need_name: Name of need (hunger, thirst, energy, social_connection, intimacy).
+            relevance: How relevant the stimulus is to preferences (0.0-1.0).
+            attention: How prominent the stimulus is (0.3=background, 0.6=described, 1.0=offered).
+
+        Returns:
+            Amount of craving boost applied.
+        """
+        needs = self.get_or_create_needs(entity_id)
+
+        # Map need names to craving fields
+        craving_map = {
+            "hunger": "hunger_craving",
+            "thirst": "thirst_craving",
+            "energy": "energy_craving",
+            "social_connection": "social_craving",
+            "intimacy": "intimacy_craving",
+        }
+
+        if need_name not in craving_map:
+            return 0
+
+        current_need = getattr(needs, need_name)
+        base_craving = 100 - current_need  # Lower need = higher susceptibility
+
+        # Calculate boost (capped at 50 to prevent overwhelming)
+        boost = int(relevance * attention * base_craving * 0.6)
+        boost = min(boost, 50)
+
+        # Apply boost to craving field
+        craving_field = craving_map[need_name]
+        current_craving = getattr(needs, craving_field)
+        new_craving = min(100, current_craving + boost)
+        setattr(needs, craving_field, new_craving)
+
+        self.db.flush()
+        return boost
+
+    def decay_cravings(
+        self,
+        entity_id: int,
+        minutes_passed: float,
+    ) -> None:
+        """Decay all cravings over time when stimuli are removed.
+
+        Rate: -20 per 30 minutes.
+
+        Args:
+            entity_id: Entity to decay cravings for.
+            minutes_passed: Minutes since last decay.
+        """
+        needs = self.get_needs(entity_id)
+        if needs is None:
+            return
+
+        # Calculate decay amount: -20 per 30 minutes
+        decay_amount = int((minutes_passed / 30) * 20)
+
+        craving_fields = [
+            "hunger_craving",
+            "thirst_craving",
+            "energy_craving",
+            "social_craving",
+            "intimacy_craving",
+        ]
+
+        for field in craving_fields:
+            current = getattr(needs, field)
+            if current > 0:
+                new_value = max(0, current - decay_amount)
+                setattr(needs, field, new_value)
+
+        self.db.flush()
+
+    # =========================================================================
+    # Accumulation Methods (Non-Vital Needs)
+    # =========================================================================
+
+    def check_accumulation_effects(
+        self,
+        entity_id: int,
+    ) -> list[dict]:
+        """Check for probability-based effects from prolonged low non-vital needs.
+
+        Formula: daily_chance = (100 - need_value) / 4
+        Should be called once per in-game day.
+
+        Non-vital needs checked:
+        - hygiene < 30: illness/disease chance
+        - social_connection < 25: depression chance
+        - comfort < 20: morale penalty
+        - sense_of_purpose < 20: motivation loss
+
+        Args:
+            entity_id: Entity to check.
+
+        Returns:
+            List of triggered effects with descriptions.
+        """
+        import random
+
+        needs = self.get_needs(entity_id)
+        if needs is None:
+            return []
+
+        triggered_effects: list[dict] = []
+
+        # Hygiene → illness
+        if needs.hygiene < 30:
+            chance = (100 - needs.hygiene) / 4 / 100  # Convert to 0-1
+            if random.random() < chance:
+                triggered_effects.append({
+                    "type": "illness",
+                    "need": "hygiene",
+                    "value": needs.hygiene,
+                    "chance": chance * 100,
+                    "description": "Poor hygiene has led to illness",
+                    "effect": "wellness_penalty",
+                    "severity": -20 if needs.hygiene < 15 else -10,
+                })
+
+        # Social connection → depression
+        if needs.social_connection < 25:
+            chance = (100 - needs.social_connection) / 4 / 100
+            if random.random() < chance:
+                triggered_effects.append({
+                    "type": "depression",
+                    "need": "social_connection",
+                    "value": needs.social_connection,
+                    "chance": chance * 100,
+                    "description": "Prolonged isolation has deepened depression",
+                    "effect": "morale_penalty",
+                    "severity": -15 if needs.social_connection < 15 else -8,
+                })
+
+        # Comfort → stress accumulation
+        if needs.comfort < 20:
+            chance = (100 - needs.comfort) / 4 / 100
+            if random.random() < chance:
+                triggered_effects.append({
+                    "type": "stress",
+                    "need": "comfort",
+                    "value": needs.comfort,
+                    "chance": chance * 100,
+                    "description": "Miserable conditions have taken their toll",
+                    "effect": "energy_penalty",
+                    "severity": -10,
+                })
+
+        # Sense of purpose → motivation loss
+        if needs.sense_of_purpose < 20:
+            chance = (100 - needs.sense_of_purpose) / 4 / 100
+            if random.random() < chance:
+                triggered_effects.append({
+                    "type": "apathy",
+                    "need": "sense_of_purpose",
+                    "value": needs.sense_of_purpose,
+                    "chance": chance * 100,
+                    "description": "Lack of purpose has led to growing apathy",
+                    "effect": "initiative_penalty",
+                    "severity": -2,
+                })
+
+        return triggered_effects
