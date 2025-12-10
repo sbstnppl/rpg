@@ -35,35 +35,99 @@ DATABASE_URL=postgresql://localhost/rpg_game
 ### Quick Start
 
 ```bash
-rpg start
+rpg game start
 ```
 
-The game will guide you through:
-1. Choosing a setting (fantasy, contemporary, sci-fi, or custom)
-2. Describing your character
-3. Setting up the initial scenario
+The unified game wizard guides you through:
+1. **Setting Selection** - Choose fantasy, contemporary, or sci-fi
+2. **Session Naming** - Name your game save
+3. **Character Creation** - 6-section wizard (see below)
+4. **World Introduction** - The GM introduces your character in the opening scene
 
-### Character Creation
+### Character Creation Wizard
 
-When prompted, describe your character naturally:
+The wizard walks you through 6 sections in order:
 
-```
-> I want to play a young wizard named Aldric with grey eyes and a
-> mysterious past. He's good at fire magic but terrible at social
-> situations.
-```
+#### 1. Name & Species
+- Choose your character's name
+- Select species (human, elf, dwarf, etc. based on setting)
+- The AI will suggest names if you're unsure
 
-The AI will ask clarifying questions:
-- Physical details (height, build, distinguishing features)
-- Personality traits
-- Background and motivations
-- Starting equipment
+#### 2. Appearance
+- Describe physical features: age, gender, build, height
+- Hair color and style
+- Eye color, skin tone
+- Distinguishing features (scars, tattoos, birthmarks)
 
-Or say "surprise me" for a random character!
+#### 3. Background
+- Where are you from?
+- What was your childhood like?
+- What is your occupation or profession?
+- How many years have you practiced it?
+- Any significant life events?
+
+#### 4. Personality
+- How do you interact with others?
+- What are your values and motivations?
+- Any quirks or habits?
+- Fears or goals?
+
+#### 5. Attributes
+The game uses a **two-tier stat system**:
+
+**Hidden Potential** (rolled secretly, never shown):
+- 4d6 drop lowest for each of 6 attributes
+- Represents your innate "genetic gifts"
+
+**Current Stats** (what you see):
+- Your background shapes your visible stats
+- Formula: `Potential + Age + Occupation + Lifestyle`
+- A blacksmith will have higher STR regardless of potential
+- A scholar will have higher INT
+
+**The 6 Attributes**:
+- **Strength (STR)** - Physical power, lifting, melee damage
+- **Dexterity (DEX)** - Agility, reflexes, ranged accuracy
+- **Constitution (CON)** - Endurance, hit points, resistance
+- **Intelligence (INT)** - Knowledge, reasoning, spellcasting
+- **Wisdom (WIS)** - Perception, willpower, insight
+- **Charisma (CHA)** - Social influence, leadership, personality
+
+**Twist Narratives**: If your stats don't match your background, the game explains why:
+> "Despite years of farm work, strength never came naturally - compensating with technique and determination."
+
+#### 6. Review
+- See your complete character summary
+- Confirm or go back to edit sections
+- Character is only saved when you confirm
+
+### What Happens After Creation
+
+Once you confirm your character:
+
+1. **Starting Equipment** assigned based on setting and backstory
+   - Wealthy background? Pristine condition
+   - Escaped prisoner? Minimal, worn equipment
+   - Soldier? Standard military gear in good condition
+
+2. **Initial Needs** set based on your story
+   - Hardship backstory? Lower comfort, morale, hygiene
+   - Loner background? Lower social connection
+   - Strong sense of purpose? Higher morale
+
+3. **NPCs from Backstory** created as "shadow entities"
+   - Family members, mentors, rivals mentioned
+   - Relationships already established (trust, liking, respect)
+   - May appear later in the game
+
+4. **Skills Inferred** from your background
+   - Blacksmith? Blacksmithing, metalworking skills
+   - Soldier? Combat, tactics, survival skills
+   - Scholar? Research, history, languages
 
 ## Playing the Game
 
-### Basic Commands
+### Basic Interaction
 
 Just type what you want to do:
 ```
@@ -95,71 +159,254 @@ Combat triggers automatically when you engage hostiles:
 > I attack the goblin with my axe
 ```
 
-The game will roll dice and narrate the result.
+The game handles initiative, rolls, and damage automatically.
 
-### Special Commands
+## Skill Checks
+
+When you attempt something challenging, the GM calls for a skill check.
+
+This game uses a **2d10 bell curve system** instead of d20, making skilled characters more reliable. See `docs/game-mechanics.md` for detailed mechanics.
+
+### Auto-Success
+
+If you're skilled enough, routine tasks succeed automatically without rolling:
+- **Rule**: If DC ≤ 10 + your total modifier, you auto-succeed
+- **Example**: A master locksmith (+8) auto-succeeds any lock DC 18 or below
+- You'll see: "AUTO-SUCCESS - This is routine for someone with your skill"
+
+### Interactive Rolling
+
+When a roll is needed, you'll see your modifiers first:
+
+**Step 1: Pre-Roll Prompt**
+```
+┌─ Skill Check ─────────────────────────────────┐
+│ Attempting to pick the merchant's lock        │
+│                                               │
+│ Your modifiers (2d10 + modifier):             │
+│   Lockpicking: +3 (Expert)                   │
+│   Dexterity: +2                              │
+│   Total: +5                                  │
+│                                               │
+│ This looks challenging                        │
+│                                               │
+│ Press ENTER to roll...                        │
+└───────────────────────────────────────────────┘
+```
+
+**Step 2: Press ENTER**
+Watch the dice tumble!
+
+**Step 3: See Results**
+```
+┌─ Result ──────────────────────────────────────┐
+│ Roll: (8+7) +5 = 20                           │
+│ vs DC 15                                      │
+│                                               │
+│ CLEAR SUCCESS                                 │
+│ (margin: +5)                                  │
+└───────────────────────────────────────────────┘
+```
+
+### Proficiency Tiers
+
+Your skill levels are categorized:
+
+| Proficiency | Tier | Bonus |
+|-------------|------|-------|
+| 0-19 | Novice | +0 |
+| 20-39 | Apprentice | +1 |
+| 40-59 | Competent | +2 |
+| 60-79 | Expert | +3 |
+| 80-99 | Master | +4 |
+| 100 | Legendary | +5 |
+
+### Outcome Tiers
+
+Results are categorized by margin (roll - DC):
+
+| Margin | Outcome | Description |
+|--------|---------|-------------|
+| +10 or more | Exceptional | Beyond expectations |
+| +5 to +9 | Clear Success | Clean execution |
+| +1 to +4 | Narrow Success | Succeed with minor cost |
+| 0 | Bare Success | Just barely |
+| -1 to -4 | Partial Failure | Fail forward, reduced effect |
+| -5 to -9 | Clear Failure | Fail with consequence |
+| -10 or less | Catastrophic | Serious setback |
+
+### Critical Results
+
+- **Critical Success** (both dice show 10) - 1% chance, exceptional outcome
+- **Critical Failure** (both dice show 1) - 1% chance, complication occurs
+
+### Advantage & Disadvantage
+
+Some situations modify your roll:
+- **Advantage**: Roll 3d10, keep best 2 (favorable circumstances)
+- **Disadvantage**: Roll 3d10, keep worst 2 (hindering conditions)
+
+## Character Needs
+
+Your character has 10 needs that affect gameplay:
+
+| Need | Description | Effects When Low |
+|------|-------------|-----------------|
+| Hunger | Food satisfaction | STR/CON penalties, eventual death |
+| Thirst | Hydration | Faster penalties than hunger |
+| Energy | Rest level | DEX/INT penalties, collapse |
+| Hygiene | Cleanliness | CHA penalties, disease risk |
+| Comfort | Physical comfort | WIS penalties, irritability |
+| Wellness | Pain level | Various penalties |
+| Social | Social connection | Morale decrease |
+| Morale | Mental state | All checks affected |
+| Purpose | Sense of meaning | Long-term morale decay |
+| Intimacy | Romantic/physical needs | Affects mood |
+
+### Need Decay
+
+Needs decrease over time based on activity:
+- **Active** (adventuring): Faster decay
+- **Resting**: Moderate decay
+- **Sleeping**: Slow decay
+- **Combat**: Fastest decay
+
+### Satisfying Needs
+
+The GM handles this naturally through roleplay:
+- Eat food → reduces hunger
+- Drink water → reduces thirst
+- Sleep → restores energy
+- Bathe → improves hygiene
+- Talk to friends → improves social
+
+## Special Commands
 
 | Command | Description |
 |---------|-------------|
-| `/status` | View character stats |
+| `/status` | View character stats, needs, and conditions |
 | `/inventory` | List items you're carrying |
-| `/equipment` | Show equipped items |
-| `/tasks` | View active tasks and appointments |
-| `/map` | Show known locations |
-| `/time` | Check current time and day |
-| `/save [name]` | Save game with optional name |
-| `/load [name]` | Load a saved game |
+| `/equipment` | Show equipped items with body slots |
+| `/outfit` | See layered clothing by body slot |
+| `/tasks` | View active tasks and quests |
+| `/time` | Check current time, day, and weather |
+| `/save` | Save your game |
 | `/quit` | Exit game |
+| `/help` | Show available commands |
 
-## Game Mechanics
+## NPCs and Relationships
 
-### Attribute Checks
+### How NPCs Work
 
-When you attempt something difficult, the game rolls dice:
-```
-You try to lift the heavy boulder...
-[Strength Check: 15 + 3 = 18 vs DC 15] Success!
-```
+NPCs in this game are fully realized characters with:
+- **Appearance** - Physical description
+- **Background** - History and occupation
+- **Skills** - What they're good at (can teach you!)
+- **Inventory** - What they carry (merchants have wares)
+- **Needs** - They get hungry, tired, etc.
+- **Preferences** - Food likes, social tendencies
 
-### Combat
+### Relationship Dimensions
 
-Combat is turn-based with initiative:
-1. Initiative rolled at start
-2. Each turn, describe your action
-3. Dice determine success/failure
-4. Enemies act on their turns
+Your relationship with NPCs has 7 dimensions:
 
-### Time
+| Dimension | Description |
+|-----------|-------------|
+| Trust | Do they believe you? |
+| Liking | Do they enjoy your company? |
+| Respect | Do they admire you? |
+| Fear | Are they afraid of you? |
+| Familiarity | How well do they know you? |
+| Romantic Interest | Are they attracted to you? |
+| Sexual Tension | Physical chemistry |
+
+### Building Relationships
+
+- Help them → Trust & Liking increase
+- Lie to them → Trust decreases
+- Be charming → Liking increases
+- Intimidate them → Fear increases, Liking decreases
+- Keep promises → Trust increases
+- Miss appointments → Trust & Liking decrease
+
+### Companions
+
+Some NPCs can travel with you as companions:
+- Their needs are tracked over time
+- They can help in combat
+- They provide conversation and skills
+- They might teach you their skills
+
+## Time and Schedules
+
+### Time Progression
 
 Time passes as you act:
 - Conversations: minutes
-- Travel: varies by distance
+- Travel: varies by distance and terrain
 - Combat: rounds (6 seconds each)
 - Rest: hours
 
-NPCs follow schedules, so the blacksmith might be closed at night!
+### NPC Schedules
 
-### Relationships
+NPCs have daily routines:
+- The blacksmith works 8 AM - 6 PM
+- The tavern owner is there evenings
+- Guards patrol in shifts
 
-NPCs remember you:
-- Help them → Trust increases
-- Lie to them → Trust decreases
-- Be charming → Liking increases
-- Miss appointments → Trust & Liking decrease
+Visit at the right time to find who you're looking for!
 
-## Tips
+### Day/Night Effects
+
+- Some locations are closed at night
+- Some NPCs sleep
+- Visibility affects stealth
+- Some creatures are nocturnal
+
+## Navigation and Travel
+
+### Zone System
+
+The world is divided into terrain zones:
+- Forests, roads, hills, rivers, etc.
+- Each zone has terrain type affecting travel
+- Some zones require skills to cross (swimming, climbing)
+
+### Fog of War
+
+You only know about zones and locations you've discovered:
+- Explore to find new areas
+- NPCs can tell you about locations
+- Maps reveal multiple locations at once
+
+### Travel Commands
+
+When traveling between locations:
+- The GM simulates the journey
+- Random encounters may occur
+- Terrain affects travel time
+
+## Tips for New Players
 
 1. **Be Specific**: "I check the desk drawers for hidden compartments" is better than "I search the room"
 
-2. **Talk to NPCs**: They have information, quests, and items
+2. **Talk to NPCs**: They have information, quests, items, and skills to teach
 
-3. **Keep Appointments**: Missing meetings hurts relationships
+3. **Manage Your Needs**: Don't let hunger or exhaustion catch up with you
 
-4. **Explore**: The world has secrets waiting to be found
+4. **Build Relationships**: Trusted allies can help in many situations
 
-5. **Actions Have Consequences**: Steal from the baker, and the town might hear about it
+5. **Keep Appointments**: Missing meetings damages relationships
 
-6. **Save Often**: Use `/save` before risky actions
+6. **Explore**: The world has secrets waiting to be found
+
+7. **Actions Have Consequences**: Steal from the baker, and the town might hear about it
+
+8. **Use Your Skills**: Try actions related to your trained skills
+
+9. **Pay Attention to Time**: NPCs follow schedules, shops close
+
+10. **Save Progress**: The game auto-saves, but `/save` before risky actions
 
 ## Troubleshooting
 
@@ -170,4 +417,30 @@ Check your `.env` file has valid API keys.
 Ensure PostgreSQL is running and DATABASE_URL is correct.
 
 ### "Command not recognized"
-Type naturally - the game understands plain English. Use `/help` for special commands.
+Type naturally - the game understands plain English. Use `/help` for commands.
+
+### Skill check seems unfair
+Check your character's skills with `/status`. You might not have training in that skill.
+
+### NPC isn't where expected
+Check the time with `/time`. NPCs follow schedules and might be elsewhere.
+
+## Game Management
+
+### Listing Games
+```bash
+rpg game list
+```
+Shows all your saved games with character names.
+
+### Deleting Games
+```bash
+rpg game delete
+```
+Select a game to delete (with confirmation).
+
+### Continuing a Game
+```bash
+rpg game play
+```
+Resume your most recent game or select from a list.

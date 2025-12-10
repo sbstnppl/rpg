@@ -107,12 +107,15 @@ class GMToolExecutor:
     def _execute_skill_check(self, args: dict[str, Any]) -> dict[str, Any]:
         """Execute a skill check with proficiency and attribute lookup.
 
+        Uses 2d10 bell curve system with auto-success for routine tasks.
+        See docs/game-mechanics.md for full mechanics documentation.
+
         Args:
             args: Tool arguments with entity_key, dc, skill_name, description,
                   attribute_key (optional), advantage.
 
         Returns:
-            Result with success, roll, margin, modifiers, and description.
+            Result with success, roll, margin, modifiers, outcome_tier, and description.
         """
         entity_key = args["entity_key"]
         dc = args["dc"]
@@ -164,7 +167,7 @@ class GMToolExecutor:
         # Parse advantage type
         advantage_type = self._parse_advantage(advantage_str)
 
-        # Make the roll
+        # Make the roll (uses 2d10 system with auto-success)
         result = make_skill_check(
             dc=dc,
             attribute_modifier=attribute_modifier,
@@ -172,18 +175,41 @@ class GMToolExecutor:
             advantage_type=advantage_type,
         )
 
-        # Build outcome description
-        if result.is_critical_success:
+        # Build outcome description based on outcome tier
+        if result.is_auto_success:
+            outcome = "Auto-Success"
+        elif result.is_critical_success:
             outcome = "Critical Success!"
         elif result.is_critical_failure:
             outcome = "Critical Failure!"
-        elif result.success:
-            outcome = "Success"
         else:
-            outcome = "Failure"
+            # Use outcome tier for nuanced description
+            tier_outcomes = {
+                "exceptional": "Exceptional Success!",
+                "clear_success": "Clear Success",
+                "narrow_success": "Narrow Success",
+                "bare_success": "Bare Success",
+                "partial_failure": "Partial Failure",
+                "clear_failure": "Clear Failure",
+                "catastrophic": "Catastrophic Failure!",
+            }
+            outcome = tier_outcomes.get(result.outcome_tier.value, "Success" if result.success else "Failure")
 
         total_modifier = attribute_modifier + skill_modifier
         modifier_str = f"+{total_modifier}" if total_modifier >= 0 else str(total_modifier)
+
+        # Build roll summary based on whether dice were rolled
+        if result.is_auto_success:
+            roll_summary = f"Auto-success (DC {dc} ≤ {10 + total_modifier})"
+            roll_total = None
+            dice_rolls = None
+        else:
+            roll_result = result.roll_result
+            dice_rolls = list(roll_result.individual_rolls)
+            roll_total = roll_result.total
+            # Format: "Roll: (5+8) +5 = 18 vs DC 15"
+            dice_str = "+".join(str(d) for d in dice_rolls)
+            roll_summary = f"Roll: ({dice_str}) {modifier_str} = {roll_total} vs DC {dc}"
 
         return {
             "entity_key": entity_key,
@@ -191,12 +217,14 @@ class GMToolExecutor:
             "description": check_description,
             "dc": dc,
             "success": result.success,
-            "roll": result.roll_result.total,
-            "natural_roll": result.roll_result.individual_rolls[0],
+            "roll": roll_total,
+            "dice_rolls": dice_rolls,  # 2d10 individual dice (or None for auto-success)
             "margin": result.margin,
             "is_critical_success": result.is_critical_success,
             "is_critical_failure": result.is_critical_failure,
+            "is_auto_success": result.is_auto_success,
             "outcome": outcome,
+            "outcome_tier": result.outcome_tier.value,
             # Modifier breakdown
             "attribute_key": attribute_key,
             "attribute_score": attribute_score,
@@ -208,7 +236,7 @@ class GMToolExecutor:
             "modifier_string": modifier_str,
             # Assessment (for player-facing display)
             "difficulty_assessment": difficulty_assessment,
-            "roll_summary": f"Roll: {result.roll_result.individual_rolls[0]} {modifier_str} = {result.roll_result.total} vs DC {dc}",
+            "roll_summary": roll_summary,
         }
 
     def _execute_attack_roll(self, args: dict[str, Any]) -> dict[str, Any]:

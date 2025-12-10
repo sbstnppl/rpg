@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Realistic Skill Check System (2d10)** - Replace d20 with 2d10 bell curve for expert reliability
+  - New `docs/game-mechanics.md` - Documents all D&D deviations and reasoning
+  - **2d10 Bell Curve**: Range 2-20 (same as d20), but with 4x less variance (8.25 vs 33.25)
+    - Experts perform consistently; master climber (+8) vs DC 15 now succeeds 88% (was 70%)
+  - **Auto-Success (Take 10 Rule)**: If DC ≤ 10 + total_modifier, auto-succeed without rolling
+    - Routine tasks for skilled characters don't require dice
+  - **Degree of Success**: Margin-based outcome tiers
+    - Exceptional (+10), Clear Success (+5-9), Narrow Success (+1-4), Bare Success (0)
+    - Partial Failure (-1 to -4), Clear Failure (-5 to -9), Catastrophic (≤-10)
+  - **New Critical System**: Double-10 = critical success (1%), Double-1 = critical failure (1%)
+  - **Advantage/Disadvantage**: Roll 3d10, keep best/worst 2 (preserves bell curve)
+  - **Saving throws use 2d10** for consistency (combat attacks stay d20 for drama)
+  - New types: `RollType` enum, `OutcomeTier` enum
+  - New functions: `roll_2d10()`, `can_auto_succeed()`, `get_outcome_tier()`
+  - Updated `display_skill_check_result()` for auto-success and outcome tier display
+  - Updated GM prompt template with new skill check guidance
+
 - **NPC Full Character Generation** - NPCs now receive comprehensive data on first introduction
   - New `src/agents/schemas/npc_generation.py` - Pydantic schemas for structured NPC output:
     - `NPCAppearance`, `NPCBackground`, `NPCSkill`, `NPCInventoryItem`
@@ -42,6 +59,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Alembic migration `010_add_companion_tracking.py`
   - 18 new tests for NPC generation
 
+### Changed
+- **Documentation Overhaul** - Comprehensive update to reflect actual implementation
+  - `docs/architecture.md` - Complete rewrite with:
+    - Character creation wizard flow (6 sections)
+    - Two-tier attribute system (potential vs current stats)
+    - Context-aware initialization (needs, vital status, equipment)
+    - Skill check system with proficiency tiers
+    - Interactive dice rolling mechanics
+    - Turn procedure and game loop
+    - NPC generator and companion tracking
+    - Updated agent architecture diagram
+  - `docs/user-guide.md` - Complete rewrite with:
+    - Character creation wizard walkthrough
+    - Skill check interactive rolling explanation
+    - Proficiency tier table
+    - Character needs system
+    - NPC relationships (7 dimensions)
+    - Companion system
+    - Navigation and travel
+    - Updated commands and troubleshooting
+
+### Added
 - **Skill Check System Overhaul** - Proficiency levels now affect skill checks
   - `proficiency_to_modifier()` converts proficiency (1-100) to modifier (+0 to +5)
   - Tier system: Novice → Apprentice → Competent → Expert → Master → Legendary

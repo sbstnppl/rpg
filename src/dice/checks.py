@@ -1,6 +1,13 @@
 """Skill checks and ability modifier calculations.
 
-Provides D&D-style skill checks with critical success/failure handling.
+Uses 2d10 bell curve system for reliable expert performance.
+See docs/game-mechanics.md for full mechanics documentation.
+
+Key features:
+- 2d10 instead of d20 for skill checks (4x less variance)
+- Auto-success for routine tasks (DC <= 10 + modifier)
+- Degree of success based on margin
+- Critical success only on double-10 (1%), critical failure on double-1 (1%)
 """
 
 from src.dice.types import (
@@ -8,8 +15,9 @@ from src.dice.types import (
     RollResult,
     AdvantageType,
     SkillCheckResult,
+    OutcomeTier,
 )
-from src.dice.roller import roll_with_advantage
+from src.dice.roller import roll_with_advantage, roll_2d10
 
 
 # Standard Difficulty Classes (DCs)
@@ -75,6 +83,63 @@ def get_proficiency_tier_name(proficiency_level: int) -> str:
     return PROFICIENCY_TIERS.get(modifier, "Unknown")
 
 
+def can_auto_succeed(dc: int, total_modifier: int) -> bool:
+    """Check if a character can auto-succeed without rolling.
+
+    Auto-success occurs when DC <= 10 + total_modifier.
+    This represents tasks that are routine for a skilled character.
+
+    Args:
+        dc: The Difficulty Class of the task.
+        total_modifier: Sum of attribute and skill modifiers.
+
+    Returns:
+        True if the character auto-succeeds without rolling.
+
+    Examples:
+        >>> can_auto_succeed(dc=15, total_modifier=8)  # 15 <= 18
+        True
+        >>> can_auto_succeed(dc=20, total_modifier=8)  # 20 > 18
+        False
+    """
+    return dc <= 10 + total_modifier
+
+
+def get_outcome_tier(margin: int, success: bool) -> OutcomeTier:
+    """Get the outcome tier based on margin.
+
+    Degree of success system provides nuanced narrative outcomes.
+    See docs/game-mechanics.md for descriptions.
+
+    Args:
+        margin: Roll total minus DC (can be negative).
+        success: Whether the check succeeded overall.
+
+    Returns:
+        OutcomeTier indicating degree of success or failure.
+
+    Examples:
+        >>> get_outcome_tier(margin=12, success=True)
+        <OutcomeTier.EXCEPTIONAL: 'exceptional'>
+        >>> get_outcome_tier(margin=-3, success=False)
+        <OutcomeTier.PARTIAL_FAILURE: 'partial_failure'>
+    """
+    if margin >= 10:
+        return OutcomeTier.EXCEPTIONAL
+    elif margin >= 5:
+        return OutcomeTier.CLEAR_SUCCESS
+    elif margin >= 1:
+        return OutcomeTier.NARROW_SUCCESS
+    elif margin == 0:
+        return OutcomeTier.BARE_SUCCESS
+    elif margin >= -4:
+        return OutcomeTier.PARTIAL_FAILURE
+    elif margin >= -9:
+        return OutcomeTier.CLEAR_FAILURE
+    else:
+        return OutcomeTier.CATASTROPHIC
+
+
 def assess_difficulty(
     dc: int,
     skill_modifier: int = 0,
@@ -83,7 +148,7 @@ def assess_difficulty(
     """Assess how difficult a check appears based on character's abilities.
 
     Calculates expected outcome and returns a qualitative assessment
-    from the character's perspective.
+    from the character's perspective. Uses 2d10 system.
 
     Args:
         dc: The Difficulty Class to assess against.
@@ -100,13 +165,16 @@ def assess_difficulty(
         'very hard'
     """
     total_modifier = skill_modifier + attribute_modifier
-    # Average d20 roll is 10.5
-    expected_total = 10.5 + total_modifier
+
+    # Check for auto-success first
+    if can_auto_succeed(dc, total_modifier):
+        return "trivial"
+
+    # Average 2d10 roll is 11
+    expected_total = 11 + total_modifier
     margin = expected_total - dc
 
-    if margin >= 10:
-        return "trivial"
-    elif margin >= 5:
+    if margin >= 5:
         return "easy"
     elif margin >= 0:
         return "moderate"
@@ -181,8 +249,13 @@ def make_skill_check(
 ) -> SkillCheckResult:
     """Make a skill check against a Difficulty Class.
 
-    Rolls 1d20 + attribute_modifier + skill_modifier and compares to DC.
-    Natural 20 is always a critical success, natural 1 is always critical failure.
+    Uses 2d10 bell curve system for reliable expert performance:
+    - Auto-success if DC <= 10 + total_modifier (no roll needed)
+    - Roll 2d10 + modifiers (3d10 keep best/worst 2 with advantage/disadvantage)
+    - Critical success on double-10 (1%), critical failure on double-1 (1%)
+    - Degree of success based on margin
+
+    See docs/game-mechanics.md for full mechanics documentation.
 
     Args:
         dc: Difficulty Class to beat.
@@ -195,27 +268,44 @@ def make_skill_check(
 
     Examples:
         >>> result = make_skill_check(dc=15, attribute_modifier=2, skill_modifier=3)
-        >>> result.success  # True if total >= 15
+        >>> result.success  # True if total >= 15 or auto-success
     """
     total_modifier = attribute_modifier + skill_modifier
-    expression = DiceExpression(num_dice=1, die_size=20, modifier=total_modifier)
 
-    roll_result = roll_with_advantage(expression, advantage_type)
+    # Check for auto-success (routine tasks for skilled characters)
+    if can_auto_succeed(dc, total_modifier):
+        # Auto-success: calculate a "virtual" margin based on average roll + modifier
+        # Average 2d10 is 11, so margin = 11 + modifier - dc
+        virtual_total = 11 + total_modifier
+        margin = virtual_total - dc
 
-    # Check for critical success/failure
-    is_critical_success = roll_result.is_natural_twenty
-    is_critical_failure = roll_result.is_natural_one
+        return SkillCheckResult(
+            roll_result=None,  # No roll needed
+            dc=dc,
+            success=True,
+            margin=margin,
+            is_critical_success=False,
+            is_critical_failure=False,
+            advantage_type=advantage_type,
+            outcome_tier=get_outcome_tier(margin, success=True),
+            is_auto_success=True,
+        )
+
+    # Roll 2d10 (or 3d10 keep 2 with advantage/disadvantage)
+    roll_result = roll_2d10(modifier=total_modifier, advantage_type=advantage_type)
+
+    # Check for critical success/failure (double-10 or double-1)
+    is_critical_success = roll_result.is_double_ten
+    is_critical_failure = roll_result.is_double_one
 
     # Determine success
-    # Critical success always succeeds, critical failure always fails
-    if is_critical_success:
-        success = True
-    elif is_critical_failure:
-        success = False
-    else:
-        success = roll_result.total >= dc
+    # Unlike d20 system, criticals don't auto-succeed/fail in 2d10
+    # Double-10 still succeeds (high roll), double-1 still likely fails (low roll)
+    # But the outcome depends on margin, not automatic
+    success = roll_result.total >= dc
 
     margin = roll_result.total - dc
+    outcome_tier = get_outcome_tier(margin, success)
 
     return SkillCheckResult(
         roll_result=roll_result,
@@ -225,6 +315,8 @@ def make_skill_check(
         is_critical_success=is_critical_success,
         is_critical_failure=is_critical_failure,
         advantage_type=advantage_type,
+        outcome_tier=outcome_tier,
+        is_auto_success=False,
     )
 
 
@@ -235,8 +327,10 @@ def make_saving_throw(
 ) -> SkillCheckResult:
     """Make a saving throw against a DC.
 
-    Mechanically identical to a skill check but with different semantics.
+    Uses 2d10 bell curve system (same as skill checks) for consistent realism.
     Saving throws typically resist spells, traps, or other effects.
+
+    Note: Attack rolls still use d20 for combat volatility.
 
     Args:
         dc: Difficulty Class to beat (typically spell DC or trap DC).

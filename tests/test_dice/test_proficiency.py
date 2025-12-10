@@ -102,20 +102,29 @@ class TestAssessDifficulty:
         assert result == "trivial"
 
     def test_easy_for_trained(self):
-        """Moderate skill vs moderate DC should be easy."""
-        # +3 skill, +2 attr = +5 total, expected ~15.5 vs DC 10 = margin +5.5
+        """Trained character vs moderate DC should be trivial (auto-success).
+
+        With +5 total modifier, DC 10 is auto-success (10 <= 10 + 5 = 15).
+        In the new 2d10 system, auto-success tasks are trivial.
+        """
         result = assess_difficulty(dc=10, skill_modifier=3, attribute_modifier=2)
-        assert result == "easy"
+        assert result == "trivial"  # Auto-success
 
     def test_moderate_for_average(self):
-        """Average character vs moderate DC should be moderate."""
-        # +0 skill, +0 attr = +0 total, expected ~10.5 vs DC 10 = margin +0.5
+        """Average character vs moderate DC should be trivial (auto-success).
+
+        With +0 total modifier, DC 10 is exactly at auto-success threshold (10 <= 10).
+        In the new 2d10 system, auto-success tasks are trivial.
+        """
         result = assess_difficulty(dc=10, skill_modifier=0, attribute_modifier=0)
-        assert result == "moderate"
+        assert result == "trivial"  # Auto-success at threshold
 
     def test_challenging_for_untrained(self):
-        """Untrained vs hard DC should be challenging."""
-        # +0 skill, +0 attr = +0 total, expected ~10.5 vs DC 15 = margin -4.5
+        """Untrained vs hard DC should be challenging (must roll).
+
+        With +0 modifier, DC 15 > 10 + 0, so must roll.
+        Expected: 11 (2d10 mean) + 0 - 15 = -4 margin -> challenging
+        """
         result = assess_difficulty(dc=15, skill_modifier=0, attribute_modifier=0)
         assert result == "challenging"
 

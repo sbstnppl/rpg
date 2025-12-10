@@ -98,13 +98,17 @@ class TestToolExecutor:
 
         executor = GMToolExecutor(db_session, game_session)
 
+        from src.dice.types import OutcomeTier
+
         with patch('src.agents.tools.executor.make_skill_check') as mock_check:
             mock_check.return_value = MagicMock(
                 success=True,
-                roll_result=MagicMock(total=18, individual_rolls=(15,)),
+                roll_result=MagicMock(total=18, individual_rolls=(8, 6)),  # 2d10
                 margin=3,
                 is_critical_success=False,
                 is_critical_failure=False,
+                is_auto_success=False,
+                outcome_tier=OutcomeTier.NARROW_SUCCESS,
             )
 
             result = executor.execute("skill_check", {
@@ -115,7 +119,10 @@ class TestToolExecutor:
 
         assert result["success"] is True
         assert result["roll"] == 18
+        assert result["dice_rolls"] == [8, 6]  # 2d10 individual dice
         assert result["skill_name"] == "stealth"
+        assert result["is_auto_success"] is False
+        assert result["outcome_tier"] == "narrow_success"
         # Check modifiers were looked up
         assert result["attribute_modifier"] == 2  # (14-10)//2 = 2
         assert result["skill_modifier"] == 2  # 40//20 = 2

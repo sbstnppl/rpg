@@ -15,6 +15,38 @@ class AdvantageType(str, Enum):
     DISADVANTAGE = "disadvantage"
 
 
+class RollType(str, Enum):
+    """Type of roll being made.
+
+    Determines which dice system to use:
+    - SKILL_CHECK, SAVING_THROW: 2d10 (bell curve, expert reliability)
+    - ATTACK, INITIATIVE: 1d20 (flat distribution, combat volatility)
+    - DAMAGE: Various dice per weapon/spell
+    """
+
+    SKILL_CHECK = "skill_check"
+    SAVING_THROW = "saving_throw"
+    ATTACK = "attack"
+    INITIATIVE = "initiative"
+    DAMAGE = "damage"
+
+
+class OutcomeTier(str, Enum):
+    """Degree of success/failure based on margin.
+
+    Used for skill checks to provide nuanced narrative outcomes.
+    See docs/game-mechanics.md for full description.
+    """
+
+    EXCEPTIONAL = "exceptional"  # margin >= 10
+    CLEAR_SUCCESS = "clear_success"  # margin 5-9
+    NARROW_SUCCESS = "narrow_success"  # margin 1-4
+    BARE_SUCCESS = "bare_success"  # margin 0
+    PARTIAL_FAILURE = "partial_failure"  # margin -1 to -4
+    CLEAR_FAILURE = "clear_failure"  # margin -5 to -9
+    CATASTROPHIC = "catastrophic"  # margin <= -10
+
+
 @dataclass(frozen=True)
 class DiceExpression:
     """A dice expression like 2d6+3.
@@ -66,28 +98,63 @@ class RollResult:
             and self.individual_rolls[0] == 1
         )
 
+    @property
+    def is_double_ten(self) -> bool:
+        """Check if both dice show 10 on a 2d10 roll (critical success).
+
+        For 2d10 skill checks, both dice showing 10 (1% chance) is a critical.
+        """
+        return (
+            self.expression.num_dice == 2
+            and self.expression.die_size == 10
+            and len(self.individual_rolls) == 2
+            and self.individual_rolls[0] == 10
+            and self.individual_rolls[1] == 10
+        )
+
+    @property
+    def is_double_one(self) -> bool:
+        """Check if both dice show 1 on a 2d10 roll (critical failure).
+
+        For 2d10 skill checks, both dice showing 1 (1% chance) is a critical.
+        """
+        return (
+            self.expression.num_dice == 2
+            and self.expression.die_size == 10
+            and len(self.individual_rolls) == 2
+            and self.individual_rolls[0] == 1
+            and self.individual_rolls[1] == 1
+        )
+
 
 @dataclass(frozen=True)
 class SkillCheckResult:
     """Result of a skill check or saving throw.
 
+    Uses 2d10 bell curve system for reliable expert performance.
+    See docs/game-mechanics.md for full mechanics description.
+
     Attributes:
-        roll_result: The underlying dice roll.
+        roll_result: The underlying dice roll (None if auto-success).
         dc: Difficulty class that was checked against.
         success: Whether the check succeeded.
         margin: How much the roll exceeded or fell short of DC.
-        is_critical_success: Natural 20 on the roll.
-        is_critical_failure: Natural 1 on the roll.
+        is_critical_success: Both dice = 10 (1% chance) OR auto-success cannot fail.
+        is_critical_failure: Both dice = 1 (1% chance).
         advantage_type: Whether advantage/disadvantage was used.
+        outcome_tier: Degree of success/failure based on margin.
+        is_auto_success: True if DC <= 10 + modifier (no roll needed).
     """
 
-    roll_result: RollResult
+    roll_result: RollResult | None  # None if auto-success
     dc: int
     success: bool
     margin: int
     is_critical_success: bool
     is_critical_failure: bool
     advantage_type: AdvantageType
+    outcome_tier: OutcomeTier = OutcomeTier.BARE_SUCCESS
+    is_auto_success: bool = False
 
 
 @dataclass(frozen=True)

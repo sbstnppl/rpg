@@ -205,6 +205,21 @@
 - [x] Add `assess_difficulty()` - Character-based difficulty perception
 - [x] Add `get_difficulty_description()` - Narrative difficulty text
 
+### 3.5.1 Realistic Skill Checks (2d10 System)
+- [x] Create `docs/game-mechanics.md` - Document D&D deviations
+- [x] Add `RollType` enum - Distinguish skill checks, attacks, saves
+- [x] Add `OutcomeTier` enum - Degree of success/failure tiers
+- [x] Add `roll_2d10()` - Bell curve roller with 3d10 advantage/disadvantage
+- [x] Add `can_auto_succeed()` - Take 10 rule (DC ≤ 10 + modifier)
+- [x] Add `get_outcome_tier()` - Margin to tier conversion
+- [x] Update `make_skill_check()` - Use 2d10, auto-success, outcome tiers
+- [x] Update `make_saving_throw()` - Use 2d10 (same as skill checks)
+- [x] Add `is_double_ten` / `is_double_one` - 2d10 critical detection
+- [x] Update `_execute_skill_check()` - Handle auto-success, new fields
+- [x] Update `display_skill_check_result()` - Auto-success and tier display
+- [x] Update GM prompt template - Skill check guidance for 2d10
+- [x] Update tests for 2d10 system (183 dice tests, 1842 total)
+
 ## Phase 4: LangGraph Agents
 
 ### 4.1 State Schema

@@ -1032,7 +1032,7 @@ def display_skill_check_prompt(
     """Display skill check prompt before rolling.
 
     Shows the player what they're attempting and their modifiers,
-    without revealing the DC.
+    without revealing the DC. Uses 2d10 bell curve system.
 
     Args:
         description: What the character is attempting.
@@ -1052,7 +1052,7 @@ def display_skill_check_prompt(
     lines = [
         f"[bold]{description}[/bold]",
         "",
-        "[dim]Your modifiers:[/dim]",
+        "[dim]Your modifiers (2d10 + modifier):[/dim]",
         f"  {skill_name.title()}: {skill_mod_str} ({skill_tier})",
         f"  {attribute_key.title()}: {attr_mod_str}",
         f"  [bold]Total: {total_mod_str}[/bold]",
@@ -1074,79 +1074,106 @@ def display_skill_check_prompt(
 
 def display_skill_check_result(
     success: bool,
-    natural_roll: int,
+    dice_rolls: list[int] | None,
     total_modifier: int,
-    total_roll: int,
+    total_roll: int | None,
     dc: int,
     margin: int,
+    outcome_tier: str,
     is_critical_success: bool = False,
     is_critical_failure: bool = False,
+    is_auto_success: bool = False,
 ) -> None:
     """Display skill check result after rolling.
 
-    Shows the roll, total, DC, and outcome.
+    Shows the roll (2d10), total, DC, and outcome tier.
+    Uses 2d10 bell curve system with auto-success support.
 
     Args:
         success: Whether the check succeeded.
-        natural_roll: The raw d20 roll.
+        dice_rolls: Individual 2d10 rolls (None if auto-success).
         total_modifier: Combined modifier applied.
-        total_roll: Final total (natural + modifier).
+        total_roll: Final total (dice + modifier), None if auto-success.
         dc: Difficulty Class that was beaten/missed.
         margin: How much over/under the DC.
-        is_critical_success: Whether this was a natural 20.
-        is_critical_failure: Whether this was a natural 1.
+        outcome_tier: Degree of success/failure (exceptional, clear_success, etc.).
+        is_critical_success: Both dice = 10 (double-10).
+        is_critical_failure: Both dice = 1 (double-1).
+        is_auto_success: True if auto-success (no roll needed).
     """
     mod_str = f"+{total_modifier}" if total_modifier >= 0 else str(total_modifier)
 
-    # Format the roll line
-    if is_critical_success:
-        roll_style = "bold yellow"
-        roll_display = f"[{roll_style}]20[/{roll_style}] (CRITICAL!)"
-    elif is_critical_failure:
-        roll_style = "bold red"
-        roll_display = f"[{roll_style}]1[/{roll_style}] (CRITICAL!)"
-    else:
-        roll_display = str(natural_roll)
+    # Handle auto-success case
+    if is_auto_success:
+        lines = [
+            "[bold green]AUTO-SUCCESS[/bold green]",
+            "",
+            f"[dim]DC {dc} ≤ {10 + total_modifier} (10 + your modifier)[/dim]",
+            "",
+            "[italic]This is routine for someone with your skill.[/italic]",
+        ]
 
-    # Format the outcome
+        panel = Panel(
+            "\n".join(lines),
+            title="[bold]Result[/bold]",
+            border_style="green",
+            padding=(0, 2),
+        )
+        console.print(panel)
+        console.print()
+        return
+
+    # Format the dice roll (2d10)
+    if dice_rolls and len(dice_rolls) == 2:
+        dice_sum = sum(dice_rolls)
+        if is_critical_success:
+            # Both dice = 10
+            dice_display = f"[bold yellow]({dice_rolls[0]}+{dice_rolls[1]})[/bold yellow]"
+            crit_label = " CRITICAL!"
+        elif is_critical_failure:
+            # Both dice = 1
+            dice_display = f"[bold red]({dice_rolls[0]}+{dice_rolls[1]})[/bold red]"
+            crit_label = " CRITICAL!"
+        else:
+            dice_display = f"({dice_rolls[0]}+{dice_rolls[1]})"
+            crit_label = ""
+    else:
+        dice_display = "?"
+        dice_sum = 0
+        crit_label = ""
+
+    # Format the outcome based on tier
+    tier_display = {
+        "exceptional": ("[bold green]EXCEPTIONAL SUCCESS![/bold green]", "green"),
+        "clear_success": ("[bold green]CLEAR SUCCESS[/bold green]", "green"),
+        "narrow_success": ("[green]NARROW SUCCESS[/green]", "green"),
+        "bare_success": ("[yellow]BARE SUCCESS[/yellow]", "yellow"),
+        "partial_failure": ("[yellow]PARTIAL FAILURE[/yellow]", "yellow"),
+        "clear_failure": ("[red]CLEAR FAILURE[/red]", "red"),
+        "catastrophic": ("[bold red]CATASTROPHIC FAILURE![/bold red]", "red"),
+    }
+
     if is_critical_success:
         outcome = "[bold yellow]CRITICAL SUCCESS![/bold yellow]"
+        border_style = "yellow"
     elif is_critical_failure:
         outcome = "[bold red]CRITICAL FAILURE![/bold red]"
-    elif success:
-        if margin >= 10:
-            outcome = "[bold green]SUCCESS![/bold green] (overwhelming)"
-        elif margin >= 5:
-            outcome = "[bold green]SUCCESS![/bold green] (clear)"
-        else:
-            outcome = "[green]SUCCESS[/green] (narrow)"
+        border_style = "red"
     else:
-        if margin <= -10:
-            outcome = "[bold red]FAILURE[/bold red] (catastrophic)"
-        elif margin <= -5:
-            outcome = "[red]FAILURE[/red] (clear)"
-        else:
-            outcome = "[yellow]FAILURE[/yellow] (narrow)"
+        outcome, border_style = tier_display.get(
+            outcome_tier,
+            ("[green]SUCCESS[/green]" if success else "[red]FAILURE[/red]", "green" if success else "red")
+        )
 
     # Build result display
     margin_str = f"+{margin}" if margin >= 0 else str(margin)
     lines = [
-        f"Roll: {roll_display} {mod_str} = [bold]{total_roll}[/bold]",
+        f"Roll: {dice_display} {mod_str} = [bold]{total_roll}[/bold]{crit_label}",
         f"vs DC {dc}",
         "",
         outcome,
         f"[dim](margin: {margin_str})[/dim]",
     ]
-
-    # Choose border color based on outcome
-    if is_critical_success or (success and margin >= 5):
-        border_style = "green"
-    elif is_critical_failure or (not success and margin <= -5):
-        border_style = "red"
-    elif success:
-        border_style = "green"
-    else:
-        border_style = "yellow"
 
     panel = Panel(
         "\n".join(lines),
