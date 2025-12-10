@@ -8,6 +8,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Structured GM Output System (Phase 1-2)** - Tool-based entity creation with emergent traits
+  - **Goal System Infrastructure** (`src/agents/schemas/goals.py`):
+    - `NPCGoal` schema with 12 goal types (acquire, romance, survive, duty, etc.)
+    - `GoalUpdate` schema for tracking goal progress
+    - Priority levels: background, low, medium, high, urgent
+    - Strategy steps and completion conditions
+  - **NPC State Schemas** (`src/agents/schemas/npc_state.py`):
+    - `NPCFullState` - Complete NPC data with appearance, personality, needs
+    - `NPCAppearance` - Age (precise + narrative), physical description
+    - `NPCPersonality` - Traits, values, flaws, quirks, speech patterns
+    - `NPCPreferencesData` - Attraction preferences (physical + personality)
+    - `EnvironmentalReaction` - NPC reactions to scene elements
+    - `AttractionScore` - Physical/personality/overall attraction calculation
+    - `SceneContext`, `VisibleItem`, `PlayerSummary` for situational awareness
+  - **GM Response Schemas** (`src/agents/schemas/gm_response.py`):
+    - `GMResponse` - Structured output with narrative + manifest
+    - `GMManifest` - NPCs, items, actions, relationship changes
+    - `NPCAction` - Entity actions with motivation tracking
+  - **Goal Manager** (`src/managers/goal_manager.py`):
+    - `create_goal()` - Create goals with triggers and strategies
+    - `get_goals_for_entity()` - Query active goals
+    - `update_goal_progress()` - Advance goal steps
+    - `complete_goal()`, `fail_goal()`, `abandon_goal()`
+    - `get_urgent_goals()` - Priority-based filtering
+    - `get_goals_by_type()` - Type-based filtering
+    - 35 tests in `tests/test_managers/test_goal_manager.py`
+  - **Emergent NPC Generator** (`src/services/emergent_npc_generator.py`):
+    - Philosophy: "GM Discovers, Not Prescribes"
+    - Creates NPCs with emergent personality, preferences, attractions
+    - Environmental reactions (notices items, calculates attraction)
+    - Immediate goal generation based on role and needs
+    - Behavioral prediction for GM guidance
+    - Database persistence (Entity, NPCExtension, Skills, Preferences, Needs)
+    - 27 tests in `tests/test_services/test_emergent_npc_generator.py`
+  - **Emergent Item Generator** (`src/services/emergent_item_generator.py`):
+    - Items have emergent quality, condition, value, provenance
+    - Context-based subtype inference (e.g., "sword" → sword damage)
+    - 8 item types: weapon, armor, clothing, food, drink, tool, container, misc
+    - Need triggers (food→hunger, drink→thirst)
+    - Narrative hooks for storytelling
+    - 43 tests in `tests/test_services/test_emergent_item_generator.py`
+  - **NPC Tools** (`src/agents/tools/npc_tools.py`):
+    - `CREATE_NPC_TOOL` - Create NPC with emergent traits, optional constraints
+    - `QUERY_NPC_TOOL` - Query existing NPC's reactions to scene
+    - `CREATE_ITEM_TOOL` - Create item with emergent properties
+  - **Tool Executor Updates** (`src/agents/tools/executor.py`):
+    - `_execute_create_npc()` - Handler for NPC creation
+    - `_execute_query_npc()` - Handler for NPC queries
+    - `_execute_create_item()` - Handler for item creation
+    - Lazy-loaded `npc_generator` and `item_generator` properties
+  - **World Simulator Goal Processing** (`src/agents/world_simulator.py`):
+    - `_check_need_driven_goals()` - Auto-create goals from urgent NPC needs
+    - `_process_npc_goals()` - Process active NPC goals during simulation
+    - `_execute_goal_step()` - Execute single goal step with success/failure
+    - `_evaluate_step_success()` - Probabilistic step success based on type/priority
+    - `_check_step_for_movement()` - Detect location-changing goal steps
+    - New dataclasses: `GoalStepResult`, `GoalCreatedEvent`
+    - Extended `SimulationResult` with goal tracking fields
+    - Fixed bug: Removed invalid `Schedule.session_id` filter
+    - 9 tests in `tests/test_agents/test_nodes/test_world_simulator_goals.py`
+  - **Context Compiler with NPC Motivations** (`src/managers/context_compiler.py`):
+    - `_get_npc_location_reason()` - Returns "Goal pursuit" or "Scheduled" based on NPC state
+    - `_get_npc_active_goals()` - Returns formatted goal list with priority and motivation
+    - `_get_urgent_needs()` - Returns needs with >60% urgency (hunger, thirst, etc.)
+    - `_get_entity_registry_context()` - Provides entity keys for manifest references
+    - Updated `_format_npc_context()` to include goals, location reason, urgent needs
+    - Added `entity_registry_context` field to `SceneContext`
+    - Updated `to_prompt()` to include entity registry section
+    - 14 tests in `tests/test_managers/test_context_compiler_goals.py`
+  - **GM Response Schema** (`src/agents/schemas/gm_response.py`):
+    - `GMResponse` - Structured output with narrative + state + manifest
+    - `GMManifest` - NPCs, items, actions, relationship changes, facts, stimuli, goals
+    - `GMState` - Time advancement, location changes, combat initiation
+    - `NPCAction` - Entity actions with motivation tracking
+    - `ItemChange` - Item ownership/state changes
+    - `RelationshipChange` - Relationship dimension changes with reason
+    - `FactRevealed` - Facts learned with secret flag
+    - `Stimulus` - Need-affecting stimuli with intensity
+    - Re-uses `GoalCreation` and `GoalUpdate` from goals.py (no duplication)
+  - Updated `src/agents/schemas/__init__.py` with GM response exports
+  - **Persistence Node Manifest Support** (`src/agents/nodes/persistence_node.py`):
+    - `_persist_from_manifest()` - Process GMManifest data for persistence
+    - `_persist_manifest_fact()` - Persist FactRevealed entries
+    - `_persist_manifest_relationship()` - Persist RelationshipChange entries
+    - `_persist_manifest_goal_creation()` - Create goals from GoalCreation entries
+    - `_persist_manifest_goal_update()` - Process GoalUpdate entries (complete, fail, advance)
+    - Dual-mode support: manifest-based (new) or extraction-based (legacy)
+    - 16 tests in `tests/test_agents/test_nodes/test_persistence_manifest.py`
+  - **GameState Updates** (`src/agents/state.py`):
+    - Added `gm_manifest` field for structured GMResponse output
+    - Added `skill_checks` field for interactive dice display
+    - Updated docstrings for legacy vs manifest fields
+  - **Phase 6: Polish** (Integration tests, bug fixes, documentation):
+    - 9 new integration tests in `tests/test_integration/test_emergent_scenarios.py`:
+      - `TestHungryNPCScenario` - Hungry NPCs react to food, satisfied NPCs don't
+      - `TestGoalDrivenNPCScenario` - Goals persisted and updated via manifest
+      - `TestAttractionScenario` - Attraction varies by player traits, constraints work
+      - `TestFullManifestWorkflow` - Complex manifests with multiple components
+
+### Fixed
+- **EmergentNPCGenerator needs inversion bug**: Fixed `query_npc_reactions()` to properly convert CharacterNeeds (high=good) to NPCNeeds schema (high=urgent) by inverting hunger and thirst values. Previously well-fed NPCs (hunger=90) would incorrectly show "overwhelming" hunger reactions.
+
 - **Realistic Skill Check System (2d10)** - Replace d20 with 2d10 bell curve for expert reliability
   - New `docs/game-mechanics.md` - Documents all D&D deviations and reasoning
   - **2d10 Bell Curve**: Range 2-20 (same as d20), but with 4x less variance (8.25 vs 33.25)

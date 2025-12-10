@@ -7,6 +7,7 @@ from src.managers.death import DeathManager, DeathSaveResult, RevivalResult
 from src.managers.entity_manager import EntityManager
 from src.managers.event_manager import EventManager
 from src.managers.fact_manager import FactManager
+from src.managers.goal_manager import GoalManager
 from src.managers.grief import GriefManager, GriefStageInfo
 from src.managers.injuries import ActivityImpact, InjuryManager, InjuryRecoveryTime
 from src.managers.item_manager import ItemManager
@@ -33,6 +34,8 @@ __all__ = [
     "ScheduleManager",
     "EventManager",
     "TaskManager",
+    # Goals
+    "GoalManager",
     # Needs
     "NeedsManager",
     "NeedEffect",

@@ -10,6 +10,14 @@ from src.agents.tools.gm_tools import (
     ToolDefinition,
     ToolParameter,
 )
+from src.agents.tools.npc_tools import (
+    CREATE_NPC_TOOL,
+    QUERY_NPC_TOOL,
+    NPC_TOOLS,
+    CREATE_ITEM_TOOL,
+    ITEM_TOOLS,
+    ENTITY_TOOLS,
+)
 from src.agents.tools.executor import GMToolExecutor
 
 __all__ = [
@@ -19,6 +27,12 @@ __all__ = [
     "ROLL_DAMAGE_TOOL",
     "GET_NPC_ATTITUDE_TOOL",
     "UPDATE_NPC_ATTITUDE_TOOL",
+    "CREATE_NPC_TOOL",
+    "QUERY_NPC_TOOL",
+    "NPC_TOOLS",
+    "CREATE_ITEM_TOOL",
+    "ITEM_TOOLS",
+    "ENTITY_TOOLS",
     "ToolDefinition",
     "ToolParameter",
     "GMToolExecutor",

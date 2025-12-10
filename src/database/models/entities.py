@@ -223,6 +223,10 @@ class Entity(Base, TimestampMixin):
         cascade="all, delete-orphan",
         foreign_keys="Schedule.entity_id",
     )
+    goals: Mapped[list["NPCGoal"]] = relationship(
+        back_populates="entity",
+        cascade="all, delete-orphan",
+    )
 
     # Unique constraint
     __table_args__ = (

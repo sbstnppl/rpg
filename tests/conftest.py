@@ -30,6 +30,7 @@ def engine():
     from src.database.models import (  # noqa: F401
         character_state,
         entities,
+        goals,
         injuries,
         items,
         mental_state,

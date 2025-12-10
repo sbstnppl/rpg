@@ -10,6 +10,7 @@ from src.database.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from src.database.models.entities import Entity
+    from src.database.models.goals import NPCGoal
     from src.database.models.tasks import Appointment, Quest, Task
 
 
@@ -111,6 +112,10 @@ class GameSession(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
     quests: Mapped[list["Quest"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    npc_goals: Mapped[list["NPCGoal"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
     )

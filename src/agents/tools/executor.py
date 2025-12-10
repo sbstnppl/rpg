@@ -8,6 +8,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from src.agents.schemas.npc_state import (
+    NPCConstraints,
+    PlayerSummary,
+    SceneContext,
+    VisibleItem,
+)
 from src.database.models.entities import Entity, EntityAttribute, EntitySkill
 from src.database.models.enums import DiscoveryMethod
 from src.database.models.session import GameSession
@@ -35,6 +41,7 @@ class GMToolExecutor:
         db: Session,
         game_session: GameSession,
         current_zone_key: str | None = None,
+        scene_context: SceneContext | None = None,
     ):
         """Initialize executor with database context.
 
@@ -42,14 +49,18 @@ class GMToolExecutor:
             db: Database session.
             game_session: Current game session.
             current_zone_key: Player's current zone key (for navigation tools).
+            scene_context: Current scene context for NPC tools.
         """
         self.db = db
         self.game_session = game_session
         self.current_zone_key = current_zone_key
+        self.scene_context = scene_context
         self.relationship_manager = RelationshipManager(db, game_session)
         self._zone_manager: ZoneManager | None = None
         self._pathfinding_manager: PathfindingManager | None = None
         self._discovery_manager: DiscoveryManager | None = None
+        self._npc_generator = None
+        self._item_generator = None
 
     @property
     def zone_manager(self) -> ZoneManager:
@@ -68,6 +79,22 @@ class GMToolExecutor:
         if self._discovery_manager is None:
             self._discovery_manager = DiscoveryManager(self.db, self.game_session)
         return self._discovery_manager
+
+    @property
+    def npc_generator(self):
+        """Lazy-load NPC generator to avoid import cycles."""
+        if self._npc_generator is None:
+            from src.services.emergent_npc_generator import EmergentNPCGenerator
+            self._npc_generator = EmergentNPCGenerator(self.db, self.game_session)
+        return self._npc_generator
+
+    @property
+    def item_generator(self):
+        """Lazy-load item generator to avoid import cycles."""
+        if self._item_generator is None:
+            from src.services.emergent_item_generator import EmergentItemGenerator
+            self._item_generator = EmergentItemGenerator(self.db, self.game_session)
+        return self._item_generator
 
     def execute(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Execute a tool and return structured result.
@@ -96,6 +123,11 @@ class GMToolExecutor:
             "check_terrain": self._execute_check_terrain,
             "discover_zone": self._execute_discover_zone,
             "discover_location": self._execute_discover_location,
+            # NPC creation/query tools
+            "create_npc": self._execute_create_npc,
+            "query_npc": self._execute_query_npc,
+            # Item creation tools
+            "create_item": self._execute_create_item,
         }
 
         handler = handlers.get(tool_name)
@@ -852,3 +884,284 @@ class GMToolExecutor:
             "method": method_str,
             "already_known": not result["newly_discovered"],
         }
+
+    # =========================================================================
+    # NPC Creation/Query Tool Handlers
+    # =========================================================================
+
+    def _execute_create_npc(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Create a new NPC with emergent traits.
+
+        Args:
+            args: Tool arguments with role, location_key, and optional constraints.
+
+        Returns:
+            Full NPC state including appearance, personality, and environmental reactions.
+        """
+        role = args["role"]
+        location_key = args["location_key"]
+
+        # Build constraints from optional arguments
+        constraints = None
+        constraint_args = {
+            "name": args.get("constraint_name"),
+            "gender": args.get("constraint_gender"),
+            "age_range": args.get("constraint_age_range"),
+            "occupation": args.get("constraint_occupation"),
+            "personality": args.get("constraint_personality"),
+            "hostile_to_player": args.get("constraint_hostile"),
+            "friendly_to_player": args.get("constraint_friendly"),
+            "attracted_to_player": args.get("constraint_attracted"),
+        }
+
+        # Only create constraints if any were provided
+        if any(v is not None for v in constraint_args.values()):
+            constraints = NPCConstraints(**{k: v for k, v in constraint_args.items() if v is not None})
+
+        # Ensure we have a scene context
+        scene_context = self.scene_context
+        if scene_context is None:
+            # Create minimal scene context if not provided
+            scene_context = SceneContext(
+                location_key=location_key,
+                location_description="Unknown location",
+                entities_present=["player"],
+            )
+
+        try:
+            # Create the NPC
+            npc_state = self.npc_generator.create_npc(
+                role=role,
+                location_key=location_key,
+                scene_context=scene_context,
+                constraints=constraints,
+            )
+
+            # Convert to dict for LLM
+            return {
+                "success": True,
+                "entity_key": npc_state.entity_key,
+                "display_name": npc_state.display_name,
+                # Appearance for description
+                "appearance": {
+                    "age": npc_state.appearance.age,
+                    "age_description": npc_state.appearance.age_description,
+                    "gender": npc_state.appearance.gender,
+                    "height_description": npc_state.appearance.height_description,
+                    "build": npc_state.appearance.build,
+                    "hair": npc_state.appearance.hair,
+                    "eyes": npc_state.appearance.eyes,
+                    "skin": npc_state.appearance.skin,
+                    "notable_features": npc_state.appearance.notable_features,
+                    "clothing": npc_state.appearance.clothing,
+                    "voice": npc_state.appearance.voice,
+                },
+                # Background
+                "background": {
+                    "occupation": npc_state.background.occupation,
+                    "occupation_years": npc_state.background.occupation_years,
+                    "background_summary": npc_state.background.background_summary,
+                },
+                # Personality (what GM needs to know)
+                "personality": {
+                    "traits": npc_state.personality.traits,
+                    "values": npc_state.personality.values,
+                    "flaws": npc_state.personality.flaws,
+                    "quirks": npc_state.personality.quirks,
+                    "speech_pattern": npc_state.personality.speech_pattern,
+                },
+                # Current state
+                "current_state": {
+                    "mood": npc_state.current_state.mood,
+                    "activity": npc_state.current_state.current_activity,
+                    "location": npc_state.current_state.current_location,
+                },
+                # Needs (urgency levels, higher = more urgent)
+                "current_needs": {
+                    "hunger": npc_state.current_needs.hunger,
+                    "thirst": npc_state.current_needs.thirst,
+                    "fatigue": npc_state.current_needs.fatigue,
+                    "social": npc_state.current_needs.social,
+                },
+                # Environmental reactions (IMPORTANT for GM)
+                "environmental_reactions": [
+                    {
+                        "notices": r.notices,
+                        "reaction_type": r.reaction_type,
+                        "need_triggered": r.need_triggered,
+                        "intensity": r.intensity,
+                        "attraction_score": {
+                            "physical": r.attraction_score.physical,
+                            "personality": r.attraction_score.personality,
+                            "overall": r.attraction_score.overall,
+                        } if r.attraction_score else None,
+                        "internal_thought": r.internal_thought,
+                        "likely_behavior": r.likely_behavior,
+                    }
+                    for r in npc_state.environmental_reactions
+                ],
+                # Goals
+                "immediate_goals": [
+                    {"goal": g.goal, "priority": g.priority}
+                    for g in npc_state.immediate_goals
+                ],
+                # Behavioral guidance for GM
+                "behavioral_prediction": npc_state.behavioral_prediction,
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to create NPC: {str(e)}",
+            }
+
+    def _execute_query_npc(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Query an existing NPC's current state and reactions.
+
+        Args:
+            args: Tool arguments with entity_key.
+
+        Returns:
+            Updated NPC reactions and behavioral prediction.
+        """
+        entity_key = args["entity_key"]
+
+        # Ensure we have a scene context
+        scene_context = self.scene_context
+        if scene_context is None:
+            # Try to build from current zone
+            scene_context = SceneContext(
+                location_key=self.current_zone_key or "unknown",
+                location_description="Unknown location",
+                entities_present=["player"],
+            )
+
+        try:
+            reactions = self.npc_generator.query_npc_reactions(
+                entity_key=entity_key,
+                scene_context=scene_context,
+            )
+
+            if reactions is None:
+                return {
+                    "success": False,
+                    "error": f"NPC '{entity_key}' not found",
+                }
+
+            return {
+                "success": True,
+                "entity_key": reactions.entity_key,
+                "current_mood": reactions.current_mood,
+                "current_needs": {
+                    "hunger": reactions.current_needs.hunger,
+                    "thirst": reactions.current_needs.thirst,
+                    "fatigue": reactions.current_needs.fatigue,
+                    "social": reactions.current_needs.social,
+                },
+                "environmental_reactions": [
+                    {
+                        "notices": r.notices,
+                        "reaction_type": r.reaction_type,
+                        "need_triggered": r.need_triggered,
+                        "intensity": r.intensity,
+                        "attraction_score": {
+                            "physical": r.attraction_score.physical,
+                            "personality": r.attraction_score.personality,
+                            "overall": r.attraction_score.overall,
+                        } if r.attraction_score else None,
+                        "internal_thought": r.internal_thought,
+                        "likely_behavior": r.likely_behavior,
+                    }
+                    for r in reactions.environmental_reactions
+                ],
+                "behavioral_prediction": reactions.behavioral_prediction,
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to query NPC: {str(e)}",
+            }
+
+    # =========================================================================
+    # Item Creation Tool Handlers
+    # =========================================================================
+
+    def _execute_create_item(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Create a new item with emergent properties.
+
+        Args:
+            args: Tool arguments with item_type, context, location_key, and optional constraints.
+
+        Returns:
+            Full item state including quality, condition, value, and narrative hooks.
+        """
+        from src.services.emergent_item_generator import ItemConstraints
+
+        item_type = args["item_type"]
+        context = args["context"]
+        location_key = args["location_key"]
+
+        # Get owner entity ID if specified
+        owner_entity_id = None
+        owner_entity_key = args.get("owner_entity_key")
+        if owner_entity_key:
+            owner_entity = self._get_entity_by_key(owner_entity_key)
+            if owner_entity:
+                owner_entity_id = owner_entity.id
+            else:
+                return {
+                    "success": False,
+                    "error": f"Owner entity '{owner_entity_key}' not found",
+                }
+
+        # Build constraints from optional arguments
+        constraints = None
+        constraint_args = {
+            "name": args.get("constraint_name"),
+            "quality": args.get("constraint_quality"),
+            "condition": args.get("constraint_condition"),
+            "has_history": args.get("constraint_has_history"),
+        }
+
+        # Only create constraints if any were provided
+        if any(v is not None for v in constraint_args.values()):
+            constraints = ItemConstraints(**{k: v for k, v in constraint_args.items() if v is not None})
+
+        try:
+            item_state = self.item_generator.create_item(
+                item_type=item_type,
+                context=context,
+                location_key=location_key,
+                owner_entity_id=owner_entity_id,
+                constraints=constraints,
+            )
+
+            return {
+                "success": True,
+                "item_key": item_state.item_key,
+                "display_name": item_state.display_name,
+                "item_type": item_state.item_type,
+                "description": item_state.description,
+                # Physical properties
+                "quality": item_state.quality,
+                "condition": item_state.condition,
+                # Value info
+                "estimated_value": item_state.estimated_value,
+                "value_description": item_state.value_description,
+                # History (may be None)
+                "age_description": item_state.age_description,
+                "provenance": item_state.provenance,
+                # Special properties
+                "properties": item_state.properties,
+                # Need triggers (for NPCs noticing this item)
+                "need_triggers": item_state.need_triggers,
+                # Narrative hooks
+                "narrative_hooks": item_state.narrative_hooks,
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to create item: {str(e)}",
+            }

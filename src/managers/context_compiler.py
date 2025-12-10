@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from src.database.models.character_state import CharacterNeeds
 from src.database.models.entities import Entity, EntityAttribute, EntitySkill, NPCExtension
-from src.database.models.enums import EntityType
+from src.database.models.enums import EntityType, GoalStatus
+from src.database.models.goals import NPCGoal
 from src.dice.checks import get_proficiency_tier_name
 from src.database.models.injuries import BodyInjury
 from src.database.models.navigation import ZoneDiscovery
@@ -15,6 +16,7 @@ from src.database.models.session import GameSession, Turn
 from src.database.models.world import Fact, Location, TimeState, WorldEvent
 from src.managers.base import BaseManager
 from src.managers.discovery_manager import DiscoveryManager
+from src.managers.goal_manager import GoalManager
 from src.managers.injuries import InjuryManager
 from src.managers.item_manager import ItemManager
 from src.managers.needs import NeedsManager
@@ -35,6 +37,7 @@ class SceneContext:
     recent_events_context: str
     secrets_context: str  # GM-only info
     navigation_context: str = ""  # Current zone and navigation info
+    entity_registry_context: str = ""  # Entity keys for manifest references
 
     def to_prompt(self, include_secrets: bool = True) -> str:
         """Format as prompt string for GM."""
@@ -55,6 +58,9 @@ class SceneContext:
         if self.recent_events_context:
             sections.append(self.recent_events_context)
 
+        if self.entity_registry_context:
+            sections.append(self.entity_registry_context)
+
         if include_secrets and self.secrets_context:
             sections.append(self.secrets_context)
 
@@ -74,6 +80,7 @@ class ContextCompiler(BaseManager):
         item_manager: ItemManager | None = None,
         zone_manager: ZoneManager | None = None,
         discovery_manager: DiscoveryManager | None = None,
+        goal_manager: GoalManager | None = None,
     ) -> None:
         """Initialize with optional manager references.
 
@@ -86,6 +93,7 @@ class ContextCompiler(BaseManager):
         self._item_manager = item_manager
         self._zone_manager = zone_manager
         self._discovery_manager = discovery_manager
+        self._goal_manager = goal_manager
 
     @property
     def needs_manager(self) -> NeedsManager:
@@ -123,6 +131,12 @@ class ContextCompiler(BaseManager):
             self._discovery_manager = DiscoveryManager(self.db, self.game_session)
         return self._discovery_manager
 
+    @property
+    def goal_manager(self) -> GoalManager:
+        if self._goal_manager is None:
+            self._goal_manager = GoalManager(self.db, self.game_session)
+        return self._goal_manager
+
     def compile_scene(
         self,
         player_id: int,
@@ -153,6 +167,7 @@ class ContextCompiler(BaseManager):
             recent_events_context=self._get_recent_events(limit=5),
             secrets_context=self._get_secrets_context(location_key) if include_secrets else "",
             navigation_context=self._get_navigation_context(current_zone_key),
+            entity_registry_context=self._get_entity_registry_context(location_key, player_id),
         )
 
     def _get_turn_context(self, turn_number: int, history_limit: int = 3) -> str:
@@ -407,8 +422,13 @@ class ContextCompiler(BaseManager):
         return "\n".join(lines)
 
     def _format_npc_context(self, npc: Entity, player_id: int) -> list[str]:
-        """Format context for a single NPC."""
-        lines = [f"\n### {npc.display_name}"]
+        """Format context for a single NPC including motivations and goals."""
+        lines = [f"\n### {npc.display_name} ({npc.entity_key})"]
+
+        # WHY HERE - Location reason based on goals or schedule
+        location_reason = self._get_npc_location_reason(npc)
+        if location_reason:
+            lines.append(f"- **Location reason:** {location_reason}")
 
         # Appearance
         if npc.appearance:
@@ -423,10 +443,22 @@ class ContextCompiler(BaseManager):
             if npc.npc_extension.current_mood:
                 lines.append(f"- Mood: {npc.npc_extension.current_mood}")
 
+        # Active goals
+        active_goals = self._get_npc_active_goals(npc.id)
+        if active_goals:
+            lines.append("- **Active Goals:**")
+            for goal_info in active_goals[:3]:  # Limit to top 3
+                lines.append(f"  - {goal_info}")
+
         # Condition (visible needs/injuries)
         condition = self._get_condition_summary(npc.id, visible_only=True)
         if condition:
             lines.append(f"- Condition: {condition}")
+
+        # Urgent needs (for behavioral prediction)
+        urgent_needs = self._get_urgent_needs(npc.id)
+        if urgent_needs:
+            lines.append(f"- **Urgent needs:** {urgent_needs}")
 
         # Attitude toward player
         attitude = self.relationship_manager.get_attitude(npc.id, player_id)
@@ -812,5 +844,156 @@ class ContextCompiler(BaseManager):
             lines.append("\n### Known Locations Here")
             for loc in discovered_locations[:5]:  # Limit to 5
                 lines.append(f"- {loc.display_name}")
+
+        return "\n".join(lines)
+
+    # =========================================================================
+    # NPC Motivation & Goal Context Methods
+    # =========================================================================
+
+    def _get_npc_location_reason(self, npc: Entity) -> str:
+        """Get WHY an NPC is at their current location.
+
+        Checks goals first, then falls back to schedule/job.
+
+        Args:
+            npc: NPC entity.
+
+        Returns:
+            Human-readable reason for NPC's presence.
+        """
+        # Check for goal-driven presence
+        active_goals = self.goal_manager.get_active_goals(entity_id=npc.id)
+        for goal in active_goals:
+            if goal.priority.value in ("urgent", "high"):
+                goal_type = goal.goal_type.value
+                return f"Goal pursuit - {goal.description} ({goal_type})"
+
+        # Fall back to schedule/job
+        if npc.npc_extension:
+            if npc.npc_extension.job:
+                return f"Scheduled - works as {npc.npc_extension.job}"
+            if npc.npc_extension.current_activity:
+                return f"Scheduled - {npc.npc_extension.current_activity}"
+
+        return "Scheduled - routine activity"
+
+    def _get_npc_active_goals(self, entity_id: int) -> list[str]:
+        """Get formatted list of NPC's active goals.
+
+        Args:
+            entity_id: NPC entity ID.
+
+        Returns:
+            List of goal description strings.
+        """
+        goals = self.goal_manager.get_active_goals(entity_id=entity_id)
+        if not goals:
+            return []
+
+        result = []
+        for goal in goals[:5]:  # Limit to 5 goals
+            priority_str = f"[{goal.priority.value}]" if goal.priority else ""
+            goal_type = goal.goal_type.value if goal.goal_type else "unknown"
+            motivation_str = ""
+            if goal.motivation:
+                motivation_str = f" (motivated by: {', '.join(goal.motivation[:2])})"
+
+            result.append(f"{priority_str} {goal.description} ({goal_type}){motivation_str}")
+
+        return result
+
+    def _get_urgent_needs(self, entity_id: int) -> str:
+        """Get urgent needs for behavioral prediction.
+
+        Args:
+            entity_id: Entity ID.
+
+        Returns:
+            Comma-separated list of urgent needs.
+        """
+        urgency = self.needs_manager.get_npc_urgency(entity_id)
+        need_name, urgency_level = urgency
+
+        if urgency_level < 60:
+            return ""
+
+        # Get all needs above threshold
+        needs = self.needs_manager.get_needs(entity_id)
+        if not needs:
+            return ""
+
+        urgent = []
+        # All needs: 0 = bad, 100 = good. Urgency = 100 - value
+        if needs.hunger < 40:
+            urgent.append(f"hunger ({100 - needs.hunger}%)")
+        if needs.thirst < 40:
+            urgent.append(f"thirst ({100 - needs.thirst}%)")
+        if needs.energy < 30:
+            urgent.append(f"fatigue ({100 - needs.energy}%)")
+        if needs.social_connection < 30:
+            urgent.append(f"loneliness ({100 - needs.social_connection}%)")
+        if needs.intimacy < 25:
+            urgent.append(f"intimacy ({100 - needs.intimacy}%)")
+
+        return ", ".join(urgent)
+
+    def _get_entity_registry_context(self, location_key: str, player_id: int) -> str:
+        """Get entity registry for manifest references.
+
+        Provides entity keys that the GM should use when referencing
+        entities in structured output.
+
+        Args:
+            location_key: Current location key.
+            player_id: Player entity ID.
+
+        Returns:
+            Formatted entity registry string.
+        """
+        lines = ["## Entity Registry (use these keys in manifest)"]
+
+        # Player
+        player = self.db.query(Entity).filter(Entity.id == player_id).first()
+        if player:
+            lines.append(f"\n### Player")
+            lines.append(f"- {player.entity_key}: \"{player.display_name}\"")
+
+        # NPCs at location
+        npcs = (
+            self.db.query(Entity)
+            .filter(
+                Entity.session_id == self.session_id,
+                Entity.entity_type == EntityType.NPC,
+                Entity.is_alive == True,
+                Entity.is_active == True,
+            )
+            .limit(10)
+            .all()
+        )
+
+        if npcs:
+            lines.append(f"\n### NPCs at Location")
+            for npc in npcs:
+                goal_hint = ""
+                active_goals = self.goal_manager.get_active_goals(entity_id=npc.id)
+                if active_goals:
+                    top_goal = active_goals[0]
+                    goal_hint = f" (HERE FOR: {top_goal.description})"
+                lines.append(f"- {npc.entity_key}: \"{npc.display_name}\"{goal_hint}")
+
+        # Player inventory (visible items)
+        visible_items = self.item_manager.get_visible_equipment(player_id)
+        if visible_items:
+            lines.append(f"\n### Player Visible Items")
+            for item in visible_items[:5]:
+                lines.append(f"- {item.item_key}: \"{item.display_name}\"")
+
+        # Location items
+        location_items = self.item_manager.get_items_at_location(location_key)
+        if location_items:
+            lines.append(f"\n### Items at Location")
+            for item in location_items[:5]:
+                lines.append(f"- {item.item_key}: \"{item.display_name}\"")
 
         return "\n".join(lines)

@@ -388,3 +388,47 @@ class EmotionalValence(str, Enum):
     NEGATIVE = "negative"  # Grief, fear, shame, anger
     MIXED = "mixed"  # Bittersweet, complex feelings
     NEUTRAL = "neutral"  # Curious, interesting but not emotional
+
+
+# =============================================================================
+# NPC Goal Enums
+# =============================================================================
+
+
+class GoalType(str, Enum):
+    """Types of goals NPCs can pursue autonomously."""
+
+    ACQUIRE = "acquire"  # Get item/resource (miller needs grain)
+    MEET_PERSON = "meet_person"  # Find and interact with someone
+    GO_TO = "go_to"  # Travel to location
+    LEARN_INFO = "learn_info"  # Discover information
+    AVOID = "avoid"  # Stay away from person/place
+    PROTECT = "protect"  # Keep someone/something safe
+    EARN_MONEY = "earn_money"  # Work, trade, sell
+    ROMANCE = "romance"  # Pursue romantic interest
+    SOCIAL = "social"  # Make friends, build relationships
+    REVENGE = "revenge"  # Get back at someone
+    SURVIVE = "survive"  # Meet basic needs (find food/water)
+    DUTY = "duty"  # Fulfill obligation/job
+    CRAFT = "craft"  # Create something
+    HEAL = "heal"  # Recover from injury/illness
+
+
+class GoalPriority(str, Enum):
+    """Priority levels for NPC goals."""
+
+    BACKGROUND = "background"  # Long-term, low urgency
+    LOW = "low"  # Can wait
+    MEDIUM = "medium"  # Should address soon
+    HIGH = "high"  # Important, needs attention
+    URGENT = "urgent"  # Must address immediately
+
+
+class GoalStatus(str, Enum):
+    """Status of an NPC goal."""
+
+    ACTIVE = "active"  # Being pursued
+    COMPLETED = "completed"  # Successfully achieved
+    FAILED = "failed"  # Could not be achieved
+    ABANDONED = "abandoned"  # NPC gave up
+    BLOCKED = "blocked"  # Temporarily cannot proceed

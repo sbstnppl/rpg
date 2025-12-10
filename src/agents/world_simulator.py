@@ -16,11 +16,13 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from src.database.models.entities import Entity
-from src.database.models.enums import EntityType
+from src.database.models.enums import EntityType, GoalPriority, GoalStatus, GoalType
+from src.database.models.goals import NPCGoal
 from src.database.models.session import GameSession
 from src.database.models.world import Schedule, TimeState, WorldEvent
 from src.managers.base import BaseManager
 from src.managers.consistency import ConsistencyValidator
+from src.managers.goal_manager import GoalManager
 from src.managers.needs import ActivityType, NeedsManager
 from src.managers.relationship_manager import RelationshipManager
 
@@ -37,6 +39,33 @@ class NPCMovement:
 
 
 @dataclass
+class GoalStepResult:
+    """Result of executing a single goal step."""
+
+    goal_id: int
+    entity_id: int
+    step_executed: str
+    success: bool
+    npc_moved: bool = False
+    new_location: str | None = None
+    goal_completed: bool = False
+    goal_blocked: bool = False
+    narrative_hook: str | None = None
+
+
+@dataclass
+class GoalCreatedEvent:
+    """Record of a goal being created from needs."""
+
+    entity_id: int
+    entity_name: str
+    goal_type: str
+    target: str
+    motivation: str
+    priority: str
+
+
+@dataclass
 class SimulationResult:
     """Results of a world simulation step."""
 
@@ -50,6 +79,11 @@ class SimulationResult:
     items_spoiled: list[int] = field(default_factory=list)
     items_cleaned: list[int] = field(default_factory=list)
     random_events: list[dict] = field(default_factory=list)
+    # Goal-related results
+    goals_created: list[GoalCreatedEvent] = field(default_factory=list)
+    goal_steps_executed: list[GoalStepResult] = field(default_factory=list)
+    goals_completed: list[int] = field(default_factory=list)  # Goal IDs
+    goals_failed: list[int] = field(default_factory=list)  # Goal IDs
 
 
 class WorldSimulator(BaseManager):
@@ -69,12 +103,14 @@ class WorldSimulator(BaseManager):
         needs_manager: NeedsManager | None = None,
         relationship_manager: RelationshipManager | None = None,
         consistency_validator: ConsistencyValidator | None = None,
+        goal_manager: GoalManager | None = None,
     ) -> None:
         """Initialize with optional manager references."""
         super().__init__(db, game_session)
         self._needs_manager = needs_manager
         self._relationship_manager = relationship_manager
         self._consistency_validator = consistency_validator
+        self._goal_manager = goal_manager
 
     @property
     def needs_manager(self) -> NeedsManager:
@@ -93,6 +129,12 @@ class WorldSimulator(BaseManager):
         if self._consistency_validator is None:
             self._consistency_validator = ConsistencyValidator(self.db, self.game_session)
         return self._consistency_validator
+
+    @property
+    def goal_manager(self) -> GoalManager:
+        if self._goal_manager is None:
+            self._goal_manager = GoalManager(self.db, self.game_session)
+        return self._goal_manager
 
     def simulate_time_passage(
         self,
@@ -129,16 +171,22 @@ class WorldSimulator(BaseManager):
         if player_location:
             self._apply_temporal_effects(hours, player_location, result)
 
-        # 4. Update NPC positions per schedules
+        # 4. Check for need-driven goal creation
+        self._check_need_driven_goals(result)
+
+        # 5. Process NPC goals (may cause movement)
+        self._process_npc_goals(hours, result)
+
+        # 6. Update NPC positions per schedules (for NPCs not pursuing goals)
         self._update_npc_positions(hours, result)
 
-        # 5. Expire mood modifiers
+        # 7. Expire mood modifiers
         result.mood_modifiers_expired = self.relationship_manager.expire_mood_modifiers()
 
-        # 6. Check missed appointments (TODO: when TaskManager is available)
+        # 8. Check missed appointments (TODO: when TaskManager is available)
         # self._check_missed_appointments(result)
 
-        # 7. Advance game time
+        # 9. Advance game time
         self._advance_time(hours)
 
         self.db.flush()
@@ -366,11 +414,11 @@ class WorldSimulator(BaseManager):
 
         # Query schedules that apply now
         # Match: day_pattern is current day (or DAILY) AND time is in range
+        # Note: Schedule doesn't have session_id - entities are session-scoped
         schedules = (
             self.db.query(Schedule)
             .filter(
                 Schedule.entity_id == entity_id,
-                Schedule.session_id == self.session_id,
                 Schedule.day_pattern.in_([current_day, DayOfWeek.DAILY]),
                 Schedule.start_time <= current_time,
                 Schedule.end_time >= current_time,
@@ -491,6 +539,304 @@ class WorldSimulator(BaseManager):
         self.db.flush()
         return event
 
+    # =========================================================================
+    # Goal Processing
+    # =========================================================================
+
+    def _check_need_driven_goals(self, result: SimulationResult) -> None:
+        """Create goals for NPCs with urgent unmet needs.
+
+        When an NPC has a need above threshold and no active goal to address it,
+        a new goal is created. This drives autonomous NPC behavior.
+        """
+        # Threshold for creating need-driven goals
+        URGENT_THRESHOLD = 75
+
+        # Get all active NPCs
+        npcs = (
+            self.db.query(Entity)
+            .filter(
+                Entity.session_id == self.session_id,
+                Entity.entity_type == EntityType.NPC,
+                Entity.is_alive == True,
+                Entity.is_active == True,
+            )
+            .all()
+        )
+
+        for npc in npcs:
+            # Check for urgent needs
+            urgency = self.needs_manager.get_npc_urgency(npc.id)
+            need_name, urgency_level = urgency
+
+            if urgency_level < URGENT_THRESHOLD:
+                continue
+
+            # Map need to goal type
+            need_to_goal_type = {
+                "hunger": GoalType.SURVIVE,
+                "thirst": GoalType.SURVIVE,
+                "energy": GoalType.SURVIVE,
+                "social_connection": GoalType.SOCIAL,
+                "intimacy": GoalType.ROMANCE,
+            }
+
+            goal_type = need_to_goal_type.get(need_name, GoalType.SURVIVE)
+
+            # Check if NPC already has an active goal for this need
+            existing_goals = self.goal_manager.get_active_goals(
+                entity_id=npc.id,
+                goal_type=goal_type,
+            )
+
+            # Skip if already pursuing a goal for this need
+            has_matching_goal = False
+            for goal in existing_goals:
+                if need_name in (goal.motivation or []):
+                    has_matching_goal = True
+                    break
+
+            if has_matching_goal:
+                continue
+
+            # Create a new goal
+            target_map = {
+                "hunger": "food",
+                "thirst": "drink",
+                "energy": "rest",
+                "social_connection": "companionship",
+                "intimacy": "intimate_partner",
+            }
+
+            description_map = {
+                "hunger": "Find something to eat",
+                "thirst": "Find something to drink",
+                "energy": "Find a place to rest",
+                "social_connection": "Find someone to talk to",
+                "intimacy": "Seek intimate companionship",
+            }
+
+            target = target_map.get(need_name, need_name)
+            description = description_map.get(need_name, f"Address {need_name} need")
+
+            # Determine priority based on urgency
+            if urgency_level >= 90:
+                priority = GoalPriority.URGENT
+            elif urgency_level >= 80:
+                priority = GoalPriority.HIGH
+            else:
+                priority = GoalPriority.MEDIUM
+
+            # Create the goal
+            goal = self.goal_manager.create_goal(
+                entity_id=npc.id,
+                goal_type=goal_type,
+                target=target,
+                description=description,
+                success_condition=f"{need_name} drops below {URGENT_THRESHOLD - 20}",
+                motivation=[need_name],
+                triggered_by=f"need_urgency_{urgency_level}",
+                priority=priority,
+                strategies=[
+                    f"look for {target}",
+                    f"acquire {target}",
+                    f"use {target} to satisfy {need_name}",
+                ],
+            )
+
+            result.goals_created.append(GoalCreatedEvent(
+                entity_id=npc.id,
+                entity_name=npc.display_name,
+                goal_type=goal_type.value,
+                target=target,
+                motivation=need_name,
+                priority=priority.value,
+            ))
+
+    def _process_npc_goals(self, hours: float, result: SimulationResult) -> None:
+        """Process active NPC goals and execute steps.
+
+        For significant time passages (30+ min), NPCs can make progress
+        on their goals. This may result in NPC movement, information
+        gathering, or goal completion.
+        """
+        if hours < 0.5:  # Less than 30 minutes, no significant goal progress
+            return
+
+        # Get all active goals ordered by priority
+        active_goals = self.goal_manager.get_active_goals()
+
+        # Group goals by NPC (each NPC processes their highest priority goal)
+        npc_goals: dict[int, NPCGoal] = {}
+        for goal in active_goals:
+            if goal.entity_id not in npc_goals:
+                npc_goals[goal.entity_id] = goal
+
+        # Process each NPC's primary goal
+        for entity_id, goal in npc_goals.items():
+            npc = self.db.query(Entity).filter(Entity.id == entity_id).first()
+            if not npc:
+                continue
+
+            step_result = self._execute_goal_step(npc, goal, hours)
+            if step_result:
+                result.goal_steps_executed.append(step_result)
+
+                if step_result.goal_completed:
+                    result.goals_completed.append(goal.id)
+
+                if step_result.npc_moved and step_result.new_location:
+                    result.npc_movements.append(NPCMovement(
+                        npc_id=npc.id,
+                        npc_name=npc.display_name,
+                        from_location=npc.npc_extension.current_location if npc.npc_extension else None,
+                        to_location=step_result.new_location,
+                        reason=f"goal: {goal.description}",
+                    ))
+
+    def _execute_goal_step(
+        self,
+        npc: Entity,
+        goal: NPCGoal,
+        hours: float,
+    ) -> GoalStepResult | None:
+        """Execute one step of an NPC's goal pursuit.
+
+        Args:
+            npc: The NPC entity.
+            goal: The goal being pursued.
+            hours: Time available for pursuit.
+
+        Returns:
+            GoalStepResult or None if no step was executed.
+        """
+        if not goal.strategies or goal.current_step >= len(goal.strategies):
+            # No more steps or no strategy defined
+            return None
+
+        current_step_desc = goal.strategies[goal.current_step]
+
+        # Determine success based on goal type and step
+        step_success = self._evaluate_step_success(npc, goal, current_step_desc)
+
+        result = GoalStepResult(
+            goal_id=goal.id,
+            entity_id=npc.id,
+            step_executed=current_step_desc,
+            success=step_success,
+        )
+
+        if step_success:
+            # Advance to next step
+            goal.current_step += 1
+
+            # Check if goal is complete
+            if goal.current_step >= len(goal.strategies):
+                # All steps completed
+                self.goal_manager.complete_goal(
+                    goal.id,
+                    f"Completed all steps for: {goal.description}"
+                )
+                result.goal_completed = True
+            else:
+                # Check for location-changing steps
+                next_step = goal.strategies[goal.current_step] if goal.current_step < len(goal.strategies) else ""
+                move_result = self._check_step_for_movement(npc, current_step_desc, next_step)
+                if move_result:
+                    result.npc_moved = True
+                    result.new_location = move_result
+                    # Update NPC location
+                    if npc.npc_extension:
+                        npc.npc_extension.current_location = move_result
+        else:
+            # Step failed - mark goal as blocked if repeated failures
+            result.goal_blocked = True
+            self.goal_manager.block_goal(goal.id, f"Failed step: {current_step_desc}")
+
+        self.db.flush()
+        return result
+
+    def _evaluate_step_success(
+        self,
+        npc: Entity,
+        goal: NPCGoal,
+        step_description: str,
+    ) -> bool:
+        """Evaluate if a goal step succeeds.
+
+        This is a simplified simulation - real success depends on
+        world state, NPC skills, etc. For now, we use probability
+        based on goal priority (urgent goals have higher success).
+        """
+        import random
+
+        step_lower = step_description.lower()
+
+        # Base success rates by step type
+        if "look for" in step_lower or "search" in step_lower:
+            base_rate = 0.7
+        elif "acquire" in step_lower or "get" in step_lower:
+            base_rate = 0.6
+        elif "use" in step_lower or "consume" in step_lower:
+            base_rate = 0.9  # Usually succeeds once acquired
+        elif "talk" in step_lower or "ask" in step_lower:
+            base_rate = 0.5
+        elif "travel" in step_lower or "go to" in step_lower:
+            base_rate = 0.8
+        else:
+            base_rate = 0.6
+
+        # Priority bonus
+        priority_bonus = {
+            GoalPriority.URGENT: 0.2,
+            GoalPriority.HIGH: 0.1,
+            GoalPriority.MEDIUM: 0.0,
+            GoalPriority.LOW: -0.1,
+            GoalPriority.BACKGROUND: -0.2,
+        }
+        modifier = priority_bonus.get(goal.priority, 0.0)
+
+        success_rate = min(0.95, max(0.1, base_rate + modifier))
+        return random.random() < success_rate
+
+    def _check_step_for_movement(
+        self,
+        npc: Entity,
+        current_step: str,
+        next_step: str,
+    ) -> str | None:
+        """Check if a step implies NPC movement.
+
+        Returns new location key if NPC should move, None otherwise.
+        """
+        step_lower = current_step.lower()
+
+        # Simple heuristics for movement
+        if "tavern" in step_lower:
+            return "tavern"
+        elif "inn" in step_lower:
+            return "inn"
+        elif "market" in step_lower:
+            return "market"
+        elif "shop" in step_lower:
+            return "general_store"
+        elif "home" in step_lower:
+            return f"home_{npc.entity_key}"
+        elif "temple" in step_lower:
+            return "temple"
+        elif "guild" in step_lower:
+            return "guild_hall"
+
+        # Check next step for location hints
+        next_lower = next_step.lower()
+        if "at the" in next_lower:
+            # Extract location from "at the X"
+            for loc in ["tavern", "inn", "market", "shop", "temple", "guild"]:
+                if loc in next_lower:
+                    return loc
+
+        return None
+
 
 # LangGraph node function (for future integration)
 def world_simulator_node(state: dict) -> dict:
@@ -536,6 +882,28 @@ def world_simulator_node(state: dict) -> dict:
             "mood_modifiers_expired": result.mood_modifiers_expired,
             "lighting_change": result.lighting_change,
             "crowd_change": result.crowd_change,
+            # Goal-related results
+            "goals_created": [
+                {
+                    "entity_name": g.entity_name,
+                    "goal_type": g.goal_type,
+                    "target": g.target,
+                    "motivation": g.motivation,
+                    "priority": g.priority,
+                }
+                for g in result.goals_created
+            ],
+            "goal_steps_executed": [
+                {
+                    "goal_id": s.goal_id,
+                    "step": s.step_executed,
+                    "success": s.success,
+                    "goal_completed": s.goal_completed,
+                }
+                for s in result.goal_steps_executed
+            ],
+            "goals_completed_count": len(result.goals_completed),
+            "goals_failed_count": len(result.goals_failed),
         }
 
     return state

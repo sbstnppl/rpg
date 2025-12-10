@@ -13,6 +13,9 @@ from src.database.models.enums import (
     EncounterFrequency,
     EntityType,
     FactCategory,
+    GoalPriority,
+    GoalStatus,
+    GoalType,
     GriefStage,
     InjurySeverity,
     InjuryType,
@@ -71,6 +74,9 @@ from src.database.models.navigation import (
     ZoneDiscovery,
 )
 
+# NPC Goals for autonomous behavior
+from src.database.models.goals import NPCGoal
+
 __all__ = [
     # Base
     "Base",
@@ -103,6 +109,10 @@ __all__ = [
     # Character memory enums
     "MemoryType",
     "EmotionalValence",
+    # Goal enums
+    "GoalType",
+    "GoalPriority",
+    "GoalStatus",
     # Session
     "GameSession",
     "Turn",
@@ -163,4 +173,6 @@ __all__ = [
     "LocationDiscovery",
     "MapItem",
     "DigitalMapAccess",
+    # NPC Goals
+    "NPCGoal",
 ]

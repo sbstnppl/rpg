@@ -70,6 +70,8 @@ from src.database.models.navigation import (
     ZoneConnection,
     ZoneDiscovery,
 )
+from src.database.models.goals import NPCGoal
+from src.database.models.enums import GoalPriority, GoalStatus, GoalType
 
 
 def _unique_key(prefix: str = "test") -> str:
@@ -1011,3 +1013,39 @@ def create_character_memory(
     db.add(memory)
     db.flush()
     return memory
+
+
+# =============================================================================
+# NPC Goal Factories
+# =============================================================================
+
+
+def create_npc_goal(
+    db: Session,
+    game_session: GameSession,
+    entity: Entity,
+    **overrides: Any,
+) -> NPCGoal:
+    """Create an NPCGoal with sensible defaults."""
+    defaults = {
+        "session_id": game_session.id,
+        "entity_id": entity.id,
+        "goal_key": _unique_key("goal"),
+        "goal_type": GoalType.ACQUIRE,
+        "target": "gold_coins",
+        "description": "Acquire some gold coins",
+        "motivation": ["greed", "survival"],
+        "triggered_by": "low_funds",
+        "priority": GoalPriority.MEDIUM,
+        "strategies": ["find_work", "sell_items", "beg"],
+        "current_step": 0,
+        "success_condition": "Has at least 10 gold coins",
+        "failure_condition": None,
+        "status": GoalStatus.ACTIVE,
+        "created_at_turn": game_session.total_turns,
+    }
+    defaults.update(overrides)
+    goal = NPCGoal(**defaults)
+    db.add(goal)
+    db.flush()
+    return goal

@@ -502,3 +502,125 @@
   - Needs inference tests
   - Occupation template tests
   - Integration tests with mocked LLM
+
+## Phase 10: Structured GM Output with Autonomous NPCs
+
+### 10.1 Core Infrastructure (Phase 1) ✓
+- [x] Create `src/agents/schemas/goals.py`
+  - `NPCGoal` schema with 12 goal types
+  - `GoalUpdate` schema for progress tracking
+  - Priority levels and completion conditions
+- [x] Create `src/agents/schemas/npc_state.py`
+  - `NPCFullState` - Complete NPC data
+  - `NPCAppearance` - Physical description with precise + narrative values
+  - `NPCPersonality` - Traits, values, flaws, quirks
+  - `NPCPreferencesData` - Attraction preferences
+  - `EnvironmentalReaction` - Scene reactions
+  - `AttractionScore` - Attraction calculation
+  - `SceneContext`, `VisibleItem`, `PlayerSummary`
+- [x] Create `src/agents/schemas/gm_response.py`
+  - `GMResponse` - Narrative + manifest structure
+  - `GMManifest` - NPCs, items, actions, changes
+  - `NPCAction` - Actions with motivations
+- [x] Create `src/managers/goal_manager.py`
+  - `create_goal()`, `get_goals_for_entity()`
+  - `update_goal_progress()`, `complete_goal()`
+  - `fail_goal()`, `abandon_goal()`
+  - `get_urgent_goals()`, `get_goals_by_type()`
+- [x] Create `tests/test_managers/test_goal_manager.py` (35 tests)
+
+### 10.2 NPC Creation Tools (Phase 2) ✓
+- [x] Create `src/services/emergent_npc_generator.py`
+  - `EmergentNPCGenerator.create_npc()` - Full NPC with emergent traits
+  - `query_npc_reactions()` - Update reactions to scene
+  - Attraction calculation (physical + personality)
+  - Environmental reaction generation
+  - Immediate goal generation
+  - Behavioral prediction
+  - Database persistence (Entity, NPCExtension, Skills, Preferences, Needs)
+- [x] Create `src/services/emergent_item_generator.py`
+  - `EmergentItemGenerator.create_item()` - Items with emergent properties
+  - `get_item_state()` - Retrieve existing item state
+  - Context-based subtype inference
+  - Quality/condition value calculation
+  - Provenance and narrative hooks
+- [x] Create `src/agents/tools/npc_tools.py`
+  - `CREATE_NPC_TOOL` - GM tool for NPC creation
+  - `QUERY_NPC_TOOL` - GM tool for NPC queries
+  - `CREATE_ITEM_TOOL` - GM tool for item creation
+- [x] Update `src/agents/tools/executor.py`
+  - `_execute_create_npc()` handler
+  - `_execute_query_npc()` handler
+  - `_execute_create_item()` handler
+  - Lazy-loaded generator properties
+- [x] Update `src/agents/tools/__init__.py`
+  - Export new tools and lists
+- [x] Create `tests/test_services/test_emergent_npc_generator.py` (27 tests)
+- [x] Create `tests/test_services/test_emergent_item_generator.py` (43 tests)
+
+### 10.3 World Simulator (Phase 3) ✓
+- [x] Update `src/agents/world_simulator.py`
+  - `_check_need_driven_goals()` - Auto-create goals from urgent needs
+  - `_process_npc_goals()` - Process active goals during simulation
+  - `_execute_goal_step()` - Execute single goal step
+  - `_evaluate_step_success()` - Probabilistic step success
+  - `_check_step_for_movement()` - Detect location changes
+- [x] Goal pursuit logic
+  - NPC movement toward goals
+  - Probabilistic step success based on type/priority
+  - Goal completion and blocking detection
+- [x] Integration with simulation loop
+  - Goals processed during `simulate_time_passage()`
+  - Results include goal tracking fields
+- [x] Create `tests/test_agents/test_nodes/test_world_simulator_goals.py` (9 tests)
+
+### 10.4 Context & Output (Phase 4) ✓
+- [x] Update `src/managers/context_compiler.py`
+  - `_get_npc_location_reason()` - Returns goal pursuit or scheduled reason
+  - `_get_npc_active_goals()` - Formatted goal list with priority/motivation
+  - `_get_urgent_needs()` - Needs with >60% urgency
+  - `_get_entity_registry_context()` - Entity keys for manifest references
+  - Updated `_format_npc_context()` with goals, location reason, urgent needs
+  - Added `entity_registry_context` field to `SceneContext`
+  - Updated `to_prompt()` to include entity registry section
+- [x] Create `src/agents/schemas/gm_response.py`
+  - `GMResponse` - Structured output (narrative + state + manifest)
+  - `GMManifest` - NPCs, items, actions, relationships, facts, stimuli, goals
+  - `GMState` - Time, location, combat state changes
+  - `NPCAction`, `ItemChange`, `RelationshipChange`, `FactRevealed`, `Stimulus`
+  - Re-uses `GoalCreation` and `GoalUpdate` from goals.py
+- [x] Update `src/agents/schemas/__init__.py`
+  - Export all GM response schemas
+- [x] Create `tests/test_managers/test_context_compiler_goals.py` (14 tests)
+
+### 10.5 Integration (Phase 5) ✓
+- [x] Graph already includes world simulator node (`route_after_gm` supports world_simulator)
+- [x] Update `src/agents/nodes/persistence_node.py`
+  - `_persist_from_manifest()` - Handle manifest-based persistence
+  - `_persist_manifest_fact()` - Persist FactRevealed entries
+  - `_persist_manifest_relationship()` - Persist RelationshipChange entries
+  - `_persist_manifest_goal_creation()` - Create goals from GoalCreation entries
+  - `_persist_manifest_goal_update()` - Process goal updates (complete, fail, advance)
+  - Dual-mode: uses manifest if `gm_manifest` in state, else legacy extraction
+- [x] Update `src/agents/state.py`
+  - Added `gm_manifest: dict[str, Any] | None` field for structured output
+  - Added `skill_checks: list[dict[str, Any]] | None` for dice display
+- [x] Create `tests/test_agents/test_nodes/test_persistence_manifest.py` (16 tests)
+- [ ] Remove/deprecate entity extractor (deferred - keeping for backward compatibility)
+
+### 10.6 Polish (Phase 6) ✓
+- [x] Tune NPC generation prompts
+  - EmergentNPCGenerator uses data pools, not LLM prompts (no tuning needed)
+  - Fixed needs inversion bug in `query_npc_reactions()`
+- [x] Test emergent scenarios
+  - Create `tests/test_integration/test_emergent_scenarios.py` (9 tests)
+  - `TestHungryNPCScenario` - Hungry NPCs react to food, satisfied NPCs don't
+  - `TestGoalDrivenNPCScenario` - Goals persisted and updated via manifest
+  - `TestAttractionScenario` - Attraction varies by player traits
+  - `TestFullManifestWorkflow` - Complex manifests with multiple components
+- [x] Performance optimization
+  - Verified indexes on key columns (session_id, entity_key)
+  - No N+1 query issues in ContextCompiler (15 efficient queries)
+- [x] Documentation updates
+  - Updated CHANGELOG.md with Phase 6 changes
+  - Updated this implementation plan
