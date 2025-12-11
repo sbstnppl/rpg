@@ -123,6 +123,7 @@ class GMToolExecutor:
             "check_terrain": self._execute_check_terrain,
             "discover_zone": self._execute_discover_zone,
             "discover_location": self._execute_discover_location,
+            "view_map": self._execute_view_map,
             # NPC creation/query tools
             "create_npc": self._execute_create_npc,
             "query_npc": self._execute_query_npc,
@@ -883,6 +884,56 @@ class GMToolExecutor:
             "location_name": location.display_name if location else location_key,
             "method": method_str,
             "already_known": not result["newly_discovered"],
+        }
+
+    def _execute_view_map(self, args: dict[str, Any]) -> dict[str, Any]:
+        """View a map item and discover its contents.
+
+        Args:
+            args: Tool arguments with item_key, viewer_entity_key.
+
+        Returns:
+            Result with zones and locations discovered.
+        """
+        from src.managers.map_manager import MapManager
+
+        item_key = args["item_key"]
+        viewer_entity_key = args.get("viewer_entity_key", "player")
+
+        # Verify viewer entity exists
+        viewer = self._get_entity_by_key(viewer_entity_key)
+        if viewer is None:
+            return {"error": f"Viewer entity '{viewer_entity_key}' not found"}
+
+        # Use discovery manager's view_map method
+        result = self.discovery_manager.view_map(item_key)
+
+        if not result["success"]:
+            return {
+                "error": result.get("reason", f"Failed to view map '{item_key}'"),
+                "success": False,
+            }
+
+        # Get map details for richer response
+        map_manager = MapManager(self.db, self.game_session)
+        map_info = map_manager.get_map_item(item_key)
+
+        return {
+            "success": True,
+            "item_key": item_key,
+            "viewer": viewer_entity_key,
+            "map_type": result.get("map_type", "unknown"),
+            "zones_discovered": result["zones_discovered"],
+            "locations_discovered": result["locations_discovered"],
+            "total_zones_discovered": len(result["zones_discovered"]),
+            "total_locations_discovered": len(result["locations_discovered"]),
+            "is_complete": map_info.get("is_complete", True) if map_info else True,
+            "message": (
+                f"Discovered {len(result['zones_discovered'])} zones and "
+                f"{len(result['locations_discovered'])} locations from the map."
+                if result["zones_discovered"] or result["locations_discovered"]
+                else "No new areas discovered (already known or map is empty)."
+            ),
         }
 
     # =========================================================================

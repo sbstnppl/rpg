@@ -499,3 +499,74 @@ def discovered(
             console.print("[dim]No locations discovered[/dim]")
 
         console.print()
+
+
+@app.command("import")
+def import_world(
+    file_path: str = typer.Argument(..., help="Path to YAML/JSON world file"),
+    session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
+) -> None:
+    """Import world data from a YAML or JSON file.
+
+    The file should contain zones, connections, and locations in the
+    WorldTemplate format. Use YAML for easy editing or JSON for programmatic
+    generation.
+
+    Example YAML structure:
+
+        name: "My World"
+        zones:
+          - zone_key: village
+            display_name: Village Center
+            terrain_type: grassland
+        connections:
+          - from_zone: village
+            to_zone: forest
+            direction: north
+        locations:
+          - location_key: tavern
+            display_name: The Rusty Tankard
+            zone_key: village
+            category: tavern
+    """
+    from pathlib import Path
+
+    from src.services.world_loader import WorldLoadError, load_world_from_file
+
+    path = Path(file_path)
+
+    with get_db_session() as db:
+        if session_id:
+            game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
+        else:
+            game_session = _get_active_session(db)
+
+        if not game_session:
+            display_error("No active session found. Create a session first.")
+            raise typer.Exit(1)
+
+        try:
+            results = load_world_from_file(db, game_session, path)
+        except FileNotFoundError:
+            display_error(f"File not found: {path}")
+            raise typer.Exit(1)
+        except WorldLoadError as e:
+            display_error(f"Failed to load world: {e}")
+            raise typer.Exit(1)
+
+        # Report results
+        console.print()
+        display_success(
+            f"Imported world from {path.name}:\n"
+            f"  - {results['zones']} zones\n"
+            f"  - {results['connections']} connections\n"
+            f"  - {results['locations']} locations"
+        )
+
+        if results.get("errors"):
+            console.print()
+            console.print("[yellow]Warnings:[/yellow]")
+            for error in results["errors"]:
+                console.print(f"  - {error}")
+
+        console.print()

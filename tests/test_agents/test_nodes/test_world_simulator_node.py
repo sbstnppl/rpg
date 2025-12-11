@@ -202,3 +202,152 @@ class TestWorldSimulatorNodeWithDefaultFunction:
             result = await world_simulator_node(state)
 
             assert "simulation_result" in result
+
+
+class TestLocationBasedActivity:
+    """Tests for location-based NPC activity inference."""
+
+    def test_get_location_activities_returns_activities_for_known_category(self):
+        """Should return activities for known location categories."""
+        from src.schemas.settings import get_location_activities
+
+        activities = get_location_activities("tavern")
+        assert "socializing" in activities
+        assert "resting" in activities
+
+    def test_get_location_activities_returns_default_for_unknown_category(self):
+        """Should return default activity for unknown categories."""
+        from src.schemas.settings import get_location_activities
+
+        activities = get_location_activities("unknown_category")
+        assert activities == ["active"]
+
+    def test_get_location_activities_returns_default_for_none(self):
+        """Should return default activity for None category."""
+        from src.schemas.settings import get_location_activities
+
+        activities = get_location_activities(None)
+        assert activities == ["active"]
+
+    def test_world_simulator_uses_location_for_activity(
+        self, db_session, game_session
+    ):
+        """WorldSimulator should infer activity from NPC location."""
+        from tests.factories import create_entity, create_location, create_npc_extension
+
+        from src.agents.world_simulator import WorldSimulator
+        from src.database.models.enums import EntityType
+        from src.managers.needs import ActivityType
+
+        # Create NPC with extension pointing to a tavern
+        npc = create_entity(
+            db_session, game_session, entity_key="bartender", entity_type=EntityType.NPC
+        )
+        tavern = create_location(db_session, game_session, location_key="main_tavern")
+        tavern.category = "tavern"
+        db_session.flush()
+
+        extension = create_npc_extension(db_session, npc)
+        extension.current_location = "main_tavern"
+        db_session.commit()
+
+        simulator = WorldSimulator(db_session, game_session)
+
+        # NPC at tavern should get SOCIALIZING activity
+        activity = simulator._get_npc_activity_type(npc.id, 1.0)
+
+        # Tavern primary activity is socializing
+        assert activity == ActivityType.SOCIALIZING
+
+
+class TestLocationChangeTracking:
+    """Tests for location visit tracking and change detection."""
+
+    def test_on_location_change_records_visit(
+        self, db_session, game_session, player_entity
+    ):
+        """on_location_change should record visit to previous location."""
+        from tests.factories import create_location
+
+        from src.agents.world_simulator import WorldSimulator
+        from src.database.models.world import LocationVisit
+
+        # Create locations
+        tavern = create_location(db_session, game_session, location_key="tavern")
+        market = create_location(db_session, game_session, location_key="market")
+        db_session.commit()
+
+        simulator = WorldSimulator(db_session, game_session)
+
+        # Move from tavern to market
+        result = simulator.on_location_change(
+            player_id=player_entity.id,
+            from_location="tavern",
+            to_location="market",
+            travel_time_hours=0.0,
+        )
+
+        # Should have recorded visit to tavern
+        visit = db_session.query(LocationVisit).filter(
+            LocationVisit.session_id == game_session.id,
+            LocationVisit.location_key == "tavern",
+        ).first()
+        assert visit is not None
+
+    def test_check_location_changes_detects_first_visit(
+        self, db_session, game_session, player_entity
+    ):
+        """First visit to a location should be flagged."""
+        from tests.factories import create_location
+
+        from src.agents.world_simulator import WorldSimulator
+
+        # Create location
+        tavern = create_location(db_session, game_session, location_key="tavern")
+        db_session.commit()
+
+        simulator = WorldSimulator(db_session, game_session)
+
+        # Check changes for first visit
+        changes = simulator._check_location_changes("tavern")
+
+        assert changes["first_visit"] is True
+
+    def test_check_location_changes_detects_npc_changes(
+        self, db_session, game_session, player_entity
+    ):
+        """Should detect NPCs who arrived or left since last visit."""
+        from tests.factories import create_entity, create_location, create_npc_extension
+
+        from src.agents.world_simulator import WorldSimulator
+        from src.database.models.enums import EntityType
+        from src.database.models.world import LocationVisit
+
+        # Create location and NPC
+        tavern = create_location(db_session, game_session, location_key="tavern")
+        bartender = create_entity(
+            db_session, game_session,
+            entity_key="bartender",
+            entity_type=EntityType.NPC
+        )
+        extension = create_npc_extension(db_session, bartender)
+        extension.current_location = "tavern"
+        db_session.flush()
+
+        # Create old visit record with no NPCs
+        visit = LocationVisit(
+            session_id=game_session.id,
+            location_key="tavern",
+            last_visit_turn=1,
+            items_snapshot=[],
+            npcs_snapshot=[],  # No NPCs before
+        )
+        db_session.add(visit)
+        db_session.commit()
+
+        simulator = WorldSimulator(db_session, game_session)
+        changes = simulator._check_location_changes("tavern")
+
+        # Bartender should be marked as arrived
+        assert "bartender" in changes["npcs_arrived"]
+        assert changes["first_visit"] is False

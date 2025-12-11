@@ -430,3 +430,65 @@ class WorldEvent(Base):
     def __repr__(self) -> str:
         known = "" if self.is_known_to_player else " [HIDDEN]"
         return f"<WorldEvent {self.event_type}: {self.summary[:30]}{known}>"
+
+
+class LocationVisit(Base, TimestampMixin):
+    """Track player visits to locations for change detection.
+
+    Stores a snapshot of who/what was at a location when the player last visited,
+    allowing the game to describe what changed since then.
+    """
+
+    __tablename__ = "location_visits"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("game_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Which location
+    location_key: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        index=True,
+        comment="Key of the visited location",
+    )
+
+    # When the player was last there
+    last_visit_turn: Mapped[int] = mapped_column(
+        nullable=False,
+        comment="Turn number of the last visit",
+    )
+    last_visit_time: Mapped[str | None] = mapped_column(
+        String(5),
+        nullable=True,
+        comment="In-game time of the last visit (HH:MM)",
+    )
+    last_visit_day: Mapped[int | None] = mapped_column(
+        nullable=True,
+        comment="In-game day of the last visit",
+    )
+
+    # Snapshot of who/what was there
+    items_snapshot: Mapped[list[str] | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="List of item keys present at last visit",
+    )
+    npcs_snapshot: Mapped[list[str] | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="List of NPC entity keys present at last visit",
+    )
+
+    # Constraint: one record per location per session
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id", "location_key", name="uq_location_visit_session_location"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<LocationVisit {self.location_key} turn={self.last_visit_turn}>"

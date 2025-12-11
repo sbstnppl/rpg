@@ -467,7 +467,36 @@ class DiscoveryManager(BaseManager):
         zones_discovered = []
         locations_discovered = []
 
-        # Discover zones on the map
+        # Handle coverage zone (hierarchical discovery)
+        # When a map has a coverage_zone_id, it reveals that zone and all its children
+        if map_item.coverage_zone_id:
+            coverage_zone = (
+                self.db.query(TerrainZone)
+                .filter(TerrainZone.id == map_item.coverage_zone_id)
+                .first()
+            )
+            if coverage_zone:
+                # Discover the coverage zone itself
+                result = self.discover_zone(
+                    coverage_zone.zone_key,
+                    method=DiscoveryMethod.MAP_VIEWED,
+                    source_map_key=item_key,
+                )
+                if result["newly_discovered"]:
+                    zones_discovered.append(coverage_zone.zone_key)
+
+                # Discover all child zones (recursive query for zones with this parent)
+                child_zones = self._get_descendant_zones(coverage_zone.id)
+                for child_zone in child_zones:
+                    result = self.discover_zone(
+                        child_zone.zone_key,
+                        method=DiscoveryMethod.MAP_VIEWED,
+                        source_map_key=item_key,
+                    )
+                    if result["newly_discovered"]:
+                        zones_discovered.append(child_zone.zone_key)
+
+        # Discover explicitly listed zones on the map
         if map_item.revealed_zone_ids:
             for zone_id in map_item.revealed_zone_ids:
                 zone = (
@@ -507,6 +536,34 @@ class DiscoveryManager(BaseManager):
             "locations_discovered": locations_discovered,
             "map_type": map_item.map_type.value,
         }
+
+    def _get_descendant_zones(self, parent_zone_id: int) -> list[TerrainZone]:
+        """Get all descendant zones of a parent zone recursively.
+
+        Args:
+            parent_zone_id: ID of the parent zone.
+
+        Returns:
+            List of all descendant TerrainZone objects.
+        """
+        descendants = []
+
+        # Get direct children
+        children = (
+            self.db.query(TerrainZone)
+            .filter(
+                TerrainZone.session_id == self.session_id,
+                TerrainZone.parent_zone_id == parent_zone_id,
+            )
+            .all()
+        )
+
+        for child in children:
+            descendants.append(child)
+            # Recursively get grandchildren
+            descendants.extend(self._get_descendant_zones(child.id))
+
+        return descendants
 
     # =========================================================================
     # Digital Map Access

@@ -48,7 +48,14 @@ from src.database.models.items import Item, StorageLocation
 from src.database.models.relationships import Relationship, RelationshipChange
 from src.database.models.session import GameSession, Turn
 from src.database.models.tasks import Appointment, Quest, QuestStage, Task
-from src.database.models.world import Fact, Location, Schedule, TimeState, WorldEvent
+from src.database.models.world import (
+    Fact,
+    Location,
+    LocationVisit,
+    Schedule,
+    TimeState,
+    WorldEvent,
+)
 
 # New models for realism system
 from src.database.models.character_state import CharacterNeeds
@@ -130,6 +137,7 @@ __all__ = [
     "RelationshipChange",
     # World
     "Location",
+    "LocationVisit",
     "Schedule",
     "TimeState",
     "Fact",

@@ -12,7 +12,76 @@ from sqlalchemy.orm import Session
 from src.agents.state import GameState
 from src.agents.world_simulator import WorldSimulator, SimulationResult
 from src.database.models.session import GameSession
+from src.managers.entity_manager import EntityManager
 from src.managers.needs import ActivityType
+
+
+def _infer_player_activity(state: GameState) -> ActivityType:
+    """Infer player activity from scene context and recent actions.
+
+    Analyzes scene_context, player_input, and gm_response for activity keywords
+    to determine what the player is doing.
+
+    Args:
+        state: Current game state.
+
+    Returns:
+        Inferred ActivityType.
+    """
+    # Gather text to analyze
+    scene_context = state.get("scene_context", "")
+    player_input = state.get("player_input", "")
+    gm_response = state.get("gm_response", "")
+
+    combined_text = f"{scene_context} {player_input} {gm_response}".lower()
+
+    # Check for specific activity indicators (order matters - most specific first)
+    if any(word in combined_text for word in [
+        "fight", "combat", "attack", "battle", "defend", "swing", "slash",
+        "shoot", "dodge", "parry", "initiative"
+    ]):
+        return ActivityType.COMBAT
+
+    if any(word in combined_text for word in [
+        "sleep", "sleeping", "asleep", "bed", "dream", "nap", "slumber",
+        "snore", "wake up", "woke up"
+    ]):
+        return ActivityType.SLEEPING
+
+    if any(word in combined_text for word in [
+        "rest", "resting", "sit", "sitting", "relax", "relaxing", "wait",
+        "waiting", "meditate", "recover", "take a break"
+    ]):
+        return ActivityType.RESTING
+
+    if any(word in combined_text for word in [
+        "talk", "talking", "conversation", "chat", "discuss", "speak",
+        "negotiate", "persuade", "barter", "meet with", "greet"
+    ]):
+        return ActivityType.SOCIALIZING
+
+    # Default to active for exploration, travel, investigation, etc.
+    return ActivityType.ACTIVE
+
+
+def _check_is_player_alone(
+    db: Session,
+    game_session: GameSession,
+    state: GameState,
+) -> bool:
+    """Check if the player is alone (no companions present).
+
+    Args:
+        db: Database session.
+        game_session: Current game session.
+        state: Current game state.
+
+    Returns:
+        True if player has no companions, False otherwise.
+    """
+    entity_manager = EntityManager(db, game_session)
+    companions = entity_manager.get_companions()
+    return len(companions) == 0
 
 
 async def world_simulator_node(state: GameState) -> dict[str, Any]:
@@ -96,12 +165,18 @@ async def _simulate_world(
 
     simulator = WorldSimulator(db, game_session)
 
+    # Infer player activity from context
+    player_activity = _infer_player_activity(state)
+
+    # Check if player has companions
+    is_player_alone = _check_is_player_alone(db, game_session, state)
+
     result = simulator.simulate_time_passage(
         hours=hours,
         player_id=state["player_id"],
-        player_activity=ActivityType.ACTIVE,  # TODO: Infer from context
+        player_activity=player_activity,
         player_location=state.get("player_location"),
-        is_player_alone=False,  # TODO: Infer from scene
+        is_player_alone=is_player_alone,
     )
 
     return {

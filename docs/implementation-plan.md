@@ -218,7 +218,7 @@
 - [x] Update `_execute_skill_check()` - Handle auto-success, new fields
 - [x] Update `display_skill_check_result()` - Auto-success and tier display
 - [x] Update GM prompt template - Skill check guidance for 2d10
-- [x] Update tests for 2d10 system (183 dice tests, 1842 total)
+- [x] Update tests for 2d10 system (183 dice tests, 1995 total)
 
 ## Phase 4: LangGraph Agents
 
@@ -332,7 +332,7 @@
 ## Phase 7: Polish & Testing
 
 ### 7.1 Tests
-- [x] Test database models (1825 tests total)
+- [x] Test database models (1995 tests total)
 - [x] Test managers
 - [x] Test agent tools
 - [x] Integration tests
@@ -420,8 +420,12 @@
   - `is_zone_discovered()`, `is_location_discovered()` - check discovery status
 
 ### 8.6 Map Item Integration
-- [ ] MapItem integration with Item system
-- [ ] "View map" action reveals zones and locations
+- [x] MapItem integration with Item system
+- [x] "View map" action reveals zones and locations
+  - `VIEW_MAP_TOOL` in `src/agents/tools/gm_tools.py`
+  - `_execute_view_map()` in `src/agents/tools/executor.py`
+  - Enhanced `view_map()` in DiscoveryManager with coverage zone support
+  - `_get_descendant_zones()` for hierarchical zone discovery
 - [ ] Setting-based digital map availability
 - [ ] Device/connection requirements for digital maps
 
@@ -434,8 +438,11 @@
 - [ ] Trigger travel simulation for distant destinations
 
 ### 8.8 World Building CLI Tools
-- [ ] CLI commands: `world create-zone`, `world connect-zones`, `world place-location`
-- [ ] Import from YAML/JSON templates
+- [x] CLI commands: `world zones`, `world create-zone`, `world connect-zones`, `world place-location`, `world zone-info`, `world discovered`
+- [x] Import from YAML/JSON templates
+  - `src/schemas/world_template.py` - Pydantic schemas for world import
+  - `src/services/world_loader.py` - `load_world_from_file()` function
+  - CLI command: `world import <file.yaml|json>`
 - [ ] Bulk zone creation for regions
 
 ## Phase 9: NPC Full Character Generation

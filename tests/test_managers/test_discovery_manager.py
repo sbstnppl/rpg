@@ -312,6 +312,42 @@ class TestDiscoveryManagerMaps:
         assert result["success"] is False
         assert "not found" in result["reason"].lower()
 
+    def test_view_map_coverage_zone_discovers_descendants(self, db_session, game_session):
+        """view_map with coverage_zone should discover zone and all descendants."""
+        # Create hierarchical zones: region -> sub_region -> village
+        region = create_terrain_zone(db_session, game_session, zone_key="northern_region")
+        db_session.flush()
+
+        sub_region = create_terrain_zone(db_session, game_session, zone_key="highland_sub")
+        sub_region.parent_zone_id = region.id
+        db_session.flush()
+
+        village_zone = create_terrain_zone(db_session, game_session, zone_key="village_area")
+        village_zone.parent_zone_id = sub_region.id
+        db_session.flush()
+
+        # Create a map that covers the region (should discover all children)
+        item = create_item(db_session, game_session, item_key="northern_map")
+        map_item = create_map_item(
+            db_session,
+            game_session,
+            item=item,
+            map_type=MapType.REGIONAL,
+        )
+        map_item.coverage_zone_id = region.id
+        db_session.commit()
+
+        manager = DiscoveryManager(db_session, game_session)
+        result = manager.view_map("northern_map")
+        db_session.commit()
+
+        assert result["success"] is True
+        # Should have discovered: region + sub_region + village_area = 3 zones
+        assert len(result["zones_discovered"]) == 3
+        assert manager.is_zone_discovered("northern_region")
+        assert manager.is_zone_discovered("highland_sub")
+        assert manager.is_zone_discovered("village_area")
+
 
 class TestDiscoveryManagerDigitalAccess:
     """Tests for digital map access (modern/sci-fi settings)."""

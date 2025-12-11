@@ -106,6 +106,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - `TestGoalDrivenNPCScenario` - Goals persisted and updated via manifest
       - `TestAttractionScenario` - Attraction varies by player traits, constraints work
       - `TestFullManifestWorkflow` - Complex manifests with multiple components
+  - **Phase 1-6: Future Enhancements Implementation**
+    - **Missed Appointments Check** (`src/agents/world_simulator.py`):
+      - Added `_check_missed_appointments()` method to detect appointments players missed
+      - Added `missed_appointments` field to `SimulationResult` dataclass
+    - **Player Activity Inference** (`src/agents/nodes/world_simulator_node.py`):
+      - Added `_infer_player_activity()` function to detect player state from scene context
+      - Detects: sleeping, combat, socializing, resting, active states
+    - **Companion Detection** (`src/agents/nodes/world_simulator_node.py`):
+      - Added companion query to determine if player is alone
+    - **Legacy Relationship Persistence** (`src/agents/nodes/persistence_node.py`):
+      - Fixed `_persist_relationship_change()` to properly update attitude dimensions
+    - **NPC Location Filtering** (`src/managers/context_compiler.py`):
+      - Fixed `_get_npcs_context()` to filter NPCs by current location
+    - **Task Context** (`src/managers/context_compiler.py`):
+      - Added `_get_tasks_context()` to include active tasks in context
+    - **Map Context for Navigation** (`src/managers/context_compiler.py`):
+      - Added `_get_map_inventory_context()` to show available maps during navigation
+    - **View Map Tool** (`src/agents/tools/gm_tools.py`, `src/agents/tools/executor.py`):
+      - Added `VIEW_MAP_TOOL` definition for examining maps
+      - Added `_execute_view_map()` handler with hierarchical zone discovery
+      - Enhanced `view_map()` in DiscoveryManager to handle `coverage_zone_id`
+      - Added `_get_descendant_zones()` for recursive zone tree traversal
+    - **NPC Location-Based Activity** (`src/schemas/settings.py`, `src/agents/world_simulator.py`):
+      - Added `LOCATION_ACTIVITY_MAPPING` dict (16 location types → activities)
+      - Added `get_location_activities()` function for activity lookup
+      - Updated `_get_npc_activity_type()` to use location context
+      - Added `_get_location_based_activity()` and `_activity_string_to_type()`
+    - **Location Change Tracking** (`src/database/models/world.py`, `src/agents/world_simulator.py`):
+      - New `LocationVisit` model to track player visits with snapshots
+      - Migration `012_add_location_visits.py` for the new table
+      - Added `_record_location_visit()`, `_check_location_changes()`
+      - Added `_get_items_at_location()`, `_get_npcs_at_location()`, `_get_events_since_visit()`
+      - Added `location_changes` field to `SimulationResult` dataclass
+    - **YAML/JSON World Import** (`src/services/world_loader.py`, `src/schemas/world_template.py`):
+      - New `WorldTemplate`, `ZoneTemplate`, `ConnectionTemplate`, `LocationTemplate` Pydantic schemas
+      - New `load_world_from_file()` function for YAML/JSON import
+      - Helper functions for enum parsing with aliases
+      - New CLI command `world import <file>` for importing world files
+      - 8 tests in `tests/test_services/test_world_loader.py`
 
 ### Fixed
 - **EmergentNPCGenerator needs inversion bug**: Fixed `query_npc_reactions()` to properly convert CharacterNeeds (high=good) to NPCNeeds schema (high=urgent) by inverting hunger and thirst values. Previously well-fed NPCs (hunger=90) would incorrectly show "overwhelming" hunger reactions.

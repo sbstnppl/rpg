@@ -414,3 +414,90 @@ def roll_all_attributes() -> dict[str, int]:
         "wisdom": roll_attribute(),
         "charisma": roll_attribute(),
     }
+
+
+# =============================================================================
+# Location-Based Activity Mapping
+# =============================================================================
+
+# Maps location categories (Location.category) to typical ActivityType values.
+# Used by WorldSimulator to infer NPC activities based on where they are.
+# The first activity in each list is the primary/default activity for that location.
+LOCATION_ACTIVITY_MAPPING: dict[str, list[str]] = {
+    # Social locations
+    "tavern": ["socializing", "resting"],
+    "inn": ["sleeping", "resting"],
+    "restaurant": ["resting", "socializing"],
+    "cafe": ["resting", "socializing"],
+    "pub": ["socializing", "resting"],
+    "club": ["socializing", "active"],
+    # Commerce
+    "market": ["active"],
+    "shop": ["active"],
+    "store": ["active"],
+    "bazaar": ["active", "socializing"],
+    # Religion/Contemplation
+    "temple": ["resting", "socializing"],
+    "church": ["resting"],
+    "shrine": ["resting"],
+    "monastery": ["resting", "sleeping"],
+    # Military/Training
+    "barracks": ["active", "combat"],
+    "training_ground": ["combat", "active"],
+    "arena": ["combat", "active"],
+    "dojo": ["combat", "active"],
+    "gym": ["active"],
+    # Residence
+    "home": ["sleeping", "resting"],
+    "house": ["sleeping", "resting"],
+    "bedroom": ["sleeping", "resting"],
+    "living_room": ["resting", "socializing"],
+    "kitchen": ["active"],
+    # Workspace
+    "workshop": ["active"],
+    "forge": ["active"],
+    "office": ["active"],
+    "laboratory": ["active"],
+    "library": ["resting", "active"],
+    # Medical
+    "hospital": ["resting"],
+    "clinic": ["resting"],
+    "infirmary": ["resting"],
+    # Outdoors
+    "wilderness": ["active"],
+    "forest": ["active"],
+    "mountain": ["active"],
+    "road": ["active"],
+    "path": ["active"],
+    "park": ["resting", "socializing"],
+    "garden": ["resting"],
+    # Maritime
+    "ship": ["active"],
+    "dock": ["active"],
+    "port": ["active", "socializing"],
+    # Default categories
+    "building": ["active"],
+    "room": ["active"],
+    "city": ["active", "socializing"],
+    "town": ["active", "socializing"],
+    "village": ["active", "socializing"],
+}
+
+
+def get_location_activities(category: str | None) -> list[str]:
+    """Get typical activities for a location category.
+
+    Args:
+        category: Location category (e.g., 'tavern', 'inn', 'market').
+
+    Returns:
+        List of activity type names, with primary activity first.
+        Returns ["active"] if category is unknown or None.
+    """
+    if not category:
+        return ["active"]
+
+    # Normalize category key (lowercase, strip whitespace)
+    key = category.lower().strip()
+
+    return LOCATION_ACTIVITY_MAPPING.get(key, ["active"])

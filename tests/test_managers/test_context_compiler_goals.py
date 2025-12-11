@@ -70,8 +70,9 @@ def player_entity(db_session: Session, game_session: GameSession) -> Entity:
 def npc_with_goal(
     db_session: Session,
     game_session: GameSession,
+    location: Location,
 ) -> tuple[Entity, NPCGoal]:
-    """Create NPC with an active goal."""
+    """Create NPC with an active goal at the test location."""
     entity = Entity(
         session_id=game_session.id,
         entity_key="merchant_bob",
@@ -87,6 +88,7 @@ def npc_with_goal(
         entity_id=entity.id,
         job="merchant",
         current_activity="manning the stall",
+        current_location=location.location_key,
     )
     db_session.add(extension)
 
@@ -126,8 +128,9 @@ def npc_with_goal(
 def npc_with_urgent_need(
     db_session: Session,
     game_session: GameSession,
+    location: Location,
 ) -> Entity:
-    """Create NPC with urgent hunger need."""
+    """Create NPC with urgent hunger need at the test location."""
     entity = Entity(
         session_id=game_session.id,
         entity_key="hungry_guard",
@@ -142,6 +145,7 @@ def npc_with_urgent_need(
     extension = NPCExtension(
         entity_id=entity.id,
         job="guard",
+        current_location=location.location_key,
     )
     db_session.add(extension)
 

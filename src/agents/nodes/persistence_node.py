@@ -136,7 +136,9 @@ async def _persist_state(
         # Persist relationship changes
         for change_data in state.get("relationship_changes", []):
             try:
-                _persist_relationship_change(relationship_manager, change_data, state.get("player_id"))
+                _persist_relationship_change(
+                    entity_manager, relationship_manager, change_data, state.get("player_id")
+                )
             except Exception as e:
                 errors.append(f"Failed to persist relationship change: {e}")
 
@@ -220,29 +222,40 @@ def _persist_fact(
 
 
 def _persist_relationship_change(
+    entity_manager: EntityManager,
     relationship_manager: RelationshipManager,
     change_data: dict[str, Any],
-    player_id: int,
+    player_id: int | None,
 ) -> None:
-    """Persist a relationship change.
+    """Persist a relationship change from legacy extraction.
 
     Args:
+        entity_manager: EntityManager instance for entity lookup.
         relationship_manager: RelationshipManager instance.
-        change_data: Relationship change data.
+        change_data: Relationship change data with entity_key, dimension, change.
         player_id: Player entity ID.
     """
     entity_key = change_data.get("entity_key")
     dimension = change_data.get("dimension")
     change = change_data.get("change", 0)
+    reason = change_data.get("reason", "Interaction")
 
-    if not entity_key or not dimension:
+    if not entity_key or not dimension or not player_id:
         return
 
-    # Get entity ID from key
-    # For now, we assume the relationship is with the player
-    # In a real implementation, we'd look up the entity ID
-    # This is a simplified version
-    pass  # TODO: Implement when entity lookup is available
+    # Look up entity by key
+    entity = entity_manager.get_entity(entity_key)
+    if not entity:
+        return
+
+    # Update the relationship between this entity and the player
+    relationship_manager.update_attitude(
+        from_id=entity.id,
+        to_id=player_id,
+        dimension=dimension,
+        delta=change,
+        reason=reason,
+    )
 
 
 def _create_turn_record(

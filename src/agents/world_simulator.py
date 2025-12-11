@@ -25,6 +25,8 @@ from src.managers.consistency import ConsistencyValidator
 from src.managers.goal_manager import GoalManager
 from src.managers.needs import ActivityType, NeedsManager
 from src.managers.relationship_manager import RelationshipManager
+from src.managers.task_manager import TaskManager
+from src.managers.time_manager import TimeManager
 
 
 @dataclass
@@ -84,6 +86,8 @@ class SimulationResult:
     goal_steps_executed: list[GoalStepResult] = field(default_factory=list)
     goals_completed: list[int] = field(default_factory=list)  # Goal IDs
     goals_failed: list[int] = field(default_factory=list)  # Goal IDs
+    # Location change tracking
+    location_changes: dict[str, Any] = field(default_factory=dict)
 
 
 class WorldSimulator(BaseManager):
@@ -104,6 +108,8 @@ class WorldSimulator(BaseManager):
         relationship_manager: RelationshipManager | None = None,
         consistency_validator: ConsistencyValidator | None = None,
         goal_manager: GoalManager | None = None,
+        task_manager: TaskManager | None = None,
+        time_manager: TimeManager | None = None,
     ) -> None:
         """Initialize with optional manager references."""
         super().__init__(db, game_session)
@@ -111,6 +117,8 @@ class WorldSimulator(BaseManager):
         self._relationship_manager = relationship_manager
         self._consistency_validator = consistency_validator
         self._goal_manager = goal_manager
+        self._task_manager = task_manager
+        self._time_manager = time_manager
 
     @property
     def needs_manager(self) -> NeedsManager:
@@ -135,6 +143,20 @@ class WorldSimulator(BaseManager):
         if self._goal_manager is None:
             self._goal_manager = GoalManager(self.db, self.game_session)
         return self._goal_manager
+
+    @property
+    def time_manager(self) -> TimeManager:
+        if self._time_manager is None:
+            self._time_manager = TimeManager(self.db, self.game_session)
+        return self._time_manager
+
+    @property
+    def task_manager(self) -> TaskManager:
+        if self._task_manager is None:
+            self._task_manager = TaskManager(
+                self.db, self.game_session, time_manager=self.time_manager
+            )
+        return self._task_manager
 
     def simulate_time_passage(
         self,
@@ -183,8 +205,8 @@ class WorldSimulator(BaseManager):
         # 7. Expire mood modifiers
         result.mood_modifiers_expired = self.relationship_manager.expire_mood_modifiers()
 
-        # 8. Check missed appointments (TODO: when TaskManager is available)
-        # self._check_missed_appointments(result)
+        # 8. Check missed appointments
+        self._check_missed_appointments(result)
 
         # 9. Advance game time
         self._advance_time(hours)
@@ -247,16 +269,22 @@ class WorldSimulator(BaseManager):
             result.needs_updated.append(npc.id)
 
     def _get_npc_activity_type(self, npc_id: int, hours: float) -> ActivityType:
-        """Determine NPC activity type based on schedule or urgency.
+        """Determine NPC activity type based on location, schedule, or urgency.
+
+        Priority order:
+        1. Urgent needs (override everything)
+        2. Schedule activity (if schedule exists)
+        3. Location-based activity (based on where NPC is)
+        4. Default: ACTIVE
 
         Returns activity type affecting need decay rates.
         """
-        # Check if NPC has urgent need that overrides schedule
+        # Check if NPC has urgent need that overrides everything
         urgency = self.needs_manager.get_npc_urgency(npc_id)
         need_name, urgency_level = urgency
 
         if urgency_level > 70:
-            # Urgent need overrides schedule
+            # Urgent need overrides schedule and location
             if need_name == "hunger":
                 return ActivityType.ACTIVE  # Seeking food
             elif need_name == "energy":
@@ -266,7 +294,7 @@ class WorldSimulator(BaseManager):
             elif need_name == "intimacy":
                 return ActivityType.ACTIVE  # Seeking companionship
 
-        # Default: check schedule
+        # Check schedule first (most specific)
         time_state = self._get_time_state()
         if time_state:
             # Get current schedule entry for NPC
@@ -274,8 +302,74 @@ class WorldSimulator(BaseManager):
             if schedule:
                 return self._schedule_to_activity_type(schedule.activity)
 
+        # No schedule - infer from current location
+        location_activity = self._get_location_based_activity(npc_id)
+        if location_activity:
+            return location_activity
+
         # Default activity
         return ActivityType.ACTIVE
+
+    def _get_location_based_activity(self, npc_id: int) -> ActivityType | None:
+        """Infer NPC activity type from their current location.
+
+        Args:
+            npc_id: ID of the NPC.
+
+        Returns:
+            ActivityType based on location category, or None if not determinable.
+        """
+        from src.database.models.entities import NPCExtension
+        from src.database.models.world import Location
+        from src.schemas.settings import get_location_activities
+
+        # Get NPC's current location
+        extension = (
+            self.db.query(NPCExtension)
+            .filter(NPCExtension.entity_id == npc_id)
+            .first()
+        )
+        if not extension or not extension.current_location:
+            return None
+
+        # Get location category
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == extension.current_location,
+            )
+            .first()
+        )
+        if not location or not location.category:
+            return None
+
+        # Get typical activities for this location category
+        activities = get_location_activities(location.category)
+        if not activities:
+            return None
+
+        # Map activity string to ActivityType enum
+        activity_str = activities[0]  # Primary activity
+        return self._activity_string_to_type(activity_str)
+
+    def _activity_string_to_type(self, activity_str: str) -> ActivityType:
+        """Convert activity string to ActivityType enum.
+
+        Args:
+            activity_str: Activity name (e.g., 'sleeping', 'socializing').
+
+        Returns:
+            Corresponding ActivityType enum value.
+        """
+        activity_map = {
+            "sleeping": ActivityType.SLEEPING,
+            "resting": ActivityType.RESTING,
+            "socializing": ActivityType.SOCIALIZING,
+            "combat": ActivityType.COMBAT,
+            "active": ActivityType.ACTIVE,
+        }
+        return activity_map.get(activity_str.lower(), ActivityType.ACTIVE)
 
     def _schedule_to_activity_type(self, activity_description: str) -> ActivityType:
         """Map schedule activity description to ActivityType."""
@@ -308,6 +402,28 @@ class WorldSimulator(BaseManager):
         result.crowd_change = effects.crowd_change
         result.items_spoiled = effects.items_spoiled
         result.items_cleaned = effects.items_cleaned
+
+    def _check_missed_appointments(self, result: SimulationResult) -> None:
+        """Check for and record missed appointments.
+
+        Uses TaskManager to find appointments that are now in the past
+        and marks them as missed. Populates result.missed_appointments.
+        """
+        try:
+            missed = self.task_manager.check_missed_appointments()
+        except ValueError:
+            # TimeManager not available - skip
+            return
+
+        for appointment in missed:
+            result.missed_appointments.append({
+                "appointment_id": appointment.id,
+                "description": appointment.description,
+                "game_day": appointment.game_day,
+                "game_time": appointment.game_time,
+                "location": appointment.location_name,
+                "participants": appointment.participants,
+            })
 
     def _update_npc_positions(
         self,
@@ -503,12 +619,206 @@ class WorldSimulator(BaseManager):
                 is_player_alone=True,  # Usually alone while traveling
             )
 
-        # TODO: Check what changed at new location since last visit
-        # - Items that should be there
-        # - NPCs who should be there
-        # - Any events that happened
+        # Record that we're leaving the old location
+        if from_location:
+            self._record_location_visit(from_location)
+
+        # Check what changed at the new location
+        location_changes = self._check_location_changes(to_location)
+        result.location_changes = location_changes
 
         return result
+
+    def _record_location_visit(self, location_key: str) -> None:
+        """Record the player's visit to a location with a snapshot of contents.
+
+        Creates or updates a LocationVisit record with the current state.
+
+        Args:
+            location_key: Key of the location being visited/left.
+        """
+        from src.database.models.world import LocationVisit
+
+        time_state = self._get_time_state()
+        current_turn = self.game_session.total_turns
+
+        # Get current items at location
+        items_at_location = self._get_items_at_location(location_key)
+        items_snapshot = [item.item_key for item in items_at_location]
+
+        # Get current NPCs at location
+        npcs_at_location = self._get_npcs_at_location(location_key)
+        npcs_snapshot = [npc.entity_key for npc in npcs_at_location]
+
+        # Find existing visit record or create new
+        visit = (
+            self.db.query(LocationVisit)
+            .filter(
+                LocationVisit.session_id == self.session_id,
+                LocationVisit.location_key == location_key,
+            )
+            .first()
+        )
+
+        if visit:
+            # Update existing record
+            visit.last_visit_turn = current_turn
+            visit.last_visit_time = time_state.current_time if time_state else None
+            visit.last_visit_day = time_state.current_day if time_state else None
+            visit.items_snapshot = items_snapshot
+            visit.npcs_snapshot = npcs_snapshot
+        else:
+            # Create new visit record
+            visit = LocationVisit(
+                session_id=self.session_id,
+                location_key=location_key,
+                last_visit_turn=current_turn,
+                last_visit_time=time_state.current_time if time_state else None,
+                last_visit_day=time_state.current_day if time_state else None,
+                items_snapshot=items_snapshot,
+                npcs_snapshot=npcs_snapshot,
+            )
+            self.db.add(visit)
+
+        self.db.flush()
+
+    def _check_location_changes(self, location_key: str) -> dict[str, Any]:
+        """Check what changed at a location since the player's last visit.
+
+        Args:
+            location_key: Location key to check.
+
+        Returns:
+            Dict with changes: items_added, items_removed, npcs_arrived, npcs_left, events
+        """
+        from src.database.models.world import LocationVisit
+
+        changes: dict[str, Any] = {
+            "first_visit": False,
+            "items_added": [],
+            "items_removed": [],
+            "npcs_arrived": [],
+            "npcs_left": [],
+            "events_since": [],
+        }
+
+        # Get last visit record
+        visit = (
+            self.db.query(LocationVisit)
+            .filter(
+                LocationVisit.session_id == self.session_id,
+                LocationVisit.location_key == location_key,
+            )
+            .first()
+        )
+
+        if not visit:
+            changes["first_visit"] = True
+            return changes
+
+        # Get current state
+        current_items = self._get_items_at_location(location_key)
+        current_item_keys = {item.item_key for item in current_items}
+
+        current_npcs = self._get_npcs_at_location(location_key)
+        current_npc_keys = {npc.entity_key for npc in current_npcs}
+
+        # Compare items
+        previous_items = set(visit.items_snapshot or [])
+        changes["items_added"] = list(current_item_keys - previous_items)
+        changes["items_removed"] = list(previous_items - current_item_keys)
+
+        # Compare NPCs
+        previous_npcs = set(visit.npcs_snapshot or [])
+        changes["npcs_arrived"] = list(current_npc_keys - previous_npcs)
+        changes["npcs_left"] = list(previous_npcs - current_npc_keys)
+
+        # Get events since last visit
+        events = self._get_events_since_visit(location_key, visit.last_visit_turn)
+        changes["events_since"] = [
+            {"type": e.event_type, "summary": e.summary}
+            for e in events
+        ]
+
+        return changes
+
+    def _get_items_at_location(self, location_key: str) -> list:
+        """Get items currently at a world location.
+
+        Items at a location are linked via StorageLocation (PLACE type) which
+        references a world Location.
+        """
+        from src.database.models.items import Item, StorageLocation
+        from src.database.models.world import Location
+
+        # Find the world location
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+        if not location:
+            return []
+
+        # Find storage locations at this world location
+        storage_locs = (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.session_id,
+                StorageLocation.world_location_id == location.id,
+            )
+            .all()
+        )
+        if not storage_locs:
+            return []
+
+        storage_ids = [s.id for s in storage_locs]
+
+        # Get items in those storage locations
+        return (
+            self.db.query(Item)
+            .filter(
+                Item.session_id == self.session_id,
+                Item.storage_location_id.in_(storage_ids),
+            )
+            .all()
+        )
+
+    def _get_npcs_at_location(self, location_key: str) -> list[Entity]:
+        """Get NPCs currently at a location."""
+        from src.database.models.entities import NPCExtension
+
+        return (
+            self.db.query(Entity)
+            .join(NPCExtension)
+            .filter(
+                Entity.session_id == self.session_id,
+                Entity.entity_type == EntityType.NPC,
+                Entity.is_alive == True,
+                Entity.is_active == True,
+                NPCExtension.current_location == location_key,
+            )
+            .all()
+        )
+
+    def _get_events_since_visit(
+        self, location_key: str, since_turn: int
+    ) -> list[WorldEvent]:
+        """Get world events at location since a given turn."""
+        return (
+            self.db.query(WorldEvent)
+            .filter(
+                WorldEvent.session_id == self.session_id,
+                WorldEvent.location_key == location_key,
+                WorldEvent.turn_created > since_turn,
+                WorldEvent.is_known_to_player == True,
+            )
+            .order_by(WorldEvent.turn_created)
+            .all()
+        )
 
     def create_world_event(
         self,

@@ -537,6 +537,31 @@ APPLY_STIMULUS_TOOL = ToolDefinition(
 )
 
 
+# View Map Tool
+VIEW_MAP_TOOL = ToolDefinition(
+    name="view_map",
+    description=(
+        "Have a character examine a map item to discover new locations and zones. "
+        "Use when the player examines, studies, or consults a map. Returns the zones "
+        "and locations discovered from viewing the map."
+    ),
+    parameters=[
+        ToolParameter(
+            name="item_key",
+            param_type="string",
+            description="The key of the map item to examine (e.g., 'regional_map', 'treasure_map')",
+        ),
+        ToolParameter(
+            name="viewer_entity_key",
+            param_type="string",
+            description="Entity key of who is viewing the map (default: 'player')",
+            required=False,
+            default="player",
+        ),
+    ],
+)
+
+
 # All GM tools
 GM_TOOLS = [
     SKILL_CHECK_TOOL,
@@ -552,4 +577,5 @@ GM_TOOLS = [
     CHECK_TERRAIN_TOOL,
     DISCOVER_ZONE_TOOL,
     DISCOVER_LOCATION_TOOL,
+    VIEW_MAP_TOOL,
 ]

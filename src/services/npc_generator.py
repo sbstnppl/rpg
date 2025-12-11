@@ -2,6 +2,11 @@
 
 This service generates comprehensive NPC data including appearance, background,
 skills, inventory, preferences, and needs when an NPC is first introduced.
+
+NOTE: This service is used by the npc_generator_node in the LangGraph pipeline
+for post-extraction NPC enrichment. For tool-based NPC creation (CREATE_NPC_TOOL),
+use EmergentNPCGenerator from src/services/emergent_npc_generator.py instead,
+which follows the "GM Discovers, Not Prescribes" philosophy.
 """
 
 import logging

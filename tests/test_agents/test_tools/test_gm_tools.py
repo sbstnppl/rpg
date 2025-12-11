@@ -244,6 +244,47 @@ class TestToolExecutor:
         with pytest.raises(ValueError, match="Unknown tool"):
             executor.execute("unknown_tool", {})
 
+    def test_execute_view_map(self, db_session: Session, game_session: GameSession):
+        """Execute view_map tool."""
+        from src.agents.tools.executor import GMToolExecutor
+        from src.database.models.enums import MapType
+        from tests.factories import (
+            create_item,
+            create_map_item,
+            create_terrain_zone,
+        )
+
+        # Create viewer entity
+        player = create_entity(db_session, game_session, entity_type=EntityType.PLAYER,
+                              entity_key="player")
+
+        # Create zones and a map
+        zone1 = create_terrain_zone(db_session, game_session, zone_key="forest")
+        zone2 = create_terrain_zone(db_session, game_session, zone_key="mountain")
+        db_session.flush()
+
+        item = create_item(db_session, game_session, item_key="old_map")
+        create_map_item(
+            db_session,
+            game_session,
+            item=item,
+            map_type=MapType.REGIONAL,
+            revealed_zone_ids=[zone1.id, zone2.id],
+        )
+        db_session.commit()
+
+        executor = GMToolExecutor(db_session, game_session)
+        result = executor.execute("view_map", {
+            "item_key": "old_map",
+            "viewer_entity_key": "player",
+        })
+
+        assert result["success"] is True
+        assert result["item_key"] == "old_map"
+        assert len(result["zones_discovered"]) == 2
+        assert "forest" in result["zones_discovered"]
+        assert "mountain" in result["zones_discovered"]
+
 
 class TestToolSchemas:
     """Test tool JSON schema generation."""

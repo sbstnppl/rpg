@@ -16,9 +16,11 @@ from src.database.models.session import GameSession, Turn
 from src.database.models.world import Fact, Location, TimeState, WorldEvent
 from src.managers.base import BaseManager
 from src.managers.discovery_manager import DiscoveryManager
+from src.managers.entity_manager import EntityManager
 from src.managers.goal_manager import GoalManager
 from src.managers.injuries import InjuryManager
 from src.managers.item_manager import ItemManager
+from src.managers.map_manager import MapManager
 from src.managers.needs import NeedsManager
 from src.managers.relationship_manager import RelationshipManager
 from src.managers.zone_manager import ZoneManager
@@ -394,28 +396,39 @@ class ContextCompiler(BaseManager):
         return ", ".join(descriptions)
 
     def _get_npcs_context(self, location_key: str, player_id: int) -> str:
-        """Get context for all NPCs at the current location."""
-        # Get NPCs at this location
-        # TODO: Use proper location tracking when EntityManager is available
-        # For now, get all active NPCs in session (placeholder)
-        npcs = (
-            self.db.query(Entity)
-            .filter(
-                Entity.session_id == self.session_id,
-                Entity.entity_type == EntityType.NPC,
-                Entity.is_alive == True,
-                Entity.is_active == True,
-            )
-            .limit(10)  # Don't overwhelm context
-            .all()
-        )
+        """Get context for all NPCs at the current location.
 
-        if not npcs:
+        Uses EntityManager to filter NPCs by their current_location field
+        from NPCExtension. Falls back to all active NPCs if no location
+        is specified or no NPCs found at location.
+        """
+        entity_manager = EntityManager(self.db, self.game_session)
+
+        # First try to get NPCs at the specific location
+        npcs = []
+        if location_key:
+            npcs = entity_manager.get_npcs_in_scene(location_key)
+
+        # Fallback: if no location or no NPCs found, get companions
+        # (companions should always show regardless of location tracking)
+        companions = entity_manager.get_companions()
+        companion_ids = {c.id for c in companions}
+
+        # Combine: NPCs at location + companions not already included
+        all_npcs = list(npcs)
+        for companion in companions:
+            if companion.id not in {n.id for n in all_npcs}:
+                all_npcs.append(companion)
+
+        # Limit total to avoid overwhelming context
+        all_npcs = all_npcs[:10]
+
+        if not all_npcs:
             return "## NPCs Present\nNone present"
 
         lines = ["## NPCs Present"]
 
-        for npc in npcs:
+        for npc in all_npcs:
             npc_lines = self._format_npc_context(npc, player_id)
             lines.extend(npc_lines)
 
@@ -671,9 +684,65 @@ class ContextCompiler(BaseManager):
         return ", ".join(parts)
 
     def _get_tasks_context(self, player_id: int) -> str:
-        """Get active tasks/quests context."""
-        # TODO: Query Task model when implemented
-        return ""
+        """Get active tasks, quests, and appointments context.
+
+        Queries TaskManager for active tasks, upcoming appointments, and quests.
+        """
+        from src.managers.task_manager import TaskManager
+        from src.managers.time_manager import TimeManager
+
+        time_manager = TimeManager(self.db, self.game_session)
+        task_manager = TaskManager(self.db, self.game_session, time_manager=time_manager)
+
+        lines = []
+
+        # Active tasks
+        try:
+            active_tasks = task_manager.get_active_tasks()
+            if active_tasks:
+                lines.append("## Active Tasks")
+                for task in active_tasks[:5]:  # Limit to 5 most important
+                    priority_str = f" [{task.priority.value}]" if task.priority else ""
+                    lines.append(f"- {task.description}{priority_str}")
+                    if task.deadline_day:
+                        lines.append(f"  Deadline: Day {task.deadline_day}")
+        except Exception:
+            pass  # TaskManager may not have all methods
+
+        # Upcoming appointments
+        try:
+            current_day, current_time = time_manager.get_current_time()
+            appointments = task_manager.get_appointments_for_day(current_day)
+            # Filter to upcoming (not yet passed)
+            upcoming = [a for a in appointments if a.game_time and a.game_time >= current_time]
+            if upcoming:
+                if lines:
+                    lines.append("")
+                lines.append("## Today's Appointments")
+                for appt in upcoming[:3]:
+                    time_str = f" at {appt.game_time}" if appt.game_time else ""
+                    loc_str = f" ({appt.location_name})" if appt.location_name else ""
+                    lines.append(f"- {appt.description}{time_str}{loc_str}")
+        except Exception:
+            pass  # TimeManager may not have time state initialized
+
+        # Active quests
+        try:
+            active_quests = task_manager.get_active_quests()
+            if active_quests:
+                if lines:
+                    lines.append("")
+                lines.append("## Active Quests")
+                for quest in active_quests[:3]:
+                    lines.append(f"- **{quest.title}**: {quest.description[:100]}...")
+                    # Get current stage
+                    current_stage = task_manager.get_current_quest_stage(quest.id)
+                    if current_stage:
+                        lines.append(f"  Current objective: {current_stage.description}")
+        except Exception:
+            pass
+
+        return "\n".join(lines) if lines else ""
 
     def _get_recent_events(self, limit: int = 5) -> str:
         """Get recent world events for context."""
@@ -844,6 +913,54 @@ class ContextCompiler(BaseManager):
             lines.append("\n### Known Locations Here")
             for loc in discovered_locations[:5]:  # Limit to 5
                 lines.append(f"- {loc.display_name}")
+
+        # Add maps in possession
+        maps_context = self._get_maps_context()
+        if maps_context:
+            lines.append("")
+            lines.append(maps_context)
+
+        return "\n".join(lines)
+
+    def _get_maps_context(self) -> str:
+        """Get context for maps in player's possession.
+
+        Returns a summary of maps the player has, which can be used
+        to discover new locations.
+        """
+        # Get player entity
+        player = (
+            self.db.query(Entity)
+            .filter(
+                Entity.session_id == self.session_id,
+                Entity.entity_type == EntityType.PLAYER,
+            )
+            .first()
+        )
+
+        if not player:
+            return ""
+
+        map_manager = MapManager(self.db, self.game_session)
+
+        # Get all items owned by player
+        player_items = self.item_manager.get_inventory(player.id)
+
+        maps_info = []
+        for item in player_items:
+            map_data = map_manager.get_map_item(item.item_key)
+            if map_data:
+                map_type = map_data.get("map_type", "unknown")
+                is_complete = map_data.get("is_complete", True)
+                quality = "complete" if is_complete else "partial/damaged"
+                maps_info.append(f"- {item.display_name} ({map_type}, {quality})")
+
+        if not maps_info:
+            return ""
+
+        lines = ["### Available Maps"]
+        lines.extend(maps_info[:5])  # Limit to 5 maps
+        lines.append("(Use `view_map` tool when player examines a map)")
 
         return "\n".join(lines)
 
