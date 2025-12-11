@@ -143,6 +143,10 @@ class Relationship(Base, TimestampMixin):
         back_populates="relationship",
         cascade="all, delete-orphan",
     )
+    milestones: Mapped[list["RelationshipMilestone"]] = relationship(
+        back_populates="relationship",
+        cascade="all, delete-orphan",
+    )
 
     # Unique constraint
     __table_args__ = (
@@ -157,6 +161,68 @@ class Relationship(Base, TimestampMixin):
             f"<Relationship {self.from_entity_id}→{self.to_entity_id} "
             f"T:{self.trust} L:{self.liking} R:{self.respect} F:{self.familiarity}>"
         )
+
+
+class RelationshipMilestone(Base, TimestampMixin):
+    """Tracks significant relationship milestones.
+
+    Milestones are recorded when relationship dimensions cross
+    important thresholds (e.g., trust reaching 70 = "earned_trust").
+    """
+
+    __tablename__ = "relationship_milestones"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    relationship_id: Mapped[int] = mapped_column(
+        ForeignKey("relationships.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Milestone details
+    milestone_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="Type: earned_trust, became_friends, made_enemy, etc.",
+    )
+    dimension: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        comment="Which dimension triggered this milestone",
+    )
+    threshold_value: Mapped[int] = mapped_column(
+        nullable=False,
+        comment="Value that was crossed to trigger milestone",
+    )
+    direction: Mapped[str] = mapped_column(
+        String(10),
+        nullable=False,
+        comment="up or down - direction of threshold crossing",
+    )
+
+    # Display
+    message: Mapped[str] = mapped_column(
+        String(200),
+        nullable=False,
+        comment="Player-facing notification message",
+    )
+
+    # Notification tracking
+    notified: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Whether player has been notified",
+    )
+
+    # When it happened
+    turn_number: Mapped[int] = mapped_column(nullable=False, index=True)
+
+    # Relationships
+    relationship: Mapped["Relationship"] = relationship(back_populates="milestones")
+
+    def __repr__(self) -> str:
+        return f"<RelationshipMilestone {self.milestone_type} at turn {self.turn_number}>"
 
 
 class RelationshipChange(Base):

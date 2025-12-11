@@ -50,6 +50,20 @@ from src.dice.combat import (
     roll_initiative,
 )
 
+# Contested Rolls & Action Economy
+from src.dice.contested import (
+    ActionBudget,
+    ActionType,
+    ContestResult,
+    contested_roll,
+    escape_grapple_contest,
+    grapple_contest,
+    resolve_contest,
+    shove_contest,
+    social_contest,
+    stealth_contest,
+)
+
 __all__ = [
     # Types
     "DiceExpression",
@@ -84,4 +98,15 @@ __all__ = [
     "make_attack_roll",
     "roll_damage",
     "roll_initiative",
+    # Contested Rolls
+    "ActionBudget",
+    "ActionType",
+    "ContestResult",
+    "contested_roll",
+    "resolve_contest",
+    "grapple_contest",
+    "escape_grapple_contest",
+    "shove_contest",
+    "stealth_contest",
+    "social_contest",
 ]

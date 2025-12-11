@@ -10,7 +10,10 @@ from src.database.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from src.database.models.entities import Entity
+    from src.database.models.faction import Faction
     from src.database.models.goals import NPCGoal
+    from src.database.models.narrative import Conflict, Mystery, StoryArc
+    from src.database.models.progression import Achievement
     from src.database.models.tasks import Appointment, Quest, Task
 
 
@@ -116,6 +119,26 @@ class GameSession(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
     npc_goals: Mapped[list["NPCGoal"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    story_arcs: Mapped[list["StoryArc"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    mysteries: Mapped[list["Mystery"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    conflicts: Mapped[list["Conflict"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    achievements: Mapped[list["Achievement"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    factions: Mapped[list["Faction"]] = relationship(
         back_populates="session",
         cascade="all, delete-orphan",
     )

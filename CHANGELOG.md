@@ -8,6 +8,220 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Phase 2: Narrative Systems** - Story structure and dramatic tension management
+  - **Story Arc Model & Manager** (`src/database/models/narrative.py`, `src/managers/story_arc_manager.py`)
+    - `StoryArc` model with `ArcType` (main_quest, side_quest, character_arc, mystery, romance, faction, world_event)
+    - `ArcPhase` enum (setup, rising_action, midpoint, escalation, climax, falling_action, resolution, aftermath)
+    - `ArcStatus` enum (planned, active, paused, completed, abandoned)
+    - Planted elements tracking for Chekhov's gun pattern
+    - Foreshadowing hints per arc
+    - `StoryArcManager` with:
+      - `create_arc()`, `get_arc()`, `get_active_arcs()`
+      - `activate_arc()`, `pause_arc()`, `complete_arc()`, `abandon_arc()`
+      - `set_phase()`, `set_tension()` (0-100 scale)
+      - `plant_element()`, `resolve_element()`, `get_unresolved_elements()` with JSON mutation detection via `flag_modified`
+      - `set_foreshadowing()`, `get_pacing_hint()` - phase-aware narrative guidance
+      - `get_arc_context()` - formatted string for GM prompt
+    - 47 tests in `tests/test_managers/test_story_arc_manager.py`
+  - **Mystery/Revelation System** (`src/database/models/narrative.py`, `src/managers/mystery_manager.py`)
+    - `Mystery` model with truth, clues (JSON list), red herrings, revelation conditions
+    - `clues_discovered`, `total_clues` counters for progress tracking
+    - Player theories tracking (JSON field)
+    - `MysteryManager` with:
+      - `create_mystery()`, `get_mystery()`, `get_active_mysteries()`
+      - `add_clue()`, `discover_clue()`, `get_discovered_clues()`, `get_undiscovered_clues()`
+      - `add_red_herring()`, `mark_red_herring_discovered()`
+      - `add_player_theory()`, `get_player_theories()`
+      - `check_revelation_ready()` - keyword-based revelation checking
+      - `solve_mystery()`, `get_solution()`
+      - `get_mystery_status()` - complete status with discovery percentage
+      - `get_mysteries_context()` - formatted string for GM prompt
+    - 36 tests in `tests/test_managers/test_mystery_manager.py`
+  - **Conflict Escalation System** (`src/database/models/narrative.py`, `src/managers/conflict_manager.py`)
+    - `Conflict` model with `ConflictLevel` enum (tension, dispute, confrontation, hostility, crisis, war)
+    - Escalation and de-escalation triggers (JSON lists)
+    - Escalation history tracking (JSON list with turn and reason)
+    - `ConflictManager` with:
+      - `create_conflict()`, `get_conflict()`, `get_active_conflicts()`
+      - `escalate()`, `de_escalate()` with reason tracking
+      - `resolve_conflict()`, `pause_conflict()`, `resume_conflict()`
+      - `add_escalation_trigger()`, `add_de_escalation_trigger()`
+      - `check_escalation_triggers()` - keyword-based trigger detection
+      - `get_conflict_status()` - complete status including escalation history
+      - `get_conflicts_context()` - formatted string for GM prompt
+    - 33 tests in `tests/test_managers/test_conflict_manager.py`
+  - **NPC Secrets System** (`src/managers/secret_manager.py`)
+    - New fields on `NPCExtension`: `dark_secret`, `hidden_goal`, `betrayal_conditions`, `secret_revealed`, `secret_revealed_turn`
+    - Migration `e28e2ef1e2bf_add_npc_secrets_system_fields.py`
+    - `NPCSecret`, `SecretRevealAlert`, `BetrayalRisk` dataclasses
+    - `SecretManager` with:
+      - `set_dark_secret()`, `set_hidden_goal()`, `set_betrayal_conditions()`
+      - `reveal_secret()` - mark secret as revealed with turn tracking
+      - `get_npc_secret()`, `get_npcs_with_secrets()`, `get_unrevealed_secrets()`
+      - `get_npcs_with_betrayal_conditions()`
+      - `check_betrayal_triggers()` - keyword-based betrayal risk detection with risk levels (low/medium/high/imminent)
+      - `generate_secret_reveal_alerts()` - context-based alert generation
+      - `get_secrets_context()`, `get_betrayal_risks_context()` - formatted strings for GM prompt
+    - Automatic `NPCExtension` creation when setting secrets
+    - 22 tests in `tests/test_managers/test_secret_manager.py`
+  - **Cliffhanger Detection** (`src/managers/cliffhanger_manager.py`)
+    - `DramaticMoment` dataclass - source, tension_score (0-100), cliffhanger_potential (low/medium/high/perfect)
+    - `CliffhangerSuggestion` dataclass - hook_type (revelation/threat/choice/mystery/arrival), description, why_effective, follow_up_hook
+    - `SceneTensionAnalysis` dataclass - overall_tension, primary_source, dramatic_moments, is_good_stopping_point, stopping_recommendation, suggested_cliffhangers
+    - Phase-based tension scores (setup: 20, climax: 95)
+    - Conflict level tension scores (tension: 15, war: 100)
+    - `CliffhangerManager` with:
+      - `analyze_scene_tension()` - combines story arcs, conflicts, mysteries
+      - `get_cliffhanger_hooks()` - sorted suggestions by effectiveness
+      - `is_cliffhanger_ready()` - tuple of (ready, reason)
+      - `get_tension_context()` - formatted string for GM prompt
+    - Weighted tension calculation (top 3 sources: 50%, 30%, 20%)
+    - 20 tests in `tests/test_managers/test_cliffhanger_manager.py`
+  - **Narrative Model Tests** - 31 tests in `tests/test_database/test_models/test_narrative.py`
+  - **Database Migration** - `c570e2f1f0dd_add_narrative_models_story_arc_mystery_.py`
+  - 189 new tests total for narrative systems
+
+- **Phase 3: Progression System** - Player growth and achievement tracking
+  - **Skill Advancement System** (`src/managers/progression_manager.py`)
+    - New `usage_count` and `successful_uses` fields on `EntitySkill` model
+    - `AdvancementResult` dataclass - skill, old_proficiency, new_proficiency, tier_change
+    - `SkillProgress` dataclass - skill progress with percentage and tier
+    - `ProgressionManager` with:
+      - `record_skill_use()` - track skill usage with success flag
+      - `advance_skill()` - manual proficiency advancement
+      - `get_skill_progress()`, `get_all_skill_progress()` - retrieve progress info
+      - `get_proficiency_tier()` - convert proficiency to tier name
+      - `get_progression_context()` - formatted string for player display
+    - Advancement formula with diminishing returns:
+      - Uses 1-10: No advancement (learning basics)
+      - Uses 11-25: +3 per 5 successful uses (fast early learning)
+      - Uses 26-50: +2 per 5 successful uses (steady growth)
+      - Uses 51-100: +1 per 5 successful uses (mastery)
+      - Uses 100+: +1 per 10 successful uses (refinement)
+    - Proficiency tiers: Novice (0-15), Apprentice (16-30), Competent (31-50), Expert (51-70), Master (71-85), Legendary (86-100)
+    - Migration `efe625b872a5_add_skill_usage_tracking.py`
+    - 22 tests in `tests/test_managers/test_progression_manager.py`
+  - **Achievement System** (`src/database/models/progression.py`, `src/managers/achievement_manager.py`)
+    - `Achievement` model with session-scoped definitions
+    - `AchievementType` enum: first_discovery, milestone, title, rank, secret
+    - `EntityAchievement` model for tracking unlocks with progress and notification state
+    - `AchievementUnlock` dataclass - unlock result with points and already_unlocked flag
+    - `AchievementProgress` dataclass - progress toward milestone achievements
+    - `AchievementManager` with:
+      - `create_achievement()`, `get_achievement()`, `get_all_achievements()`, `get_achievements_by_type()`
+      - `unlock_achievement()`, `is_achievement_unlocked()`, `get_unlocked_achievements()`
+      - `update_progress()`, `get_progress()` - progress-based milestone tracking
+      - `get_total_points()` - total achievement points for an entity
+      - `get_recent_unlocks()`, `get_pending_notifications()`, `mark_notified()` - notification management
+      - `get_achievement_context()` - formatted string for player display
+    - Migration `79d56dc7020f_add_achievement_system.py`
+    - 23 tests in `tests/test_managers/test_achievement_manager.py`
+  - **Relationship Milestones** (`src/database/models/relationships.py`)
+    - `RelationshipMilestone` model for tracking significant relationship changes
+    - Milestone types: earned_trust, lost_trust, became_friends, made_enemy, earned_respect, lost_respect, romantic_spark, romantic_interest, close_bond, terrified
+    - `MilestoneInfo` dataclass with entity names and notification state
+    - `RelationshipManager` enhancements:
+      - `_check_milestones()` - automatic milestone detection on attitude changes
+      - `get_recent_milestones()` - retrieve milestones for a relationship
+      - `get_pending_milestone_notifications()` - unnotified milestones for display
+      - `mark_milestone_notified()` - mark milestone as seen
+      - `get_milestone_context()` - formatted string for player display
+    - Smart deduplication: milestones reset when crossing back below threshold
+    - Migration `2564a021f6ff_add_relationship_milestones.py`
+    - 20 tests in `tests/test_managers/test_relationship_milestones.py`
+  - **Reputation/Faction System** (`src/database/models/faction.py`, `src/managers/reputation_manager.py`)
+    - `Faction` model with session-scoped definitions
+    - `ReputationTier` enum: hated, hostile, unfriendly, neutral, friendly, honored, revered, exalted
+    - `FactionRelationship` model for inter-faction relationships (ally, rival, vassal, enemy)
+    - `EntityReputation` model for tracking entity-faction reputation (-100 to +100)
+    - `ReputationChange` model for audit log
+    - `FactionStanding` dataclass - standing with ally/enemy/neutral status
+    - `ReputationManager` with:
+      - `create_faction()`, `get_faction()`, `get_all_factions()` - faction management
+      - `get_reputation()`, `adjust_reputation()`, `get_reputation_tier()` - reputation tracking
+      - `get_faction_standing()` - ally/enemy/neutral status calculation
+      - `set_faction_relationship()`, `get_faction_relationship()` - inter-faction relationships
+      - `get_allied_factions()`, `get_rival_factions()` - query factions by relationship
+      - `get_reputation_context()` - formatted string for player display
+      - `get_reputation_history()` - audit trail of reputation changes
+    - Tier thresholds: Hated (-100 to -75), Hostile (-74 to -50), Unfriendly (-49 to -25), Neutral (-24 to 24), Friendly (25 to 49), Honored (50 to 74), Revered (75 to 89), Exalted (90 to 100)
+    - Ally threshold: 50+, Enemy threshold: -50 or below
+    - Migration `76cc10d0166a_add_faction_and_reputation_tables.py`
+    - 36 tests in `tests/test_managers/test_reputation_manager.py`
+  - 101 new tests total for progression systems
+
+- **Phase 4: Combat Depth** - Enhanced combat mechanics with tactical options
+  - **Weapon & Armor Equipment System** (`src/database/models/equipment.py`, `src/managers/equipment_manager.py`)
+    - `DamageType` enum - slashing, piercing, bludgeoning, fire, cold, lightning, acid, poison, psychic, radiant, necrotic, force, thunder
+    - `WeaponProperty` enum - finesse, heavy, light, reach, two_handed, versatile, ammunition, loading, thrown, special, silvered, magical
+    - `WeaponCategory` enum - simple_melee, simple_ranged, martial_melee, martial_ranged, exotic, improvised, natural
+    - `WeaponRange` enum - melee, reach, ranged, thrown
+    - `ArmorCategory` enum - light, medium, heavy, shield
+    - `WeaponDefinition` model - damage dice, damage type, properties, range, versatile dice
+    - `ArmorDefinition` model - base AC, max DEX bonus, strength required, stealth disadvantage
+    - `EquipmentManager` with:
+      - `create_weapon()`, `get_weapon()`, `get_all_weapons()`, `get_weapons_by_category()`
+      - `get_weapon_stats()` - calculates attack/damage bonuses based on finesse, ranged, etc.
+      - `create_armor()`, `get_armor()`, `get_all_armors()`, `get_armors_by_category()`
+      - `get_armor_stats()` - calculates total AC with DEX cap
+      - `calculate_total_ac()` - combines armor + shield + DEX
+    - `WeaponStats` and `ArmorStats` dataclasses for calculated values
+    - Migration `ec5a9e5f55d4_add_weapon_and_armor_definition_tables.py`
+    - 19 model tests + 32 manager tests = 51 tests
+  - **Combat Conditions System** (`src/database/models/combat_conditions.py`, `src/managers/combat_condition_manager.py`)
+    - `CombatCondition` enum - 16 conditions: prone, grappled, restrained, paralyzed, blinded, deafened, invisible, stunned, incapacitated, unconscious, poisoned, frightened, charmed, exhausted, concentrating, petrified, hidden
+    - `EntityCondition` model - tracks active conditions with duration, source, exhaustion level
+    - `CombatConditionManager` with:
+      - `apply_condition()` - apply/extend conditions, exhaustion stacks
+      - `remove_condition()`, `remove_all_conditions()`
+      - `tick_conditions()` - advance time, expire timed conditions
+      - `has_condition()`, `get_active_conditions()`, `get_condition_info()`
+      - `get_condition_effects()` - combined effects on attacks, saves, movement
+      - `get_condition_context()` - formatted string for GM display
+    - Condition effects: attack/defense modifiers, save auto-fails, speed penalties
+    - Exhaustion levels 1-6 with cumulative penalties
+    - Migration `a3c9cc28fc46_add_entity_conditions_table.py`
+    - 27 tests in `tests/test_managers/test_combat_conditions.py`
+  - **Action Economy & Contested Rolls** (`src/dice/contested.py`)
+    - `ActionType` enum - standard, move, bonus, reaction, free
+    - `ActionBudget` class - tracks available actions per turn
+      - `can_use()`, `use()`, `reset()` - manage action budget
+      - `convert_standard_to_move()` - trade action for extra movement
+      - `get_remaining_string()` - formatted display
+    - `ContestResult` dataclass - rolls, totals, winner, margin
+    - `contested_roll()` - generic opposed check (d20 + mod vs d20 + mod)
+    - `resolve_contest()` - determine winner (ties go to defender)
+    - Common contests: `grapple_contest()`, `escape_grapple_contest()`, `shove_contest()`, `stealth_contest()`, `social_contest()`
+    - Support for advantage/disadvantage on either side
+    - 23 tests in `tests/test_dice/test_contested_rolls.py`
+  - 101 new tests total for combat depth
+
+- **Pre-Generation Context Validator** - Prevents hallucinations before they happen
+  - New `src/managers/context_validator.py` with:
+    - `validate_entity_reference()` - checks if entity exists
+    - `validate_location_reference()` - checks if location is known
+    - `validate_fact_consistency()` - detects contradictions with existing facts
+    - `validate_time_consistency()` - catches time/weather inconsistencies in descriptions
+    - `validate_unique_role()` - prevents duplicate unique roles (e.g., two mayors)
+    - `validate_extraction()` - batch validation for extraction results
+    - `get_constraint_context()` - generates constraint instructions for GM prompt
+  - 17 new tests in `tests/test_managers/test_context_validator.py`
+- **Constraint Instructions in GM Prompt** - GM now receives key facts to avoid contradictions
+  - Added `{constraint_context}` placeholder to `data/templates/game_master.md`
+  - Context includes current time, weather, and key entity facts
+  - Updated game_master_node.py to generate and include constraint context
+- **Token Budget Management** - Smart context prioritization within token limits
+  - New `src/managers/context_budget.py` with:
+    - `ContextBudget` class for managing token limits
+    - Priority-based section inclusion (CRITICAL, HIGH, MEDIUM, LOW, OPTIONAL)
+    - Automatic truncation for large sections
+    - Model-specific budget configuration
+    - Token estimation (~4 chars/token heuristic)
+  - 23 new tests in `tests/test_managers/test_context_budget.py`
+- **Entity Existence Validation in Extraction** - Validates extracted references
+  - Entity extractor now validates entity keys in relationship changes, item owners, and appointment participants
+  - Location references validated with allow_new flag for discoveries
+  - Validation warnings logged and returned in state
 - **Birthplace System** - NPCs now have birthplace and derive traits from it
   - New `birthplace` field on Entity model with database migration
   - New `src/schemas/regions.py` with region definitions by setting:

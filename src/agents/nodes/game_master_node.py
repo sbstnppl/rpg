@@ -18,6 +18,7 @@ from src.database.models.session import GameSession
 from src.llm.factory import get_gm_provider
 from src.llm.message_types import Message
 from src.llm.audit_logger import set_audit_context
+from src.managers.context_validator import ContextValidator
 
 
 # Template path
@@ -98,9 +99,21 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
 
     # Load and format template
     template = _load_template()
+
+    # Generate constraint context to prevent contradictions
+    constraint_context = ""
+    db: Session | None = state.get("_db")
+    game_session: GameSession | None = state.get("_game_session")
+    if db is not None and game_session is not None:
+        validator = ContextValidator(db, game_session)
+        # Get entity keys from scene context (NPCs at location)
+        entity_keys = state.get("entity_keys", [])
+        constraint_context = validator.get_constraint_context(entity_keys)
+
     prompt = template.format(
         scene_context=state.get("scene_context", ""),
         player_input=state.get("player_input", ""),
+        constraint_context=constraint_context,
     )
 
     # Get LLM provider and generate response with tools
@@ -108,8 +121,6 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
     messages = [Message.user(prompt)]
 
     # Setup tool executor if we have database context
-    db: Session | None = state.get("_db")
-    game_session: GameSession | None = state.get("_game_session")
     executor = None
     if db is not None and game_session is not None:
         executor = GMToolExecutor(db, game_session)
@@ -189,6 +200,8 @@ def _load_template() -> str:
     return """# Game Master
 
 {scene_context}
+
+{constraint_context}
 
 ## Player Input
 {player_input}

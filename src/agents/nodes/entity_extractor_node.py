@@ -4,6 +4,7 @@ This node extracts entities, facts, and state changes from GM responses
 using structured LLM output.
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Callable, Coroutine
 
@@ -15,6 +16,10 @@ from src.database.models.session import GameSession
 from src.llm.factory import get_extraction_provider
 from src.llm.message_types import Message
 from src.llm.audit_logger import set_audit_context
+from src.managers.context_validator import ContextValidator
+
+
+logger = logging.getLogger(__name__)
 
 
 # Template path
@@ -148,6 +153,61 @@ async def _extract_entities(state: GameState) -> dict[str, Any]:
             "next_agent": "persistence",
         }
 
+    # Validate entity references
+    db: Session | None = state.get("_db")
+    game_session: GameSession | None = state.get("_game_session")
+    validation_warnings: list[str] = []
+
+    if db is not None and game_session is not None:
+        validator = ContextValidator(db, game_session)
+
+        # Collect all entity keys referenced in extraction
+        referenced_keys: set[str] = set()
+
+        # From relationship changes
+        for r in extraction.relationship_changes:
+            referenced_keys.add(r.from_entity)
+            referenced_keys.add(r.to_entity)
+
+        # From item owners
+        for i in extraction.items:
+            if i.owner_key:
+                referenced_keys.add(i.owner_key)
+
+        # From appointment participants
+        for a in extraction.appointments:
+            referenced_keys.update(a.participants)
+
+        # Validate references (excluding newly created characters)
+        new_character_keys = {c.entity_key for c in extraction.characters}
+        keys_to_validate = referenced_keys - new_character_keys
+
+        if keys_to_validate:
+            result = validator.validate_entity_references(list(keys_to_validate))
+            for issue in result.issues:
+                validation_warnings.append(
+                    f"Entity reference warning: {issue.description}"
+                )
+                logger.warning(
+                    "Extraction references non-existent entity: %s",
+                    issue.entity_key,
+                )
+
+        # Validate location references
+        if extraction.location_change:
+            loc_result = validator.validate_location_reference(
+                extraction.location_change,
+                allow_new=True,  # New locations may be discovered
+            )
+            for issue in loc_result.issues:
+                validation_warnings.append(
+                    f"Location reference warning: {issue.description}"
+                )
+                logger.warning(
+                    "Extraction references non-existent location: %s",
+                    extraction.location_change,
+                )
+
     return {
         "extracted_entities": [
             {
@@ -201,6 +261,7 @@ async def _extract_entities(state: GameState) -> dict[str, Any]:
             }
             for a in extraction.appointments
         ],
+        "validation_warnings": validation_warnings,
         "next_agent": "persistence",
     }
 

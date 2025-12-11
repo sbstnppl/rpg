@@ -152,6 +152,20 @@
   - Kübler-Ross stages based on relationship strength
 - [x] Create `src/managers/consistency.py` - ConsistencyValidator
   - Possession/spatial/temporal/behavioral checks
+- [x] Create `src/managers/context_validator.py` - ContextValidator (Pre-Generation)
+  - `validate_entity_reference()` - check entity exists before generation
+  - `validate_location_reference()` - check location is known
+  - `validate_fact_consistency()` - detect contradictions
+  - `validate_time_consistency()` - catch time/weather mismatches
+  - `validate_unique_role()` - prevent duplicate unique roles
+  - `validate_extraction()` - batch validation for extractions
+  - `get_constraint_context()` - generate GM constraint instructions
+- [x] Create `src/managers/context_budget.py` - ContextBudget
+  - `add_section()` - add context section with priority
+  - `compile()` - compile sections within token budget
+  - Priority-based inclusion (CRITICAL > HIGH > MEDIUM > LOW > OPTIONAL)
+  - Automatic truncation for large sections
+  - `for_model()` - model-specific budget configuration
 
 ## Phase 3: LLM Integration
 
@@ -337,7 +351,7 @@
 ## Phase 7: Polish & Testing
 
 ### 7.1 Tests
-- [x] Test database models (1995 tests total)
+- [x] Test database models (2306 tests total)
 - [x] Test managers
 - [x] Test agent tools
 - [x] Integration tests
@@ -662,3 +676,274 @@
 - [x] Documentation updates
   - Updated CHANGELOG.md with Phase 6 changes
   - Updated this implementation plan
+
+## Phase 11: Narrative Systems
+
+### 11.1 Story Arc System ✓
+- [x] Create `src/database/models/narrative.py`
+  - `StoryArc` model with arc_key, title, arc_type, current_phase, status
+  - `ArcType` enum (main_quest, side_quest, character_arc, mystery, romance, faction, world_event)
+  - `ArcPhase` enum (setup, rising_action, midpoint, escalation, climax, falling_action, resolution, aftermath)
+  - `ArcStatus` enum (planned, active, paused, completed, abandoned)
+  - `tension_level` (0-100), `planted_elements` (JSON), `foreshadowing` (text)
+- [x] Create `src/managers/story_arc_manager.py`
+  - `create_arc()`, `get_arc()`, `get_active_arcs()`, `get_arcs_by_type()`
+  - `activate_arc()`, `pause_arc()`, `complete_arc()`, `abandon_arc()`
+  - `set_phase()`, `set_tension()` - phase and tension management
+  - `plant_element()`, `resolve_element()`, `get_unresolved_elements()` - Chekhov's gun pattern
+  - `set_foreshadowing()`, `get_pacing_hint()` - narrative guidance
+  - `get_arc_context()` - formatted context for GM
+  - JSON mutation detection using `flag_modified`
+- [x] Create Alembic migration `c570e2f1f0dd_add_narrative_models_story_arc_mystery_.py`
+- [x] Add relationships to `GameSession` model
+- [x] Export models in `src/database/models/__init__.py`
+- [x] Create tests in `tests/test_database/test_models/test_narrative.py` (31 tests)
+- [x] Create tests in `tests/test_managers/test_story_arc_manager.py` (47 tests)
+
+### 11.2 Mystery/Revelation System ✓
+- [x] Add to `src/database/models/narrative.py`
+  - `Mystery` model with mystery_key, title, truth, clues (JSON), red_herrings (JSON)
+  - `revelation_conditions`, `player_theories` (JSON)
+  - `clues_discovered`, `total_clues` counters
+  - `is_solved`, `solved_turn` tracking
+- [x] Create `src/managers/mystery_manager.py`
+  - `create_mystery()`, `get_mystery()`, `get_active_mysteries()`
+  - `add_clue()`, `discover_clue()`, `get_discovered_clues()`, `get_undiscovered_clues()`
+  - `add_red_herring()`, `mark_red_herring_discovered()`
+  - `add_player_theory()`, `get_player_theories()`
+  - `check_revelation_ready()` - keyword-based trigger detection
+  - `solve_mystery()`, `get_solution()`
+  - `get_mystery_status()` - complete status with discovery percentage
+  - `get_mysteries_context()` - formatted context for GM
+- [x] Create tests in `tests/test_managers/test_mystery_manager.py` (36 tests)
+
+### 11.3 Conflict Escalation System ✓
+- [x] Add to `src/database/models/narrative.py`
+  - `Conflict` model with conflict_key, title, initial_level, current_level
+  - `ConflictLevel` enum (tension, dispute, confrontation, hostility, crisis, war)
+  - `escalation_triggers`, `de_escalation_triggers` (JSON lists)
+  - `escalation_history` (JSON list with turn and reason)
+  - `is_active`, `is_resolved` status flags
+- [x] Create `src/managers/conflict_manager.py`
+  - `create_conflict()`, `get_conflict()`, `get_active_conflicts()`
+  - `escalate()`, `de_escalate()` with reason tracking
+  - `resolve_conflict()`, `pause_conflict()`, `resume_conflict()`
+  - `add_escalation_trigger()`, `add_de_escalation_trigger()`
+  - `check_escalation_triggers()` - keyword-based detection
+  - `get_conflict_status()` - complete status with history
+  - `get_conflicts_context()` - formatted context for GM
+- [x] Create tests in `tests/test_managers/test_conflict_manager.py` (33 tests)
+
+### 11.4 NPC Secrets System ✓
+- [x] Add secret fields to `NPCExtension` model
+  - `dark_secret` - Something NPC is hiding
+  - `hidden_goal` - True goal (may differ from stated)
+  - `betrayal_conditions` - What would cause betrayal
+  - `secret_revealed` - Whether secret has been revealed
+  - `secret_revealed_turn` - When secret was revealed
+- [x] Create Alembic migration `e28e2ef1e2bf_add_npc_secrets_system_fields.py`
+- [x] Create `src/managers/secret_manager.py`
+  - `NPCSecret`, `SecretRevealAlert`, `BetrayalRisk` dataclasses
+  - `set_dark_secret()`, `set_hidden_goal()`, `set_betrayal_conditions()`
+  - `reveal_secret()` with turn tracking
+  - `get_npc_secret()`, `get_npcs_with_secrets()`, `get_unrevealed_secrets()`
+  - `get_npcs_with_betrayal_conditions()`
+  - `check_betrayal_triggers()` - keyword-based risk detection (low/medium/high/imminent)
+  - `generate_secret_reveal_alerts()` - context-based alerts
+  - `get_secrets_context()`, `get_betrayal_risks_context()` - formatted context for GM
+  - Automatic `NPCExtension` creation when setting secrets
+- [x] Export `SecretManager`, `NPCSecret`, `BetrayalRisk` in `src/managers/__init__.py`
+- [x] Create tests in `tests/test_managers/test_secret_manager.py` (22 tests)
+
+### 11.5 Cliffhanger Detection ✓
+- [x] Create `src/managers/cliffhanger_manager.py`
+  - `DramaticMoment` dataclass - source, tension_score, cliffhanger_potential
+  - `CliffhangerSuggestion` dataclass - hook_type, description, why_effective, follow_up_hook
+  - `SceneTensionAnalysis` dataclass - overall analysis with suggestions
+  - Phase-based tension scores (setup: 20, climax: 95)
+  - Conflict level tension scores (tension: 15, war: 100)
+  - `CliffhangerManager` with:
+    - `analyze_scene_tension()` - combines story arcs, conflicts, mysteries
+    - `get_cliffhanger_hooks()` - sorted by effectiveness
+    - `is_cliffhanger_ready()` - returns (ready, reason) tuple
+    - `get_tension_context()` - formatted context for GM
+  - Weighted tension calculation (top 3: 50%, 30%, 20%)
+- [x] Export in `src/managers/__init__.py`
+- [x] Create tests in `tests/test_managers/test_cliffhanger_manager.py` (20 tests)
+
+### 11.6 Summary
+- [x] 5 new database models (StoryArc, Mystery, Conflict + 3 enums)
+- [x] 5 new fields on NPCExtension
+- [x] 5 new managers (StoryArcManager, MysteryManager, ConflictManager, SecretManager, CliffhangerManager)
+- [x] 2 Alembic migrations
+- [x] 189 new tests total
+- [x] All managers exported in `src/managers/__init__.py`
+
+## Phase 12: Progression System
+
+### 12.1 Skill Advancement System ✓
+- [x] Add skill tracking fields to `EntitySkill` model
+  - `usage_count` - Total times skill has been used
+  - `successful_uses` - Times skill was used successfully
+- [x] Create Alembic migration `efe625b872a5_add_skill_usage_tracking.py`
+- [x] Create `src/managers/progression_manager.py`
+  - `AdvancementResult` dataclass - skill, old_proficiency, new_proficiency, tier_change
+  - `SkillProgress` dataclass - progress info with percentage and tier
+  - `ProgressionManager` with:
+    - `record_skill_use()` - track skill usage with success flag
+    - `advance_skill()` - manual proficiency advancement
+    - `get_skill_progress()`, `get_all_skill_progress()` - retrieve progress
+    - `get_proficiency_tier()` - convert proficiency to tier name
+    - `get_progression_context()` - formatted context for display
+  - Advancement formula with diminishing returns:
+    - Uses 1-10: No advancement
+    - Uses 11-25: +3 per 5 successful uses
+    - Uses 26-50: +2 per 5 successful uses
+    - Uses 51-100: +1 per 5 successful uses
+    - Uses 100+: +1 per 10 successful uses
+  - Proficiency tiers: Novice, Apprentice, Competent, Expert, Master, Legendary
+- [x] Export in `src/managers/__init__.py`
+- [x] Create tests in `tests/test_managers/test_progression_manager.py` (22 tests)
+
+### 12.2 Achievement System ✓
+- [x] Create `src/database/models/progression.py`
+  - `Achievement` model - session-scoped achievement definitions
+  - `AchievementType` enum (first_discovery, milestone, title, rank, secret)
+  - `EntityAchievement` model - tracks entity unlocks with progress and notifications
+- [x] Add `achievements` relationship to `GameSession` model
+- [x] Create Alembic migration `79d56dc7020f_add_achievement_system.py`
+- [x] Create `src/managers/achievement_manager.py`
+  - `AchievementUnlock` dataclass - unlock result with points
+  - `AchievementProgress` dataclass - progress toward milestones
+  - `AchievementManager` with:
+    - `create_achievement()`, `get_achievement()`, `get_all_achievements()`, `get_achievements_by_type()`
+    - `unlock_achievement()`, `is_achievement_unlocked()`, `get_unlocked_achievements()`
+    - `update_progress()`, `get_progress()` - milestone progress tracking
+    - `get_total_points()` - total points for entity
+    - `get_recent_unlocks()`, `get_pending_notifications()`, `mark_notified()`
+    - `get_achievement_context()` - formatted context
+- [x] Export models in `src/database/models/__init__.py`
+- [x] Export in `src/managers/__init__.py`
+- [x] Create tests in `tests/test_managers/test_achievement_manager.py` (23 tests)
+
+### 12.3 Relationship Milestones ✓
+- [x] Add `RelationshipMilestone` model to `src/database/models/relationships.py`
+  - milestone_type, dimension, threshold_value, direction
+  - message (player-facing notification)
+  - notified flag for tracking
+- [x] Add `milestones` relationship to `Relationship` model
+- [x] Create Alembic migration `2564a021f6ff_add_relationship_milestones.py`
+- [x] Add milestone tracking to `RelationshipManager`
+  - `_check_milestones()` - automatic detection on attitude changes
+  - `_get_active_milestone()` - deduplication with reset detection
+  - `get_recent_milestones()` - retrieve milestones for relationship
+  - `get_pending_milestone_notifications()` - unnotified milestones
+  - `mark_milestone_notified()` - mark as seen
+  - `get_milestone_context()` - formatted context
+  - `MilestoneInfo` dataclass with entity names
+- [x] Milestone types: earned_trust, lost_trust, became_friends, made_enemy, earned_respect, lost_respect, romantic_spark, romantic_interest, close_bond, terrified
+- [x] Export `MilestoneInfo` in `src/managers/__init__.py`
+- [x] Export `RelationshipMilestone` in `src/database/models/__init__.py`
+- [x] Create tests in `tests/test_managers/test_relationship_milestones.py` (20 tests)
+
+### 12.4 Reputation/Faction System (Complete)
+- [x] Create `src/database/models/faction.py`
+  - `ReputationTier` enum - hated, hostile, unfriendly, neutral, friendly, honored, revered, exalted
+  - `Faction` model - faction_key, name, description, base_reputation, is_hostile_by_default
+  - `FactionRelationship` model - directional relationships between factions (ally, rival, vassal, enemy)
+  - `EntityReputation` model - entity's reputation with factions (-100 to +100)
+  - `ReputationChange` model - audit log for reputation changes
+- [x] Create `src/managers/reputation_manager.py`
+  - `ReputationChange` dataclass - result of reputation adjustment
+  - `FactionStanding` dataclass - standing with ally/enemy/neutral status
+  - `create_faction()`, `get_faction()`, `get_all_factions()`
+  - `get_reputation()`, `adjust_reputation()`, `get_reputation_tier()`
+  - `get_faction_standing()` - ally/neutral/enemy status based on thresholds
+  - `set_faction_relationship()`, `get_faction_relationship()`
+  - `get_allied_factions()`, `get_rival_factions()`
+  - `get_reputation_context()` - formatted context for display
+  - `get_reputation_history()` - audit trail of changes
+- [x] Export `ReputationManager`, `ReputationChange`, `FactionStanding` in `src/managers/__init__.py`
+- [x] Export faction models and `ReputationTier` in `src/database/models/__init__.py`
+- [x] Add `factions` relationship to `GameSession` in session.py
+- [x] Create Alembic migration `76cc10d0166a_add_faction_and_reputation_tables.py`
+- [x] Create tests in `tests/test_managers/test_reputation_manager.py` (36 tests)
+
+### 12.5 Summary
+- [x] 7 new database models (Achievement, EntityAchievement, RelationshipMilestone, Faction, FactionRelationship, EntityReputation, ReputationChange)
+- [x] 2 new fields on EntitySkill
+- [x] 3 new managers (ProgressionManager, AchievementManager, ReputationManager)
+- [x] 1 enhanced manager (RelationshipManager with milestones)
+- [x] 4 Alembic migrations
+- [x] 101 new tests total
+
+---
+
+## Phase 13: Combat Depth (Complete)
+
+### 13.1 Weapon & Armor Equipment System (Complete)
+- [x] Create `src/database/models/equipment.py`
+  - `DamageType` enum - 13 damage types (physical and elemental)
+  - `WeaponProperty` enum - 12 weapon properties (finesse, heavy, versatile, etc.)
+  - `WeaponCategory` enum - simple_melee, simple_ranged, martial_melee, martial_ranged, exotic, improvised, natural
+  - `WeaponRange` enum - melee, reach, ranged, thrown
+  - `ArmorCategory` enum - light, medium, heavy, shield
+  - `WeaponDefinition` model - weapon_key, damage_dice, damage_type, properties, range, versatile_dice
+  - `ArmorDefinition` model - armor_key, base_ac, max_dex_bonus, strength_required, stealth_disadvantage
+- [x] Create `src/managers/equipment_manager.py`
+  - `WeaponStats` dataclass - attack_bonus, damage_dice, damage_bonus, damage_type
+  - `ArmorStats` dataclass - total_ac, base_ac, dex_bonus_applied, stealth_disadvantage
+  - `create_weapon()`, `get_weapon()`, `get_all_weapons()`, `get_weapons_by_category()`
+  - `get_weapon_stats()` - calculates bonuses with finesse/ranged logic
+  - `create_armor()`, `get_armor()`, `get_all_armors()`, `get_armors_by_category()`
+  - `get_armor_stats()` - calculates AC with DEX cap
+  - `calculate_total_ac()` - combines armor + shield + DEX
+- [x] Export equipment models and enums in `src/database/models/__init__.py`
+- [x] Export `EquipmentManager`, `WeaponStats`, `ArmorStats` in `src/managers/__init__.py`
+- [x] Create migration `ec5a9e5f55d4_add_weapon_and_armor_definition_tables.py`
+- [x] Create tests in `tests/test_database/test_models/test_equipment.py` (19 tests)
+- [x] Create tests in `tests/test_managers/test_equipment_manager.py` (32 tests)
+
+### 13.2 Combat Conditions System (Complete)
+- [x] Create `src/database/models/combat_conditions.py`
+  - `CombatCondition` enum - 16 conditions (prone, stunned, grappled, etc.)
+  - `EntityCondition` model - entity_id, condition, duration_rounds, rounds_remaining, source_entity_id, exhaustion_level
+- [x] Create `src/managers/combat_condition_manager.py`
+  - `ConditionInfo` dataclass - condition info with source and duration
+  - `ConditionEffect` dataclass - combined effects on attacks, defense, saves, movement
+  - `apply_condition()` - apply/extend conditions, exhaustion stacks
+  - `remove_condition()`, `remove_all_conditions()`
+  - `tick_conditions()` - advance time, expire timed conditions
+  - `has_condition()`, `get_active_conditions()`, `get_condition_info()`
+  - `get_condition_effects()` - calculate combined effects
+  - `get_condition_context()` - formatted string for display
+- [x] Export combat condition models in `src/database/models/__init__.py`
+- [x] Export `CombatConditionManager`, `ConditionInfo`, `ConditionEffect` in `src/managers/__init__.py`
+- [x] Create migration `a3c9cc28fc46_add_entity_conditions_table.py`
+- [x] Create tests in `tests/test_managers/test_combat_conditions.py` (27 tests)
+
+### 13.3 Action Economy & Contested Rolls (Complete)
+- [x] Create `src/dice/contested.py`
+  - `ActionType` enum - standard, move, bonus, reaction, free
+  - `ActionBudget` class - action tracking per turn
+    - `can_use()`, `use()`, `reset()`
+    - `convert_standard_to_move()`
+    - `get_remaining_string()`
+  - `ContestResult` dataclass - rolls, totals, winner, margin
+  - `contested_roll()` - generic opposed check with advantage support
+  - `resolve_contest()` - determine winner (ties to defender)
+  - `grapple_contest()` - Athletics vs Athletics/Acrobatics
+  - `escape_grapple_contest()` - Athletics/Acrobatics vs Athletics
+  - `shove_contest()` - Athletics vs Athletics/Acrobatics
+  - `stealth_contest()` - Stealth vs Perception
+  - `social_contest()` - Social skill vs Insight
+- [x] Export contested roll functions and classes in `src/dice/__init__.py`
+- [x] Create tests in `tests/test_dice/test_contested_rolls.py` (23 tests)
+
+### 13.4 Summary
+- [x] 5 new database models (WeaponDefinition, ArmorDefinition, EntityCondition + 2 enums as models)
+- [x] 8 new enums (DamageType, WeaponProperty, WeaponCategory, WeaponRange, ArmorCategory, CombatCondition, ActionType)
+- [x] 2 new managers (EquipmentManager, CombatConditionManager)
+- [x] 1 new dice module (contested.py)
+- [x] 3 Alembic migrations
+- [x] 101 new tests total

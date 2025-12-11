@@ -3,10 +3,15 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.database.models.entities import Entity, NPCExtension
-from src.database.models.relationships import Relationship, RelationshipChange
+from src.database.models.relationships import (
+    Relationship,
+    RelationshipChange,
+    RelationshipMilestone,
+)
 from src.database.models.session import GameSession
 from src.managers.base import BaseManager
 
@@ -83,6 +88,40 @@ PERSONALITY_EFFECTS: dict[str, dict] = {
         "fear_decay_mult": 0.5,  # Fear persists longer
     },
 }
+
+
+# Milestone thresholds configuration
+# Format: (dimension, milestone_type, threshold, direction, message_template)
+MILESTONE_THRESHOLDS: list[tuple[str, str, int, str, str]] = [
+    ("trust", "earned_trust", 70, "up", "{from_name} has earned {to_name}'s trust!"),
+    ("trust", "lost_trust", 30, "down", "{from_name} has lost {to_name}'s trust."),
+    ("liking", "became_friends", 70, "up", "{from_name} has become friends with {to_name}!"),
+    ("liking", "made_enemy", 30, "down", "{from_name} has made an enemy of {to_name}."),
+    ("respect", "earned_respect", 70, "up", "{from_name} has earned {to_name}'s respect!"),
+    ("respect", "lost_respect", 30, "down", "{from_name} has lost {to_name}'s respect."),
+    ("romantic_interest", "romantic_spark", 30, "up", "{to_name} has caught {from_name}'s eye!"),
+    ("romantic_interest", "romantic_interest", 50, "up", "{to_name} has captured {from_name}'s heart!"),
+    ("familiarity", "close_bond", 70, "up", "{from_name} and {to_name} have formed a close bond!"),
+    ("fear", "terrified", 70, "up", "{from_name} is terrified of {to_name}!"),
+]
+
+
+@dataclass
+class MilestoneInfo:
+    """Information about a relationship milestone."""
+
+    id: int
+    milestone_type: str
+    dimension: str
+    threshold_value: int
+    direction: str
+    message: str
+    notified: bool
+    turn_number: int
+    from_entity_id: int
+    to_entity_id: int
+    from_entity_name: str | None = None
+    to_entity_name: str | None = None
 
 
 class RelationshipManager(BaseManager):
@@ -244,6 +283,9 @@ class RelationshipManager(BaseManager):
                 turn_number=self.current_turn,
             )
             self.db.add(change)
+
+        # Check for milestone crossings
+        self._check_milestones(rel, dimension, old_value, new_value)
 
         self.db.flush()
         return rel
@@ -565,3 +607,278 @@ class RelationshipManager(BaseManager):
         if extras:
             return f"{base} ({', '.join(extras)})"
         return base
+
+    # ==================== Milestone Methods ====================
+
+    def _check_milestones(
+        self,
+        rel: Relationship,
+        dimension: str,
+        old_value: int,
+        new_value: int,
+    ) -> None:
+        """Check if any milestones were crossed and record them.
+
+        Args:
+            rel: The relationship being updated.
+            dimension: Which dimension changed.
+            old_value: Value before change.
+            new_value: Value after change.
+        """
+        for dim, milestone_type, threshold, direction, msg_template in MILESTONE_THRESHOLDS:
+            if dim != dimension:
+                continue
+
+            crossed = False
+            if direction == "up":
+                # Crossing threshold going up
+                crossed = old_value < threshold <= new_value
+            elif direction == "down":
+                # Crossing threshold going down
+                crossed = old_value >= threshold > new_value
+
+            if not crossed:
+                continue
+
+            # Check if this exact milestone was already recorded (dedup)
+            # For "up" milestones, only record if we don't already have one at this threshold
+            # that hasn't been "reset" by going below threshold
+            if direction == "up":
+                # Check for existing milestone at this threshold that's still valid
+                existing = self._get_active_milestone(rel.id, milestone_type, dimension)
+                if existing:
+                    continue  # Already have this milestone
+
+            # Get entity names for the message
+            from_entity = self.db.execute(
+                select(Entity).where(Entity.id == rel.from_entity_id)
+            ).scalar_one_or_none()
+            to_entity = self.db.execute(
+                select(Entity).where(Entity.id == rel.to_entity_id)
+            ).scalar_one_or_none()
+
+            from_name = from_entity.display_name if from_entity else "Unknown"
+            to_name = to_entity.display_name if to_entity else "Unknown"
+
+            message = msg_template.format(from_name=from_name, to_name=to_name)
+
+            milestone = RelationshipMilestone(
+                relationship_id=rel.id,
+                milestone_type=milestone_type,
+                dimension=dimension,
+                threshold_value=threshold,
+                direction=direction,
+                message=message,
+                notified=False,
+                turn_number=self.current_turn,
+            )
+            self.db.add(milestone)
+
+    def _get_active_milestone(
+        self, relationship_id: int, milestone_type: str, dimension: str
+    ) -> RelationshipMilestone | None:
+        """Get an active (non-reset) milestone of the given type.
+
+        An "up" milestone becomes inactive when the value drops back below threshold.
+        This is detected by checking for a "down" milestone on the same dimension
+        that occurred after the "up" milestone.
+        """
+        # Get the most recent milestone of this type
+        milestone = self.db.execute(
+            select(RelationshipMilestone)
+            .where(
+                RelationshipMilestone.relationship_id == relationship_id,
+                RelationshipMilestone.milestone_type == milestone_type,
+            )
+            .order_by(RelationshipMilestone.turn_number.desc())
+        ).scalar_one_or_none()
+
+        if not milestone:
+            return None
+
+        # Check if there's a "down" milestone on the same dimension after this one
+        # If so, the milestone was "reset" and can be earned again
+        # We check both turn_number and id for proper ordering within the same turn
+        from sqlalchemy import or_
+        down_milestone = self.db.execute(
+            select(RelationshipMilestone)
+            .where(
+                RelationshipMilestone.relationship_id == relationship_id,
+                RelationshipMilestone.dimension == dimension,
+                RelationshipMilestone.direction == "down",
+                or_(
+                    RelationshipMilestone.turn_number > milestone.turn_number,
+                    # Same turn but later ID (operations within same turn)
+                    (RelationshipMilestone.turn_number == milestone.turn_number)
+                    & (RelationshipMilestone.id > milestone.id),
+                ),
+            )
+        ).scalar_one_or_none()
+
+        if down_milestone:
+            # The milestone was reset by a "down" crossing
+            return None
+
+        return milestone
+
+    def get_recent_milestones(
+        self, from_id: int, to_id: int, limit: int = 20
+    ) -> list[MilestoneInfo]:
+        """Get recent milestones for a relationship.
+
+        Args:
+            from_id: Entity whose attitude changed.
+            to_id: Entity they have attitude toward.
+            limit: Maximum milestones to return.
+
+        Returns:
+            List of MilestoneInfo objects.
+        """
+        rel = self.get_relationship(from_id, to_id)
+        if not rel:
+            return []
+
+        milestones = self.db.execute(
+            select(RelationshipMilestone)
+            .where(RelationshipMilestone.relationship_id == rel.id)
+            .order_by(RelationshipMilestone.turn_number.desc())
+            .limit(limit)
+        ).scalars().all()
+
+        # Get entity names
+        from_entity = self.db.execute(
+            select(Entity).where(Entity.id == from_id)
+        ).scalar_one_or_none()
+        to_entity = self.db.execute(
+            select(Entity).where(Entity.id == to_id)
+        ).scalar_one_or_none()
+
+        from_name = from_entity.display_name if from_entity else None
+        to_name = to_entity.display_name if to_entity else None
+
+        return [
+            MilestoneInfo(
+                id=m.id,
+                milestone_type=m.milestone_type,
+                dimension=m.dimension,
+                threshold_value=m.threshold_value,
+                direction=m.direction,
+                message=m.message,
+                notified=m.notified,
+                turn_number=m.turn_number,
+                from_entity_id=from_id,
+                to_entity_id=to_id,
+                from_entity_name=from_name,
+                to_entity_name=to_name,
+            )
+            for m in milestones
+        ]
+
+    def get_pending_milestone_notifications(
+        self, target_entity_id: int
+    ) -> list[MilestoneInfo]:
+        """Get unnotified milestones where the entity is the target.
+
+        This is useful for showing the player notifications about NPCs
+        whose attitudes toward them have changed significantly.
+
+        Args:
+            target_entity_id: The entity that milestones are "about" (usually player).
+
+        Returns:
+            List of unnotified MilestoneInfo objects.
+        """
+        # Find relationships where this entity is the target
+        relationships = self.db.execute(
+            select(Relationship).where(
+                Relationship.session_id == self.session_id,
+                Relationship.to_entity_id == target_entity_id,
+            )
+        ).scalars().all()
+
+        if not relationships:
+            return []
+
+        rel_ids = [r.id for r in relationships]
+
+        milestones = self.db.execute(
+            select(RelationshipMilestone)
+            .where(
+                RelationshipMilestone.relationship_id.in_(rel_ids),
+                RelationshipMilestone.notified == False,  # noqa: E712
+            )
+            .order_by(RelationshipMilestone.turn_number.desc())
+        ).scalars().all()
+
+        result = []
+        for m in milestones:
+            # Get relationship and entity info
+            rel = next(r for r in relationships if r.id == m.relationship_id)
+            from_entity = self.db.execute(
+                select(Entity).where(Entity.id == rel.from_entity_id)
+            ).scalar_one_or_none()
+
+            from_name = from_entity.display_name if from_entity else None
+            to_entity = self.db.execute(
+                select(Entity).where(Entity.id == target_entity_id)
+            ).scalar_one_or_none()
+            to_name = to_entity.display_name if to_entity else None
+
+            result.append(
+                MilestoneInfo(
+                    id=m.id,
+                    milestone_type=m.milestone_type,
+                    dimension=m.dimension,
+                    threshold_value=m.threshold_value,
+                    direction=m.direction,
+                    message=m.message,
+                    notified=m.notified,
+                    turn_number=m.turn_number,
+                    from_entity_id=rel.from_entity_id,
+                    to_entity_id=target_entity_id,
+                    from_entity_name=from_name,
+                    to_entity_name=to_name,
+                )
+            )
+
+        return result
+
+    def mark_milestone_notified(self, milestone_id: int) -> bool:
+        """Mark a milestone as notified.
+
+        Args:
+            milestone_id: ID of the milestone to mark.
+
+        Returns:
+            True if found and marked, False otherwise.
+        """
+        milestone = self.db.execute(
+            select(RelationshipMilestone)
+            .where(RelationshipMilestone.id == milestone_id)
+        ).scalar_one_or_none()
+
+        if not milestone:
+            return False
+
+        milestone.notified = True
+        self.db.flush()
+        return True
+
+    def get_milestone_context(self, entity_id: int) -> str:
+        """Generate context string for pending milestones.
+
+        Args:
+            entity_id: Entity to get context for (usually player).
+
+        Returns:
+            Formatted context string, or empty string if no pending milestones.
+        """
+        pending = self.get_pending_milestone_notifications(entity_id)
+        if not pending:
+            return ""
+
+        lines = ["## Relationship Updates"]
+        for m in pending:
+            lines.append(f"- {m.message}")
+
+        return "\n".join(lines)

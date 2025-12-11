@@ -404,6 +404,20 @@ class EntitySkill(Base):
         nullable=False,
     )
 
+    # Skill usage tracking for progression system
+    usage_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Total times this skill has been used",
+    )
+    successful_uses: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="Times skill was used successfully (for advancement)",
+    )
+
     # Relationships
     entity: Mapped["Entity"] = relationship(back_populates="skills")
 
@@ -493,6 +507,34 @@ class NPCExtension(Base, TimestampMixin):
         Integer,
         nullable=True,
         comment="Turn when NPC joined as companion",
+    )
+
+    # NPC Secrets System - hidden information for dramatic revelations
+    dark_secret: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Something the NPC is hiding (past crime, forbidden love, true identity)",
+    )
+    hidden_goal: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="What the NPC truly wants (may differ from stated goals)",
+    )
+    betrayal_conditions: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Conditions that would cause NPC to betray player",
+    )
+    secret_revealed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Whether dark_secret has been revealed to player",
+    )
+    secret_revealed_turn: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Turn when secret was revealed",
     )
 
     # Relationships

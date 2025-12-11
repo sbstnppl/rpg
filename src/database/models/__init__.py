@@ -45,7 +45,11 @@ from src.database.models.entities import (
     NPCExtension,
 )
 from src.database.models.items import Item, StorageLocation
-from src.database.models.relationships import Relationship, RelationshipChange
+from src.database.models.relationships import (
+    Relationship,
+    RelationshipChange,
+    RelationshipMilestone,
+)
 from src.database.models.session import GameSession, Turn
 from src.database.models.tasks import Appointment, Quest, QuestStage, Task
 from src.database.models.world import (
@@ -83,6 +87,50 @@ from src.database.models.navigation import (
 
 # NPC Goals for autonomous behavior
 from src.database.models.goals import NPCGoal
+
+# Narrative systems for story arcs, mysteries, and conflicts
+from src.database.models.narrative import (
+    ArcPhase,
+    ArcStatus,
+    ArcType,
+    Conflict,
+    ConflictLevel,
+    Mystery,
+    StoryArc,
+)
+
+# Progression systems for achievements and ranks
+from src.database.models.progression import (
+    Achievement,
+    AchievementType,
+    EntityAchievement,
+)
+
+# Faction and reputation systems
+from src.database.models.faction import (
+    EntityReputation,
+    Faction,
+    FactionRelationship,
+    ReputationChange,
+    ReputationTier,
+)
+
+# Equipment definitions for combat
+from src.database.models.equipment import (
+    ArmorCategory,
+    ArmorDefinition,
+    DamageType,
+    WeaponCategory,
+    WeaponDefinition,
+    WeaponProperty,
+    WeaponRange,
+)
+
+# Combat conditions
+from src.database.models.combat_conditions import (
+    CombatCondition,
+    EntityCondition,
+)
 
 __all__ = [
     # Base
@@ -135,6 +183,7 @@ __all__ = [
     # Relationships
     "Relationship",
     "RelationshipChange",
+    "RelationshipMilestone",
     # World
     "Location",
     "LocationVisit",
@@ -183,4 +232,36 @@ __all__ = [
     "DigitalMapAccess",
     # NPC Goals
     "NPCGoal",
+    # Narrative enums
+    "ArcType",
+    "ArcPhase",
+    "ArcStatus",
+    "ConflictLevel",
+    # Narrative models
+    "StoryArc",
+    "Mystery",
+    "Conflict",
+    # Progression enums
+    "AchievementType",
+    # Progression models
+    "Achievement",
+    "EntityAchievement",
+    # Faction models
+    "Faction",
+    "FactionRelationship",
+    "EntityReputation",
+    "ReputationChange",
+    "ReputationTier",
+    # Equipment enums
+    "DamageType",
+    "WeaponProperty",
+    "WeaponCategory",
+    "WeaponRange",
+    "ArmorCategory",
+    # Equipment models
+    "WeaponDefinition",
+    "ArmorDefinition",
+    # Combat conditions
+    "CombatCondition",
+    "EntityCondition",
 ]
