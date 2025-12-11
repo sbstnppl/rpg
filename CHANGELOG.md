@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Urban Fantasy Setting** - Contemporary world with secret magic societies
+  - Full setting configuration (`data/settings/urban_fantasy.json`)
+    - 7 attributes including Willpower for magic
+    - 21 skills (15 mundane + 6 magical)
+    - 6 factions (Council of the Veil, Hermetic Order, Circle of Thorns, Covenant of Shadows, Order of the Dawn, Mundanes)
+    - Veil mechanics for maintaining magical secrecy
+    - Supernatural creatures (vampires, werewolves, ghosts, demons, fae, constructs)
+    - Modern starting equipment with magical items (focus pendant, chalk pouch, silver knife)
+    - Dual currency system (dollars + Council Marks)
+  - Starter spell collection (`data/settings/urban_fantasy_spells.json`)
+    - 12 spells tailored for urban use with Veil safety ratings
+    - Includes: Veil Sight, Minor Ward, Glamour, Forget, Tech Jinx, Sense Lies, Spirit Bolt, Shadow Step, Binding Circle, Psychic Shield, True Name Binding, Healing Touch
+    - Spells designed for subtlety and modern scenarios
+
 - **LLM-Driven Relationship Arcs & Voice Generation** - Transform static templates to dynamic LLM-generated content
   - **Arc Generation System** (`src/agents/schemas/arc_generation.py`, `data/templates/arc_generator.md`)
     - `ArcPhaseTemplate` schema - phase definition with milestones and suggested scenes

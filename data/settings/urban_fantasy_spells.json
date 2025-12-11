@@ -1,0 +1,269 @@
+{
+  "setting": "urban_fantasy",
+  "description": "Starter spells for urban fantasy practitioners. These spells are designed for modern use - subtle, practical, and Veil-safe when used carefully.",
+  "spells": [
+    {
+      "spell_key": "veil_sight",
+      "display_name": "Veil Sight",
+      "tradition": "occult",
+      "school": "divination",
+      "level": 0,
+      "base_cost": 1,
+      "casting_time": "action",
+      "range_description": "self",
+      "duration": "10 minutes",
+      "components": ["somatic"],
+      "description": "Your eyes briefly flash silver as you pierce the Veil. You can see through magical illusions, detect supernatural creatures, and notice enchantments on objects or people.",
+      "effects": {
+        "buff": {
+          "ability": "see_magic",
+          "duration_minutes": 10
+        }
+      },
+      "veil_safe": true,
+      "notes": "Essential cantrip for any practitioner. The brief eye flash is usually missed by mundanes."
+    },
+    {
+      "spell_key": "minor_ward",
+      "display_name": "Minor Ward",
+      "tradition": "occult",
+      "school": "abjuration",
+      "level": 1,
+      "base_cost": 3,
+      "casting_time": "action",
+      "range_description": "touch",
+      "duration": "1 hour",
+      "components": ["verbal", "somatic"],
+      "description": "You trace a protective symbol on a door, window, or threshold. Supernatural creatures must succeed on a Willpower check to cross, and you're alerted when they try.",
+      "effects": {
+        "ward": {
+          "save": "willpower",
+          "dc_bonus": 5,
+          "alerts_caster": true
+        }
+      },
+      "veil_safe": true,
+      "notes": "The symbol fades to invisibility after casting. Standard apartment protection."
+    },
+    {
+      "spell_key": "glamour",
+      "display_name": "Glamour",
+      "tradition": "occult",
+      "school": "illusion",
+      "level": 1,
+      "base_cost": 3,
+      "casting_time": "action",
+      "range_description": "self",
+      "duration": "1 hour",
+      "components": ["somatic"],
+      "description": "You subtly alter your appearance - hair color, eye color, facial features, apparent age. The changes are minor but enough to avoid recognition on camera or by witnesses.",
+      "effects": {
+        "illusion": {
+          "type": "disguise_self",
+          "limitation": "minor_changes_only"
+        }
+      },
+      "veil_safe": true,
+      "notes": "Perfect for avoiding identification. Doesn't fool other practitioners without effort."
+    },
+    {
+      "spell_key": "forget",
+      "display_name": "Forget",
+      "tradition": "occult",
+      "school": "enchantment",
+      "level": 2,
+      "base_cost": 5,
+      "casting_time": "action",
+      "range_description": "touch",
+      "duration": "permanent",
+      "components": ["verbal", "somatic"],
+      "description": "You touch a mundane's temple and cause them to forget the last few minutes. Their mind fills in the gap with mundane explanations. Ineffective against practitioners or supernatural beings.",
+      "effects": {
+        "condition": {
+          "apply": "memory_altered",
+          "save": "willpower",
+          "mundanes_only": true,
+          "duration_minutes": 5
+        }
+      },
+      "veil_safe": true,
+      "ethical_note": "Standard Veil maintenance, but overuse is considered abuse by the Council.",
+      "notes": "The most common cleanup spell. Every practitioner learns this."
+    },
+    {
+      "spell_key": "tech_jinx",
+      "display_name": "Tech Jinx",
+      "tradition": "occult",
+      "school": "transmutation",
+      "level": 0,
+      "base_cost": 1,
+      "casting_time": "bonus_action",
+      "range_description": "30 feet",
+      "duration": "instantaneous",
+      "components": ["somatic"],
+      "description": "You snap your fingers and nearby electronics glitch momentarily. Phones freeze, cameras skip frames, recordings corrupt. Useful for preventing evidence.",
+      "effects": {
+        "special": {
+          "type": "tech_disruption",
+          "radius_feet": 30,
+          "duration_seconds": 6
+        }
+      },
+      "veil_safe": true,
+      "notes": "Mundanes assume it's normal tech problems. Overuse in one area draws attention."
+    },
+    {
+      "spell_key": "sense_lies",
+      "display_name": "Sense Lies",
+      "tradition": "occult",
+      "school": "divination",
+      "level": 1,
+      "base_cost": 2,
+      "casting_time": "action",
+      "range_description": "30 feet",
+      "duration": "10 minutes",
+      "components": ["somatic"],
+      "description": "You attune your senses to deception. For the duration, you can sense when someone within range speaks a deliberate lie. Doesn't reveal the truth, just that they're lying.",
+      "effects": {
+        "buff": {
+          "ability": "detect_lies",
+          "duration_minutes": 10
+        }
+      },
+      "veil_safe": true,
+      "notes": "Useful in negotiations. Supernatural creatures may be immune or aware you're using it."
+    },
+    {
+      "spell_key": "spirit_bolt",
+      "display_name": "Spirit Bolt",
+      "tradition": "occult",
+      "school": "evocation",
+      "level": 1,
+      "base_cost": 3,
+      "casting_time": "action",
+      "range_description": "60 feet",
+      "duration": "instantaneous",
+      "components": ["verbal", "somatic"],
+      "description": "You hurl a bolt of raw magical force at a target. It manifests as a brief shimmer in the air, striking with concussive impact.",
+      "effects": {
+        "damage": {
+          "dice": "2d6",
+          "type": "force",
+          "save": null
+        }
+      },
+      "veil_safe": false,
+      "notes": "Visible effect! Only use when Veil is already broken or in hidden locations."
+    },
+    {
+      "spell_key": "shadow_step",
+      "display_name": "Shadow Step",
+      "tradition": "occult",
+      "school": "conjuration",
+      "level": 2,
+      "base_cost": 5,
+      "casting_time": "bonus_action",
+      "range_description": "60 feet",
+      "duration": "instantaneous",
+      "components": ["somatic"],
+      "description": "You step into a shadow and emerge from another shadow within range. Both shadows must be large enough to contain you.",
+      "effects": {
+        "teleport": {
+          "range_feet": 60,
+          "requirement": "shadow_to_shadow"
+        }
+      },
+      "veil_safe": "conditional",
+      "notes": "If no one sees you enter or exit, Veil-safe. Otherwise, you have a problem."
+    },
+    {
+      "spell_key": "binding_circle",
+      "display_name": "Binding Circle",
+      "tradition": "occult",
+      "school": "abjuration",
+      "level": 3,
+      "base_cost": 8,
+      "casting_time": "ritual",
+      "range_description": "10 feet",
+      "duration": "until broken",
+      "components": ["verbal", "somatic", "material"],
+      "material_component": "Salt, silver dust, and chalk (worth $50)",
+      "description": "You inscribe a circle that can contain supernatural creatures. Once a creature enters or is summoned within, it cannot leave until the circle is broken or you release it.",
+      "effects": {
+        "trap": {
+          "save": "willpower",
+          "affects": "supernatural_only",
+          "escape_dc": 20
+        }
+      },
+      "veil_safe": true,
+      "notes": "Takes 10 minutes to inscribe properly. Essential for dealing with demons or hostile spirits."
+    },
+    {
+      "spell_key": "psychic_shield",
+      "display_name": "Psychic Shield",
+      "tradition": "occult",
+      "school": "abjuration",
+      "level": 1,
+      "base_cost": 2,
+      "casting_time": "reaction",
+      "range_description": "self",
+      "duration": "1 round",
+      "components": ["somatic"],
+      "description": "You raise a mental barrier against psychic intrusion. Gain advantage on saves against mind-reading, possession, and mental domination until your next turn.",
+      "effects": {
+        "buff": {
+          "type": "psychic_resistance",
+          "advantage_on": ["mind_control", "possession", "telepathy"],
+          "duration_rounds": 1
+        }
+      },
+      "veil_safe": true,
+      "notes": "Automatic reflex for experienced practitioners. Vampires hate this spell."
+    },
+    {
+      "spell_key": "true_name_binding",
+      "display_name": "True Name Binding",
+      "tradition": "occult",
+      "school": "enchantment",
+      "level": 4,
+      "base_cost": 12,
+      "casting_time": "action",
+      "range_description": "30 feet",
+      "duration": "concentration",
+      "components": ["verbal"],
+      "description": "Speaking a supernatural creature's true name, you attempt to bind its will. If it fails to resist, it must obey your commands for the duration. Extremely dangerous if you get the name wrong.",
+      "effects": {
+        "condition": {
+          "apply": "dominated",
+          "save": "willpower",
+          "requires": "true_name",
+          "concentration": true
+        }
+      },
+      "veil_safe": true,
+      "notes": "The nuclear option. True names are closely guarded secrets. Using this on Council members is a capital offense."
+    },
+    {
+      "spell_key": "healing_touch",
+      "display_name": "Healing Touch",
+      "tradition": "divine",
+      "school": "evocation",
+      "level": 1,
+      "base_cost": 3,
+      "casting_time": "action",
+      "range_description": "touch",
+      "duration": "instantaneous",
+      "components": ["somatic"],
+      "description": "Warm light flows from your hands into the wounded. The target regains health as wounds close and pain fades.",
+      "effects": {
+        "healing": {
+          "dice": "2d8",
+          "bonus": 0
+        }
+      },
+      "veil_safe": "conditional",
+      "notes": "The warm glow is visible. Use in private or claim it's some kind of heat therapy device."
+    }
+  ]
+}

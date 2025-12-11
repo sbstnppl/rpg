@@ -1,0 +1,432 @@
+{
+  "name": "urban_fantasy",
+  "description": "Modern-day Earth where magic exists in secret. Hidden societies of practitioners operate beneath the mundane world, maintaining 'The Veil' that keeps ordinary humans unaware. Players navigate both worlds - holding down jobs, paying rent, and secretly wielding ancient powers.",
+  "genre": "urban_fantasy",
+  "era": "contemporary",
+  "attributes": [
+    {
+      "key": "strength",
+      "display_name": "Strength",
+      "description": "Physical power and athletic ability",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "agility",
+      "display_name": "Agility",
+      "description": "Speed, reflexes, coordination, fine motor control",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "endurance",
+      "display_name": "Endurance",
+      "description": "Stamina, health, resistance to fatigue and stress",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "intelligence",
+      "display_name": "Intelligence",
+      "description": "Reasoning, education, technical and arcane knowledge",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "perception",
+      "display_name": "Perception",
+      "description": "Awareness, intuition, sensing the supernatural",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "charisma",
+      "display_name": "Charisma",
+      "description": "Social skills, persuasion, force of personality",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    },
+    {
+      "key": "willpower",
+      "display_name": "Willpower",
+      "description": "Mental fortitude, magical aptitude, resistance to supernatural influence",
+      "min_value": 1,
+      "max_value": 20,
+      "default_value": 10
+    }
+  ],
+  "point_buy": {
+    "total_points": 35,
+    "min_value": 6,
+    "max_value": 16,
+    "cost_table": {
+      "6": 0,
+      "7": 1,
+      "8": 2,
+      "9": 3,
+      "10": 4,
+      "11": 5,
+      "12": 6,
+      "13": 7,
+      "14": 9,
+      "15": 11,
+      "16": 14
+    }
+  },
+  "magic": {
+    "enabled": true,
+    "mana_attribute": "willpower",
+    "mana_per_point": 5,
+    "traditions": ["occult", "divine", "primal"],
+    "hidden_from_mundanes": true,
+    "veil_mechanics": {
+      "description": "The Veil is a global enchantment that causes mundane humans to rationalize or forget magical events. Blatant magic in public risks Veil breaches.",
+      "breach_consequences": [
+        "Memory alteration required",
+        "Cleaners dispatched by the Council",
+        "Reputation loss with magical factions",
+        "Potential tribunal if repeated"
+      ]
+    },
+    "common_schools": ["illusion", "enchantment", "divination", "abjuration"],
+    "restricted_schools": ["necromancy"],
+    "restricted_school_note": "Necromancy is forbidden by most magical societies. Practitioners are hunted."
+  },
+  "factions": [
+    {
+      "key": "the_council",
+      "name": "The Council of the Veil",
+      "description": "The governing body of the magical world. Enforces the Veil and magical law. Bureaucratic but powerful.",
+      "alignment": "lawful_neutral"
+    },
+    {
+      "key": "hermetic_order",
+      "name": "The Hermetic Order",
+      "description": "Traditional wizards who study magic academically. Value knowledge, hierarchy, and proper training.",
+      "alignment": "lawful_neutral",
+      "tradition": "arcane"
+    },
+    {
+      "key": "circle_of_thorns",
+      "name": "The Circle of Thorns",
+      "description": "Nature-focused practitioners. Druids, hedge witches, and those connected to the old ways.",
+      "alignment": "true_neutral",
+      "tradition": "primal"
+    },
+    {
+      "key": "covenant_of_shadows",
+      "name": "The Covenant of Shadows",
+      "description": "Practitioners who believe magic should be secret and personal. Distrust the Council. Work in cells.",
+      "alignment": "chaotic_neutral",
+      "tradition": "occult"
+    },
+    {
+      "key": "order_of_the_dawn",
+      "name": "The Order of the Dawn",
+      "description": "Holy warriors and divine casters. Believe they serve higher powers. Often at odds with other factions.",
+      "alignment": "lawful_good",
+      "tradition": "divine"
+    },
+    {
+      "key": "the_mundanes",
+      "name": "Mundane Society",
+      "description": "Ordinary humans unaware of magic. The Veil protects them - and magic users from them.",
+      "alignment": "neutral",
+      "note": "Not a true faction but represents the mundane world."
+    }
+  ],
+  "skills": {
+    "mundane": [
+      {"key": "athletics", "attribute": "strength", "description": "Running, climbing, swimming, physical fitness"},
+      {"key": "brawling", "attribute": "strength", "description": "Unarmed combat, grappling"},
+      {"key": "driving", "attribute": "agility", "description": "Operating vehicles"},
+      {"key": "firearms", "attribute": "agility", "description": "Guns and ranged modern weapons"},
+      {"key": "stealth", "attribute": "agility", "description": "Moving unseen and unheard"},
+      {"key": "computers", "attribute": "intelligence", "description": "Hacking, programming, digital forensics"},
+      {"key": "investigation", "attribute": "intelligence", "description": "Research, crime scenes, finding clues"},
+      {"key": "medicine", "attribute": "intelligence", "description": "First aid, diagnosis, surgery"},
+      {"key": "academics", "attribute": "intelligence", "description": "History, science, general knowledge"},
+      {"key": "awareness", "attribute": "perception", "description": "Noticing details, spotting danger"},
+      {"key": "empathy", "attribute": "perception", "description": "Reading emotions and intentions"},
+      {"key": "streetwise", "attribute": "charisma", "description": "Urban survival, contacts, black markets"},
+      {"key": "persuasion", "attribute": "charisma", "description": "Convincing others, negotiation"},
+      {"key": "subterfuge", "attribute": "charisma", "description": "Lying, disguise, misdirection"},
+      {"key": "intimidation", "attribute": "charisma", "description": "Coercion through fear"}
+    ],
+    "magical": [
+      {"key": "arcana", "attribute": "intelligence", "description": "Magical theory, identifying spells, ritual knowledge"},
+      {"key": "occult_lore", "attribute": "intelligence", "description": "Hidden knowledge, supernatural creatures, forbidden texts"},
+      {"key": "spellcasting", "attribute": "willpower", "description": "Casting spells effectively under pressure"},
+      {"key": "ritual_magic", "attribute": "intelligence", "description": "Extended magical workings, enchanting, wards"},
+      {"key": "aura_reading", "attribute": "perception", "description": "Sensing magic, detecting supernatural beings"},
+      {"key": "meditation", "attribute": "willpower", "description": "Mental focus, mana recovery, psychic defense"}
+    ]
+  },
+  "equipment_slots": [
+    {"key": "head", "display_name": "Head", "max_layers": 2},
+    {"key": "face", "display_name": "Face", "max_layers": 1},
+    {"key": "ear_left", "display_name": "Left Ear", "max_layers": 2},
+    {"key": "ear_right", "display_name": "Right Ear", "max_layers": 2},
+    {"key": "neck", "display_name": "Neck", "max_layers": 2},
+    {"key": "torso", "display_name": "Torso", "max_layers": 4},
+    {"key": "legs", "display_name": "Legs", "max_layers": 3},
+    {"key": "full_body", "display_name": "Full Body", "max_layers": 1, "covers": ["torso", "legs"]},
+    {"key": "back", "display_name": "Back", "max_layers": 2},
+    {"key": "waist", "display_name": "Waist", "max_layers": 2},
+    {"key": "forearm_left", "display_name": "Left Wrist", "max_layers": 2},
+    {"key": "forearm_right", "display_name": "Right Wrist", "max_layers": 2},
+    {"key": "hand_left", "display_name": "Left Hand", "max_layers": 2},
+    {"key": "hand_right", "display_name": "Right Hand", "max_layers": 2},
+    {"key": "thumb_left", "display_name": "Left Thumb", "max_layers": 1},
+    {"key": "index_left", "display_name": "Left Index", "max_layers": 1},
+    {"key": "middle_left", "display_name": "Left Middle", "max_layers": 1},
+    {"key": "ring_left", "display_name": "Left Ring Finger", "max_layers": 1},
+    {"key": "pinky_left", "display_name": "Left Pinky", "max_layers": 1},
+    {"key": "thumb_right", "display_name": "Right Thumb", "max_layers": 1},
+    {"key": "index_right", "display_name": "Right Index", "max_layers": 1},
+    {"key": "middle_right", "display_name": "Right Middle", "max_layers": 1},
+    {"key": "ring_right", "display_name": "Right Ring Finger", "max_layers": 1},
+    {"key": "pinky_right", "display_name": "Right Pinky", "max_layers": 1},
+    {"key": "feet_socks", "display_name": "Feet (Socks)", "max_layers": 1},
+    {"key": "feet_shoes", "display_name": "Feet (Shoes)", "max_layers": 1}
+  ],
+  "bonus_slots": [
+    {"key": "pocket_left", "display_name": "Left Pocket", "max_layers": 1},
+    {"key": "pocket_right", "display_name": "Right Pocket", "max_layers": 1},
+    {"key": "back_pocket_left", "display_name": "Left Back Pocket", "max_layers": 1},
+    {"key": "back_pocket_right", "display_name": "Right Back Pocket", "max_layers": 1},
+    {"key": "jacket_pocket_left", "display_name": "Left Jacket Pocket", "max_layers": 1},
+    {"key": "jacket_pocket_right", "display_name": "Right Jacket Pocket", "max_layers": 1},
+    {"key": "jacket_inner_left", "display_name": "Left Inner Pocket", "max_layers": 1},
+    {"key": "jacket_inner_right", "display_name": "Right Inner Pocket", "max_layers": 1},
+    {"key": "messenger_bag", "display_name": "Messenger Bag", "max_layers": 1},
+    {"key": "backpack_main", "display_name": "Backpack (Main)", "max_layers": 1}
+  ],
+  "starting_equipment": [
+    {
+      "item_key": "crew_socks",
+      "display_name": "Crew Socks",
+      "item_type": "clothing",
+      "body_slot": "feet_socks",
+      "body_layer": 0,
+      "description": "Plain black crew socks"
+    },
+    {
+      "item_key": "underwear",
+      "display_name": "Underwear",
+      "item_type": "clothing",
+      "body_slot": "legs",
+      "body_layer": 0,
+      "description": "Basic undergarments"
+    },
+    {
+      "item_key": "dark_tshirt",
+      "display_name": "Dark T-Shirt",
+      "item_type": "clothing",
+      "body_slot": "torso",
+      "body_layer": 0,
+      "description": "A plain dark t-shirt, inconspicuous"
+    },
+    {
+      "item_key": "dark_jeans",
+      "display_name": "Dark Jeans",
+      "item_type": "clothing",
+      "body_slot": "legs",
+      "body_layer": 1,
+      "description": "Dark denim jeans, practical for any situation",
+      "provides_slots": ["pocket_left", "pocket_right", "back_pocket_left", "back_pocket_right"]
+    },
+    {
+      "item_key": "leather_jacket",
+      "display_name": "Leather Jacket",
+      "item_type": "clothing",
+      "body_slot": "torso",
+      "body_layer": 2,
+      "description": "A worn leather jacket with inner pockets - good for concealing things",
+      "provides_slots": ["jacket_pocket_left", "jacket_pocket_right", "jacket_inner_left", "jacket_inner_right"]
+    },
+    {
+      "item_key": "combat_boots",
+      "display_name": "Combat Boots",
+      "item_type": "clothing",
+      "body_slot": "feet_shoes",
+      "body_layer": 0,
+      "description": "Sturdy boots, good for running or kicking"
+    },
+    {
+      "item_key": "leather_belt",
+      "display_name": "Leather Belt",
+      "item_type": "clothing",
+      "body_slot": "waist",
+      "body_layer": 0,
+      "description": "A sturdy leather belt"
+    },
+    {
+      "item_key": "wallet",
+      "display_name": "Wallet",
+      "item_type": "container",
+      "body_slot": "back_pocket_right",
+      "body_layer": 0,
+      "description": "A leather wallet with ID, cards, and cash",
+      "properties": {"value": 200, "currency": "dollars"}
+    },
+    {
+      "item_key": "smartphone",
+      "display_name": "Smartphone",
+      "item_type": "tool",
+      "body_slot": "pocket_right",
+      "body_layer": 0,
+      "description": "A modern smartphone - useful for mundane tasks, but magic tends to glitch electronics"
+    },
+    {
+      "item_key": "keys",
+      "display_name": "Keys",
+      "item_type": "misc",
+      "body_slot": "pocket_left",
+      "body_layer": 0,
+      "description": "Apartment and car keys on a plain keyring"
+    },
+    {
+      "item_key": "focus_pendant",
+      "display_name": "Focus Pendant",
+      "item_type": "magical",
+      "body_slot": "neck",
+      "body_layer": 0,
+      "description": "A small silver pendant inscribed with subtle runes. Helps focus magical energy. To mundanes it looks like ordinary jewelry.",
+      "properties": {"magical": true, "focus_bonus": 1}
+    },
+    {
+      "item_key": "chalk_pouch",
+      "display_name": "Chalk Pouch",
+      "item_type": "magical_component",
+      "body_slot": "jacket_inner_left",
+      "body_layer": 0,
+      "description": "A small pouch of white and colored chalk for drawing ritual circles",
+      "properties": {"magical": true, "component_type": "ritual"}
+    },
+    {
+      "item_key": "silver_knife",
+      "display_name": "Silver Folding Knife",
+      "item_type": "weapon",
+      "body_slot": "jacket_inner_right",
+      "body_layer": 0,
+      "description": "A folding knife with a silver-plated blade. Effective against certain supernatural creatures.",
+      "properties": {"damage": "1d4", "damage_type": "piercing", "silver": true, "concealed": true}
+    }
+  ],
+  "currencies": [
+    {"key": "dollars", "display_name": "US Dollars", "symbol": "$", "is_primary": true},
+    {"key": "council_marks", "display_name": "Council Marks", "symbol": "CM", "is_primary": false, "note": "Magical currency used between practitioners. One mark equals roughly $100 in mundane purchasing power."}
+  ],
+  "locations": {
+    "mundane_examples": ["apartment", "office", "coffee_shop", "bar", "subway", "hospital", "university", "warehouse"],
+    "magical_examples": ["sanctum", "ley_line_nexus", "hidden_library", "council_hall", "apothecary", "summoning_circle", "graveyard", "crossroads"]
+  },
+  "supernatural_creatures": [
+    {"key": "vampire", "description": "Undead blood-drinkers. Organized into courts. Technically illegal under Council law but tolerated if they're discreet."},
+    {"key": "werewolf", "description": "Humans cursed with lycanthropy. Form packs. Territorial."},
+    {"key": "ghost", "description": "Spirits of the dead. Usually tied to locations or unfinished business."},
+    {"key": "demon", "description": "Entities from other realms. Summoning them is extremely dangerous and restricted."},
+    {"key": "fae", "description": "Creatures from the Otherworld. Beautiful and dangerous. Never make deals with them."},
+    {"key": "construct", "description": "Magically animated objects or golems. Require significant power to create."}
+  ],
+  "themes": [
+    "Maintaining a double life",
+    "The cost of power",
+    "Ancient conspiracies in modern cities",
+    "What lurks in the shadows",
+    "Trust is a dangerous commodity",
+    "The mundane world is fragile"
+  ],
+  "need_modifiers": {
+    "recalculate_on_aging": false,
+    "age_curves": [
+      {
+        "need_name": "intimacy",
+        "distribution": {
+          "peak_age": 22,
+          "peak_value": 85,
+          "std_dev_lower": 4,
+          "std_dev_upper": 40,
+          "min_value": 0,
+          "max_value": 100
+        },
+        "individual_variance_std": 18,
+        "affects_decay": true,
+        "affects_max_intensity": true
+      },
+      {
+        "need_name": "fatigue",
+        "distribution": {
+          "peak_age": 25,
+          "peak_value": 25,
+          "std_dev_lower": 10,
+          "std_dev_upper": 35,
+          "min_value": 40,
+          "max_value": 100
+        },
+        "individual_variance_std": 12,
+        "affects_decay": true,
+        "affects_max_intensity": false
+      },
+      {
+        "need_name": "social_connection",
+        "distribution": {
+          "peak_age": 24,
+          "peak_value": 75,
+          "std_dev_lower": 6,
+          "std_dev_upper": 25,
+          "min_value": 25,
+          "max_value": 100
+        },
+        "individual_variance_std": 22,
+        "affects_decay": true,
+        "affects_max_intensity": true
+      }
+    ],
+    "trait_effects": {
+      "workaholic": {
+        "fatigue": {"decay_rate_multiplier": 1.3},
+        "social_connection": {"decay_rate_multiplier": 1.4}
+      },
+      "night_owl": {
+        "fatigue": {"decay_rate_multiplier": 0.8}
+      },
+      "paranoid": {
+        "social_connection": {"satisfaction_multiplier": 0.6}
+      },
+      "magical_sensitivity": {
+        "morale": {"decay_rate_multiplier": 1.2}
+      },
+      "iron_will": {
+        "morale": {"decay_rate_multiplier": 0.7}
+      },
+      "coffee_addict": {
+        "fatigue": {"satisfaction_multiplier": 0.8, "decay_rate_multiplier": 0.9}
+      }
+    }
+  },
+  "gm_guidance": {
+    "tone": "Gritty urban fantasy with noir elements. Magic has costs. The supernatural is dangerous.",
+    "veil_reminders": [
+      "Always consider who might be watching when magic is used",
+      "Smartphones and cameras are everywhere - evidence must be handled",
+      "The Council has cleaners, but they charge favors",
+      "Mundanes who see too much become problems - ethical dilemmas abound"
+    ],
+    "conflict_sources": [
+      "Faction politics within the magical world",
+      "Supernatural creatures with their own agendas",
+      "Mundane authorities getting too close to the truth",
+      "Ancient prophecies coming due",
+      "Magical artifacts falling into wrong hands",
+      "Veil breaches that need containing"
+    ]
+  }
+}
