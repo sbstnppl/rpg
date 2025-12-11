@@ -131,11 +131,7 @@ class NPCPreferences(BaseModel):
     )
     attracted_age_offset: int = Field(
         default=0,
-        description="Offset from own age to center of preferred age range"
-    )
-    attracted_age_range: tuple[int, int] = Field(
-        default=(-5, 5),
-        description="(min, max) range around the offset center"
+        description="Offset from own age to preferred partner age (e.g., +5 means prefers 5 years older)"
     )
 
     # Physical/personality attraction preferences
@@ -430,7 +426,6 @@ class NPCFullState(BaseModel):
                 "preferences": {
                     "attracted_to_genders": ["male"],
                     "attracted_age_offset": 2,
-                    "attracted_age_range": [-3, 5],
                     "attracted_to_physical": ["lean build", "dark hair"],
                     "attracted_to_personality": ["confidence", "kindness"],
                     "favorite_foods": ["honey cakes"],

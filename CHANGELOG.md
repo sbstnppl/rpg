@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Age-Relative Attraction System** - Improved realism in NPC age preferences
+  - **Age-Relative Decay Rate**: Younger NPCs are now pickier about age gaps
+    - 18yo: 5-year gap = 33% attraction (high decay)
+    - 60yo: 5-year gap = 72% attraction (low decay)
+    - Formula: `decay_rate = 0.1 * (40 / npc_age)`, clamped to [0.03, 0.30]
+  - **Fixed Offset Distribution**: Each NPC gets a single fixed age preference offset using skew-normal distribution
+    - Most NPCs prefer similar ages (offset ~0)
+    - Spread scales with age (older NPCs have wider preference range)
+    - Age-bounded: Adults prefer 16+, minors can prefer 10+
+    - Skew varies by age: young adults slightly prefer older, older adults prefer younger
+  - **Refined Age Brackets**: children (6-9), teens (10-17), young adults (18-30), etc.
+  - **Intimacy System by Age**: children (<10) have no drive, teens (10-16) have developing drive
+  - **Family Situation**: new dedicated bracket for ages 18-25
+  - **Alcohol Preferences**: now start at age 16
+  - **Perfect Match Range**: +/-2 years around preferred age gives 100% attraction before decay starts
+  - Removed `attracted_age_range` field from `NPCPreferences` schema (replaced by fixed PERFECT_MATCH_RANGE constant)
+  - 12 new tests for age attraction system in `tests/test_services/test_emergent_npc_generator.py`
+
 ### Added
 - **Structured GM Output System (Phase 1-2)** - Tool-based entity creation with emergent traits
   - **Goal System Infrastructure** (`src/agents/schemas/goals.py`):

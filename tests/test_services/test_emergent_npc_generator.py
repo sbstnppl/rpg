@@ -750,3 +750,166 @@ class TestEdgeCases:
 
         assert npc_state is not None
         assert npc_state.entity_key is not None
+
+
+# =============================================================================
+# Age Attraction System Tests
+# =============================================================================
+
+
+class TestAgeAttractionSystem:
+    """Tests for the age-relative attraction system."""
+
+    def test_age_decay_rate_varies_with_age(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that decay rate is higher for younger NPCs."""
+        rate_18 = generator._calculate_age_decay_rate(18)
+        rate_40 = generator._calculate_age_decay_rate(40)
+        rate_60 = generator._calculate_age_decay_rate(60)
+
+        # Younger = higher decay rate (pickier)
+        assert rate_18 > rate_40 > rate_60
+
+    def test_age_decay_rate_bounds(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that decay rate is clamped to expected bounds."""
+        # Very young - should hit upper bound
+        rate_very_young = generator._calculate_age_decay_rate(10)
+        assert rate_very_young <= 0.30
+
+        # Very old - should hit lower bound
+        rate_very_old = generator._calculate_age_decay_rate(100)
+        assert rate_very_old >= 0.03
+
+    def test_age_decay_rate_formula(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test specific decay rate values."""
+        # At age 40, formula gives exactly 0.1
+        rate_40 = generator._calculate_age_decay_rate(40)
+        assert abs(rate_40 - 0.1) < 0.001
+
+        # At age 18, formula gives 0.1 * (40/18) ≈ 0.222
+        rate_18 = generator._calculate_age_decay_rate(18)
+        assert abs(rate_18 - 0.222) < 0.01
+
+    def test_age_offset_bounds_for_adult(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that adult NPC offset respects 16+ minimum partner age."""
+        # Run many times to check bounds are respected
+        for _ in range(50):
+            offset = generator._generate_age_offset(40)
+            # 40yo with offset should prefer at least 16yo
+            # min_offset = 16 - 40 = -24
+            assert offset >= -24
+            # Preferred age = 40 + offset
+            preferred = 40 + offset
+            assert preferred >= 16
+
+    def test_age_offset_bounds_for_18yo(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that 18yo NPC cannot prefer younger than 16."""
+        for _ in range(50):
+            offset = generator._generate_age_offset(18)
+            # 18yo: min_offset = 16 - 18 = -2
+            assert offset >= -2
+            preferred = 18 + offset
+            assert preferred >= 16
+
+    def test_age_offset_bounds_for_minor(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that minor NPC has restricted offset."""
+        for _ in range(50):
+            offset = generator._generate_age_offset(16)
+            # 16yo: min_offset = max(10-16, -2) = -2
+            # max_offset = min(85-16, max(30, 16-10)) = 30
+            assert -2 <= offset <= 30
+            preferred = 16 + offset
+            assert 14 <= preferred <= 46
+
+    def test_age_offset_centered_near_zero(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that most offsets are near zero (same-age preference)."""
+        offsets = [generator._generate_age_offset(30) for _ in range(100)]
+        near_zero = sum(1 for o in offsets if abs(o) <= 3)
+        # At least 40% should be within +/-3 years
+        assert near_zero >= 40
+
+    def test_age_attraction_factor_perfect_match(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that perfect match (within +/-2) gives 1.0."""
+        # NPC age 30, offset 0, player age 30 (exact match)
+        factor = generator._calculate_age_attraction_factor(30, 30, 0)
+        assert factor == 1.0
+
+        # Player age within +/-2 of preferred
+        factor = generator._calculate_age_attraction_factor(30, 32, 0)
+        assert factor == 1.0
+        factor = generator._calculate_age_attraction_factor(30, 28, 0)
+        assert factor == 1.0
+
+    def test_age_attraction_factor_decay_starts_after_range(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that decay starts after +/-2 perfect match range."""
+        # NPC age 30, offset 0, preferred = 30
+        # +/-2 perfect match, so 28-32 = 1.0
+        # 33 = 1 year outside = decay starts
+        factor_32 = generator._calculate_age_attraction_factor(30, 32, 0)
+        factor_33 = generator._calculate_age_attraction_factor(30, 33, 0)
+        assert factor_32 == 1.0
+        assert factor_33 < 1.0
+
+    def test_age_attraction_factor_respects_offset(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that offset shifts the preferred age."""
+        # NPC age 30 with offset +10 prefers 40yo
+        # So player at 40 should get 1.0
+        factor = generator._calculate_age_attraction_factor(30, 40, 10)
+        assert factor == 1.0
+
+        # Player at 30 is 10 years from preferred (outside +/-2 range)
+        # Distance = 10 - 2 = 8 years of decay
+        factor = generator._calculate_age_attraction_factor(30, 30, 10)
+        assert factor < 1.0
+        assert factor < 0.5  # Should be significantly reduced
+
+    def test_age_attraction_factor_younger_pickier(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that younger NPCs have faster decay (pickier)."""
+        # Same distance outside perfect range, different NPC ages
+        # 5 years outside perfect range
+        factor_18yo = generator._calculate_age_attraction_factor(18, 30, 0)  # 10 outside, 8 after range
+        factor_60yo = generator._calculate_age_attraction_factor(60, 70, 0)  # 10 outside, 8 after range
+
+        # 18yo should have lower factor (pickier)
+        assert factor_18yo < factor_60yo
+
+    def test_age_attraction_factor_floor(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that factor never goes below 0.02."""
+        # Very large distance
+        factor = generator._calculate_age_attraction_factor(20, 80, 0)
+        assert factor >= 0.02

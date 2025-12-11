@@ -302,8 +302,8 @@ PERSONALITY_ATTRACTION_TRAITS = [
 # =============================================================================
 
 AGE_RANGES: dict[str, tuple[int, int, str]] = {
-    "child": (6, 12, "child"),
-    "teen": (13, 17, "teenager"),
+    "child": (6, 9, "child"),
+    "teen": (10, 17, "teenager"),
     "young_adult": (18, 30, "young adult"),
     "middle_aged": (31, 55, "middle-aged"),
     "elderly": (56, 85, "elderly"),
@@ -312,7 +312,7 @@ AGE_RANGES: dict[str, tuple[int, int, str]] = {
 
 def age_to_description(age: int) -> str:
     """Convert numeric age to narrative description."""
-    if age < 13:
+    if age < 10:
         return "a child"
     elif age < 18:
         return "teenage"
@@ -1007,10 +1007,16 @@ Generate occupation details that fit naturally in this setting."""
 
     def _generate_family_situation(self, age: int) -> str:
         """Generate family situation based on age."""
-        if age < 20:
+        if age < 18:
             situations = [
                 "lives with parents", "orphaned young", "raised by grandparents",
                 "large family with many siblings", "only child",
+            ]
+        elif age < 25:
+            situations = [
+                "lives with parents", "large family with many siblings",
+                "married with children", "single", "widowed", "divorced",
+                "engaged", "married, no children", "caring for aging parents",
             ]
         elif age < 40:
             situations = [
@@ -1132,59 +1138,59 @@ Generate occupation details that fit naturally in this setting."""
             # Non-binary or other: random distribution
             return random.choice([["male"], ["female"], ["male", "female"]])
 
-    def _generate_age_attraction(self, npc_age: int) -> tuple[int, tuple[int, int]]:
-        """Generate preferred age using offset + range system.
+    def _generate_age_offset(self, npc_age: int) -> int:
+        """Generate fixed age preference offset at character creation.
 
-        Returns: (offset, (range_min, range_max))
-
-        Target age center = npc_age + offset
-        Acceptable range = (center + range_min, center + range_max)
-
-        Most NPCs prefer similar ages (offset ~0), but some have preferences
-        for older/younger partners.
+        Uses a truncated skew-normal distribution where:
+        - Most NPCs prefer similar ages (offset ~0)
+        - Spread scales with age (older NPCs have wider preference spread)
+        - Young adults slightly prefer older, older adults prefer younger
+        - Bounds ensure adults prefer 18+, minors can prefer minors
 
         Args:
             npc_age: The NPC's age.
 
         Returns:
-            Tuple of (offset, (range_min, range_max)).
+            Integer offset from NPC's age to their preferred partner age.
+            Example: offset=5 means NPC prefers partners 5 years older.
         """
-        if npc_age < 18:
-            # Minors: strict same-age preference
-            offset = 0
-            age_range = (-2, 2)
-        elif npc_age < 25:
-            # Young adults: mostly similar age, occasionally older preference
-            roll = random.random()
-            if roll < 0.85:
-                offset = random.randint(-2, 3)  # Similar age
-                age_range = (-3, 5)
-            else:
-                offset = random.randint(5, 15)  # Prefers older
-                age_range = (-5, 10)
-        elif npc_age < 40:
-            # Adults: wider variety
-            roll = random.random()
-            if roll < 0.70:
-                offset = random.randint(-3, 3)  # Similar age
-                age_range = (-5, 8)
-            elif roll < 0.90:
-                offset = random.randint(-8, -3)  # Prefers younger
-                age_range = (-5, 5)
-            else:
-                offset = random.randint(5, 15)  # Prefers older
-                age_range = (-5, 10)
-        else:
-            # Older adults: often prefer younger
-            roll = random.random()
-            if roll < 0.60:
-                offset = random.randint(-15, -5)  # Prefers younger
-                age_range = (-10, 5)
-            else:
-                offset = random.randint(-5, 5)  # Similar age
-                age_range = (-8, 8)
+        # Spread scales with age: older NPCs have wider preference spread
+        sigma = 5.0 * math.sqrt(npc_age / 40)
 
-        return (offset, age_range)
+        # Age-dependent skew (young prefer older, old prefer younger)
+        if npc_age < 25:
+            skew = 0.5  # Slight preference for older
+        elif npc_age < 40:
+            skew = 0.0  # Symmetric
+        elif npc_age < 55:
+            skew = -0.3  # Slight preference for younger
+        else:
+            skew = -0.8  # Stronger preference for younger
+
+        # Asymmetric bounds - minors can prefer minors, adults must prefer 18+
+        max_partner_age = 85
+        if npc_age < 18:
+            # Minors: can prefer down to ~2 years younger, but not below 10
+            min_offset = max(10 - npc_age, -2)
+            max_offset = min(max_partner_age - npc_age, max(30, npc_age - 10))
+        else:
+            # Adults: must prefer 16+
+            min_offset = 16 - npc_age  # 18yo: -2, 40yo: -24, 70yo: -54
+            max_offset = min(max_partner_age - npc_age, max(30, npc_age - 10))
+
+        # Sample from skew-normal with rejection sampling
+        max_iterations = 1000
+        for _ in range(max_iterations):
+            u = random.gauss(0, 1)
+            v = random.gauss(0, 1)
+            delta = skew / math.sqrt(1 + skew**2)
+            x = delta * abs(u) + math.sqrt(1 - delta**2) * v
+            offset = x * sigma
+            if min_offset <= offset <= max_offset:
+                return int(round(offset))
+
+        # Fallback: clamp to bounds (should rarely happen)
+        return int(round(max(min_offset, min(max_offset, 0))))
 
     def _generate_preferences(
         self,
@@ -1204,7 +1210,7 @@ Generate occupation details that fit naturally in this setting."""
         """
         # Gender and age attraction
         attracted_to_genders = self._generate_gender_attraction(gender)
-        offset, age_range = self._generate_age_attraction(age)
+        offset = self._generate_age_offset(age)
 
         # Physical attraction (2-4 traits)
         attracted_physical = random.sample(PHYSICAL_ATTRACTION_TRAITS, random.randint(2, 4))
@@ -1264,7 +1270,7 @@ Generate occupation details that fit naturally in this setting."""
             food_allergies = random.sample(allergy_options, random.randint(1, 2))
 
         # Alcohol preferences - correlated with age
-        if age < 18:
+        if age < 16:
             is_alcoholic = False
             is_teetotaler = random.random() < 0.80  # Most minors don't drink
         else:
@@ -1273,11 +1279,26 @@ Generate occupation details that fit naturally in this setting."""
 
         # Intimacy preferences
         drive_roll = random.random()
-        if age < 18:
+        if age < 10:
+            # Children have no drive
+            drive_level = "low"
+            drive_threshold = 0
+            is_actively_seeking = False
+        if age < 16:
             # Minors have lower/developing drive
             drive_level = "low"
             drive_threshold = 70 + random.randint(0, 20)  # Higher threshold
             is_actively_seeking = False
+            if drive_roll < 0.3 + 0.1 * (16 - age):
+                drive_level = "low"
+                drive_threshold = 60 + random.randint(0, 30)
+            elif drive_roll < 0.77 + 0.03 * (16 - age):
+                drive_level = "moderate"
+                drive_threshold = 40 + random.randint(0, 30)
+            else:
+                drive_level = "high"
+                drive_threshold = 20 + random.randint(0, 30)
+            is_actively_seeking = random.random() < 0.30
         else:
             if drive_roll < 0.25:
                 drive_level = "low"
@@ -1291,8 +1312,8 @@ Generate occupation details that fit naturally in this setting."""
             is_actively_seeking = random.random() < 0.30
 
         # Partnership status (correlates with age)
-        if age < 18:
-            has_regular_partner = random.random() < 0.10  # Young crushes
+        if age < 16:
+            has_regular_partner = random.random() < 0.25 - 0.025 * (16 - age)  # Young crushes
         elif age < 30:
             has_regular_partner = random.random() < 0.35
         elif age < 50:
@@ -1309,7 +1330,6 @@ Generate occupation details that fit naturally in this setting."""
         return NPCPreferences(
             attracted_to_genders=attracted_to_genders,
             attracted_age_offset=offset,
-            attracted_age_range=age_range,
             attracted_to_physical=attracted_physical,
             attracted_to_personality=attracted_personality,
             favorite_foods=favorite_foods,
@@ -1493,58 +1513,65 @@ Generate occupation details that fit naturally in this setting."""
 
         return reactions
 
+    def _calculate_age_decay_rate(self, npc_age: int) -> float:
+        """Calculate age-relative decay rate for attraction falloff.
+
+        Younger NPCs are pickier about age gaps - a 5-year gap means more
+        to an 18yo than to a 60yo.
+
+        Formula: decay_rate = 0.1 * (40 / npc_age), clamped to [0.03, 0.30]
+
+        Examples:
+            - 18yo: decay_rate = 0.22 (5yr gap → 33% attraction)
+            - 25yo: decay_rate = 0.16 (5yr gap → 45% attraction)
+            - 40yo: decay_rate = 0.10 (5yr gap → 61% attraction)
+            - 60yo: decay_rate = 0.07 (5yr gap → 72% attraction)
+
+        Args:
+            npc_age: The NPC's age.
+
+        Returns:
+            Decay rate between 0.03 and 0.30.
+        """
+        raw = 0.1 * (40 / max(npc_age, 15))
+        return max(0.03, min(0.30, raw))
+
+    # Perfect match range: +/- this many years from preferred age = 100% attraction
+    PERFECT_MATCH_RANGE = 2
+
     def _calculate_age_attraction_factor(
         self,
         npc_age: int,
         player_age: int,
         offset: int,
-        age_range: tuple[int, int],
     ) -> float:
-        """Calculate age-based attraction factor (0.0 to 1.0).
+        """Calculate age-based attraction factor (0.02 to 1.0).
 
-        Uses gradual falloff outside preferred range:
-        - Inside range: 1.0 (no penalty)
-        - Outside range: decreases gradually based on distance
-        - Very far outside: approaches 0
+        Uses age-relative decay - younger NPCs are pickier about age gaps.
+        A small "perfect match" range (+/-2 years) gives 100% before decay starts.
 
-        Example: 18yo with offset=5, range=(-5,+10) → prefers 18-33
-        - 30yo player: 1.0 (in range)
-        - 34yo player: ~0.95 (1 year outside)
-        - 40yo player: ~0.70 (7 years outside)
-        - 80yo player: ~0.05 (47 years outside)
+        Example: 30yo NPC with offset=5 → prefers 35yo
+        - 33-37yo: 1.0 (within +/-2 perfect match range)
+        - 40yo: decay based on 3 years outside (40-37=3)
 
         Args:
             npc_age: The NPC's age.
             player_age: The player's age.
-            offset: Offset from NPC's age to center of preferred range.
-            age_range: (min, max) range around the offset center.
+            offset: Offset from NPC's age to preferred age center.
 
         Returns:
             Float from 0.02 to 1.0 representing age compatibility.
         """
-        # Calculate preferred age range
-        center = npc_age + offset
-        min_preferred = center + age_range[0]
-        max_preferred = center + age_range[1]
+        preferred_age = npc_age + offset
+        raw_distance = abs(player_age - preferred_age)
 
-        # Ensure minimum age is at least 18 for adults, or appropriate for minors
-        if npc_age >= 18:
-            min_preferred = max(18, min_preferred)
+        # Perfect match within +/-2 years
+        if raw_distance <= self.PERFECT_MATCH_RANGE:
+            return 1.0
 
-        # Check if in range
-        if min_preferred <= player_age <= max_preferred:
-            return 1.0  # Perfect match, no penalty
-
-        # Calculate distance outside range
-        if player_age < min_preferred:
-            distance = min_preferred - player_age
-        else:
-            distance = player_age - max_preferred
-
-        # Gradual falloff using exponential decay
-        # decay_rate controls how quickly attraction falls off
-        # 0.1 means ~90% at 1 year, ~60% at 5 years, ~35% at 10 years, ~5% at 30 years
-        decay_rate = 0.1
+        # Decay starts after the flat zone
+        distance = raw_distance - self.PERFECT_MATCH_RANGE
+        decay_rate = self._calculate_age_decay_rate(npc_age)
         factor = math.exp(-decay_rate * distance)
 
         # Floor at 0.02 (never completely zero, just very unlikely)
@@ -1621,7 +1648,6 @@ Generate occupation details that fit naturally in this setting."""
                 npc_age=npc_age,
                 player_age=player_age,
                 offset=preferences.attracted_age_offset,
-                age_range=preferences.attracted_age_range,
             )
 
         # Combine scores: age factor MULTIPLIES the base score
@@ -2156,7 +2182,6 @@ Generate occupation details that fit naturally in this setting."""
                 "personality": preferences.attracted_to_personality,
                 "genders": preferences.attracted_to_genders,
                 "age_offset": preferences.attracted_age_offset,
-                "age_range": list(preferences.attracted_age_range),  # Convert tuple to list for JSON
             },
             # Extra preferences
             extra_preferences=preferences.extra_preferences if preferences.extra_preferences else None,
@@ -2283,16 +2308,12 @@ Generate occupation details that fit naturally in this setting."""
         attracted_personality = []
         attracted_genders = ["male", "female"]  # Default bisexual if not stored
         age_offset = 0
-        age_range = (-5, 5)
 
         if record.attraction_preferences:
             attracted_physical = record.attraction_preferences.get("physical", [])
             attracted_personality = record.attraction_preferences.get("personality", [])
             attracted_genders = record.attraction_preferences.get("genders", ["male", "female"])
             age_offset = record.attraction_preferences.get("age_offset", 0)
-            age_range_list = record.attraction_preferences.get("age_range", [-5, 5])
-            if isinstance(age_range_list, list) and len(age_range_list) == 2:
-                age_range = (age_range_list[0], age_range_list[1])
 
         # Map drive_level enum to string
         drive_level_str = "moderate"
@@ -2305,7 +2326,6 @@ Generate occupation details that fit naturally in this setting."""
             # Gender/age attraction
             attracted_to_genders=attracted_genders,
             attracted_age_offset=age_offset,
-            attracted_age_range=age_range,
             # Physical/personality attraction
             attracted_to_physical=attracted_physical,
             attracted_to_personality=attracted_personality,
