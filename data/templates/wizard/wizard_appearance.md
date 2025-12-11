@@ -17,8 +17,10 @@ You need to gather:
 - `eye_color` - Eye color
 
 ## Optional Fields
+- `height` - Height (e.g., "175 cm", "5'9\"", "tall", "average height")
 - `hair_style` - How the hair is styled
 - `skin_tone` - Skin tone description
+- `voice_description` - Voice characteristics (e.g., "deep and resonant", "soft and melodic")
 
 ## Your Task
 Help the player describe their character's appearance.
@@ -44,7 +46,7 @@ After each response where you learn appearance details:
 
 When ALL required fields are filled and confirmed:
 ```json
-{"section_complete": true, "data": {"age": 25, "gender": "female", "build": "athletic", "hair_color": "red", "hair_style": "long", "eye_color": "green"}}
+{"section_complete": true, "data": {"age": 25, "gender": "female", "height": "170 cm", "build": "athletic", "hair_color": "red", "hair_style": "long", "eye_color": "green", "voice_description": "clear and confident"}}
 ```
 
 ## Conversation History (this section only)

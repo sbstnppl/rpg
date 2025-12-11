@@ -112,6 +112,11 @@ class Entity(Base, TimestampMixin):
         nullable=True,
         comment="Species/race (e.g., 'human', 'half-elf', 'android')",
     )
+    birthplace: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="Region/place of birth (e.g., 'Northern Europe', 'Mediterranean')",
+    )
     distinguishing_features: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,

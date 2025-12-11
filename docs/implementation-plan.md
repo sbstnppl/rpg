@@ -309,6 +309,11 @@
 - [x] Implement conversational character creation
 - [x] AI-assisted attribute assignment
 - [x] Starting equipment selection
+- [x] **Height & Voice Support**
+  - Add `height` and `voice_description` fields to `CharacterCreationState`
+  - Update `get_current_state_summary()` to display height and voice
+  - Update `_create_character_records()` to persist height and voice
+  - Update `wizard_appearance.md` template with height and voice prompts
 
 ### 6.7 Unified Game Start Wizard
 - [x] Create `rpg game start` command combining session + character + play
@@ -562,8 +567,34 @@
   - Lazy-loaded generator properties
 - [x] Update `src/agents/tools/__init__.py`
   - Export new tools and lists
-- [x] Create `tests/test_services/test_emergent_npc_generator.py` (27 tests)
+- [x] Create `tests/test_services/test_emergent_npc_generator.py` (74 tests)
 - [x] Create `tests/test_services/test_emergent_item_generator.py` (43 tests)
+
+### 10.2.1 NPC Generation Enhancements ✓
+- [x] **Birthplace System**
+  - Add `birthplace` field to Entity model
+  - Create migration `369661c753f3_add_birthplace_to_entities.py`
+  - Create `src/schemas/regions.py` with RegionCulture dataclass
+  - Define regions for Contemporary, Fantasy, and Sci-Fi settings
+  - `_generate_birthplace()` - 87% local, 13% migrant
+  - `_generate_skin_color_from_birthplace()` - weighted random from region demographics
+- [x] **Age-Aware Height Generation**
+  - `GROWTH_PERCENTAGES` constant for pediatric growth curves
+  - `_calculate_height()` - age and gender-appropriate heights
+- [x] **Age-Aware Voice Generation**
+  - `VOICES_CHILD` and `VOICES_TEEN` constants
+  - `_generate_voice()` - pre-voice-break for children/teens
+- [x] **Setting-Specific Name Pools**
+  - `NAMES_BY_SETTING` dictionary (fantasy, contemporary, scifi)
+  - `_SETTING_NAME_ALIASES` for setting lookup
+  - Updated `_generate_name()` to use setting-specific pools
+- [x] **Context-Aware Apprentice Generation**
+  - `LOCATION_APPRENTICE_ROLES` mapping 50+ locations to trade-specific roles
+  - `_GENERIC_APPRENTICE_ROLES` and `_GENERIC_YOUNG_ROLES` fallbacks
+  - `_generate_context_aware_apprentice()` method
+  - Updated `_generate_occupation_fallback()` to use location context
+- [x] Create `src/schemas/regions.py` (new file)
+- [x] Create `tests/test_schemas/test_regions.py` (18 tests)
 
 ### 10.3 World Simulator (Phase 3) ✓
 - [x] Update `src/agents/world_simulator.py`

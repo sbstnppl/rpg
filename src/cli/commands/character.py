@@ -72,11 +72,13 @@ class CharacterCreationState:
     # Group 3: Appearance
     age: int | None = None
     gender: str | None = None
+    height: str | None = None  # e.g., "175 cm" or "5'9\""
     build: str | None = None
     hair_color: str | None = None
     hair_style: str | None = None
     eye_color: str | None = None
     skin_tone: str | None = None
+    voice_description: str | None = None  # e.g., "deep and resonant"
     species: str | None = None
 
     # Group 4: Background
@@ -148,10 +150,12 @@ class CharacterCreationState:
         appearance_fields = {
             "age": self.age,
             "gender": self.gender,
+            "height": self.height,
             "build": self.build,
             "hair_color": self.hair_color,
             "eye_color": self.eye_color,
             "skin_tone": self.skin_tone,
+            "voice": self.voice_description,
             "species": self.species,
         }
         filled = [f"{k}={v}" for k, v in appearance_fields.items() if v]
@@ -1074,6 +1078,8 @@ def _create_character_records(
             entity.age = creation_state.age
         if creation_state.gender:
             entity.gender = creation_state.gender
+        if creation_state.height:
+            entity.height = creation_state.height
         if creation_state.build:
             entity.build = creation_state.build
         if creation_state.hair_color:
@@ -1084,6 +1090,8 @@ def _create_character_records(
             entity.eye_color = creation_state.eye_color
         if creation_state.skin_tone:
             entity.skin_tone = creation_state.skin_tone
+        if creation_state.voice_description:
+            entity.voice_description = creation_state.voice_description
         if creation_state.species:
             entity.species = creation_state.species
         if creation_state.personality_notes:

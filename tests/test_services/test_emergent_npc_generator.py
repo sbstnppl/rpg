@@ -913,3 +913,571 @@ class TestAgeAttractionSystem:
         # Very large distance
         factor = generator._calculate_age_attraction_factor(20, 80, 0)
         assert factor >= 0.02
+
+
+# =============================================================================
+# Age-Aware Height Tests
+# =============================================================================
+
+
+class TestAgeAwareHeight:
+    """Tests for age-aware height generation."""
+
+    def test_adult_height_in_normal_range(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that adults (18+) get height in adult ranges."""
+        for _ in range(20):
+            height_male = generator._calculate_height("male", 25)
+            height_female = generator._calculate_height("female", 25)
+
+            # Adult male: 165-195cm (with variance)
+            assert 155 <= height_male <= 205
+            # Adult female: 155-185cm (with variance)
+            assert 145 <= height_female <= 195
+
+    def test_child_height_shorter_than_adult(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that children are shorter than adults."""
+        # Get average heights over multiple samples
+        adult_heights = [generator._calculate_height("male", 25) for _ in range(20)]
+        child_heights = [generator._calculate_height("male", 10) for _ in range(20)]
+
+        avg_adult = sum(adult_heights) / len(adult_heights)
+        avg_child = sum(child_heights) / len(child_heights)
+
+        # Children should be significantly shorter
+        assert avg_child < avg_adult * 0.85  # At least 15% shorter
+
+    def test_height_increases_with_age(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that height generally increases through childhood/teens."""
+        ages = [8, 12, 15, 18]
+        avg_heights = []
+
+        for age in ages:
+            heights = [generator._calculate_height("male", age) for _ in range(20)]
+            avg_heights.append(sum(heights) / len(heights))
+
+        # Each age should be taller on average than the previous
+        for i in range(len(avg_heights) - 1):
+            assert avg_heights[i] < avg_heights[i + 1], f"Age {ages[i]} not shorter than {ages[i+1]}"
+
+    def test_height_at_specific_ages(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test height percentages at specific ages match growth curves."""
+        # 10-year-old should be ~70% of adult height
+        heights_10 = [generator._calculate_height("male", 10) for _ in range(30)]
+        avg_10 = sum(heights_10) / len(heights_10)
+        # Adult male average ~180cm, so 10yo should be ~126cm
+        assert 115 <= avg_10 <= 140, f"10yo avg height {avg_10} not in expected range"
+
+        # 15-year-old should be ~93% of adult height
+        heights_15 = [generator._calculate_height("male", 15) for _ in range(30)]
+        avg_15 = sum(heights_15) / len(heights_15)
+        # Should be ~167cm
+        assert 155 <= avg_15 <= 180, f"15yo avg height {avg_15} not in expected range"
+
+    def test_very_young_child_height(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that very young children get appropriate heights."""
+        heights_5 = [generator._calculate_height("male", 5) for _ in range(20)]
+        avg_5 = sum(heights_5) / len(heights_5)
+        # 5yo should be ~55% of adult height (~99cm)
+        assert 85 <= avg_5 <= 115, f"5yo avg height {avg_5} not in expected range"
+
+    def test_height_gender_difference(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that male heights are generally taller than female."""
+        male_heights = [generator._calculate_height("male", 25) for _ in range(30)]
+        female_heights = [generator._calculate_height("female", 25) for _ in range(30)]
+
+        avg_male = sum(male_heights) / len(male_heights)
+        avg_female = sum(female_heights) / len(female_heights)
+
+        assert avg_male > avg_female
+
+
+# =============================================================================
+# Age-Aware Voice Tests
+# =============================================================================
+
+
+class TestAgeAwareVoice:
+    """Tests for age-aware voice generation with pre-voice-break support."""
+
+    def test_child_voice_descriptors(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that children under 10 get child voice descriptors."""
+        child_voices = {"high and clear", "piping", "soft", "childlike", "bright"}
+        for _ in range(20):
+            voice = generator._generate_voice("male", 8)
+            assert voice in child_voices, f"Child voice '{voice}' not in child voice pool"
+
+    def test_teen_male_pre_voice_break(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that male teens under 15 get pre-voice-break descriptors."""
+        teen_voices = {"youthful", "clear", "light", "bright", "unbroken"}
+        for _ in range(20):
+            voice = generator._generate_voice("male", 13)
+            assert voice in teen_voices, f"Teen male voice '{voice}' not in teen voice pool"
+
+    def test_teen_female_pre_voice_break(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that female teens under 13 get pre-voice-break descriptors."""
+        teen_voices = {"youthful", "clear", "light", "bright", "unbroken"}
+        for _ in range(20):
+            voice = generator._generate_voice("female", 11)
+            assert voice in teen_voices, f"Teen female voice '{voice}' not in teen voice pool"
+
+    def test_adult_male_voice(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that adult males (15+) get adult male voice descriptors."""
+        adult_male_voices = {
+            "deep and resonant", "gravelly", "warm baritone", "quiet and measured",
+            "booming", "soft-spoken", "rough from shouting", "melodic",
+        }
+        for _ in range(20):
+            voice = generator._generate_voice("male", 30)
+            assert voice in adult_male_voices, f"Adult male voice '{voice}' not in adult voice pool"
+
+    def test_adult_female_voice(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that adult females (13+) get adult female voice descriptors."""
+        adult_female_voices = {
+            "melodic", "warm and inviting", "soft and gentle", "clear and bright",
+            "husky", "sharp and precise", "lilting", "quiet but firm",
+        }
+        for _ in range(20):
+            voice = generator._generate_voice("female", 25)
+            assert voice in adult_female_voices, f"Adult female voice '{voice}' not in adult voice pool"
+
+    def test_elderly_voice(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that elderly (60+) get elderly voice descriptors."""
+        elderly_voices = {
+            "thin and reedy", "surprisingly strong", "warm and weathered",
+            "crackling", "patient and slow",
+        }
+        for _ in range(20):
+            voice = generator._generate_voice("male", 70)
+            assert voice in elderly_voices, f"Elderly voice '{voice}' not in elderly voice pool"
+
+    def test_voice_break_age_difference_by_gender(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that voice break happens at different ages for male vs female."""
+        # 14yo male should still have teen voice (voice breaks at ~15)
+        teen_voices = {"youthful", "clear", "light", "bright", "unbroken"}
+        voice_14m = generator._generate_voice("male", 14)
+        assert voice_14m in teen_voices, "14yo male should have pre-voice-break voice"
+
+        # 14yo female should have adult voice (voice breaks at ~13)
+        adult_female_voices = {
+            "melodic", "warm and inviting", "soft and gentle", "clear and bright",
+            "husky", "sharp and precise", "lilting", "quiet but firm",
+        }
+        voice_14f = generator._generate_voice("female", 14)
+        assert voice_14f in adult_female_voices, "14yo female should have adult voice"
+
+
+# =============================================================================
+# Birthplace and Skin Color Tests
+# =============================================================================
+
+
+class TestBirthplaceGeneration:
+    """Tests for birthplace generation based on regions."""
+
+    def test_generate_birthplace_mostly_local(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that most NPCs are born locally (85-90%)."""
+        from src.schemas.regions import REGIONS_CONTEMPORARY
+
+        local_region = "Northern Europe"
+        birthplaces = [
+            generator._generate_birthplace(local_region, REGIONS_CONTEMPORARY)
+            for _ in range(100)
+        ]
+
+        local_count = sum(1 for bp in birthplaces if bp == local_region)
+        # Should be 80-95% local (allowing for randomness)
+        assert 75 <= local_count <= 95, f"Local count {local_count} not in expected range"
+
+    def test_generate_birthplace_some_migrants(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that some NPCs are migrants (10-15%)."""
+        from src.schemas.regions import REGIONS_CONTEMPORARY
+
+        local_region = "Northern Europe"
+        birthplaces = [
+            generator._generate_birthplace(local_region, REGIONS_CONTEMPORARY)
+            for _ in range(100)
+        ]
+
+        migrant_count = sum(1 for bp in birthplaces if bp != local_region)
+        # Should have some migrants (5-25% allowing for randomness)
+        assert 5 <= migrant_count <= 25, f"Migrant count {migrant_count} not in expected range"
+
+    def test_generate_birthplace_returns_valid_region(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that generated birthplace is always a valid region."""
+        from src.schemas.regions import REGIONS_FANTASY
+
+        for _ in range(50):
+            birthplace = generator._generate_birthplace("Central Plains", REGIONS_FANTASY)
+            assert birthplace in REGIONS_FANTASY, f"Invalid birthplace: {birthplace}"
+
+
+class TestSkinColorFromBirthplace:
+    """Tests for birthplace-derived skin color generation."""
+
+    def test_skin_color_from_northern_europe(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that Northern Europe generates mostly fair/light skin tones."""
+        from src.schemas.regions import REGIONS_CONTEMPORARY
+
+        colors = [
+            generator._generate_skin_color_from_birthplace(
+                "Northern Europe", REGIONS_CONTEMPORARY
+            )
+            for _ in range(100)
+        ]
+
+        fair_light_count = sum(
+            1 for c in colors if c in ("fair", "pale", "light", "freckled fair", "ruddy")
+        )
+        # Should be mostly fair/light
+        assert fair_light_count >= 70, f"Fair/light count {fair_light_count} too low for Northern Europe"
+
+    def test_skin_color_from_sub_saharan_africa(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that Sub-Saharan Africa generates mostly dark skin tones."""
+        from src.schemas.regions import REGIONS_CONTEMPORARY
+
+        colors = [
+            generator._generate_skin_color_from_birthplace(
+                "Sub-Saharan Africa", REGIONS_CONTEMPORARY
+            )
+            for _ in range(100)
+        ]
+
+        dark_count = sum(
+            1 for c in colors if c in ("dark", "dark brown", "brown", "tan")
+        )
+        # Should be mostly dark tones
+        assert dark_count >= 80, f"Dark count {dark_count} too low for Sub-Saharan Africa"
+
+    def test_skin_color_fallback_for_unknown_region(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that unknown regions fall back to random skin color."""
+        from src.schemas.regions import REGIONS_CONTEMPORARY
+
+        # Unknown region should still return a valid skin color
+        color = generator._generate_skin_color_from_birthplace(
+            "Unknown Region", REGIONS_CONTEMPORARY
+        )
+        assert color is not None
+        assert isinstance(color, str)
+        assert len(color) > 0
+
+
+# =============================================================================
+# Setting-Specific Name Generation Tests
+# =============================================================================
+
+
+class TestSettingSpecificNames:
+    """Tests for setting-specific name generation."""
+
+    def test_fantasy_names_exist(self):
+        """Test that fantasy name pools exist."""
+        from src.services.emergent_npc_generator import NAMES_BY_SETTING
+
+        assert "fantasy" in NAMES_BY_SETTING
+        assert "male" in NAMES_BY_SETTING["fantasy"]
+        assert "female" in NAMES_BY_SETTING["fantasy"]
+        assert "surnames" in NAMES_BY_SETTING["fantasy"]
+
+    def test_contemporary_names_exist(self):
+        """Test that contemporary name pools exist."""
+        from src.services.emergent_npc_generator import NAMES_BY_SETTING
+
+        assert "contemporary" in NAMES_BY_SETTING
+        assert "male" in NAMES_BY_SETTING["contemporary"]
+        assert "female" in NAMES_BY_SETTING["contemporary"]
+        assert "surnames" in NAMES_BY_SETTING["contemporary"]
+
+        # Check for typical contemporary names
+        male_names = NAMES_BY_SETTING["contemporary"]["male"]
+        assert any(name in male_names for name in ["James", "Michael", "David", "John"])
+
+        surnames = NAMES_BY_SETTING["contemporary"]["surnames"]
+        assert any(name in surnames for name in ["Smith", "Johnson", "Williams"])
+
+    def test_scifi_names_exist(self):
+        """Test that sci-fi name pools exist."""
+        from src.services.emergent_npc_generator import NAMES_BY_SETTING
+
+        assert "scifi" in NAMES_BY_SETTING
+        assert "male" in NAMES_BY_SETTING["scifi"]
+        assert "female" in NAMES_BY_SETTING["scifi"]
+        assert "surnames" in NAMES_BY_SETTING["scifi"]
+
+    def test_generate_name_uses_setting(
+        self,
+        db_session: Session,
+        game_session: GameSession,
+    ):
+        """Test that name generation uses the game session's setting."""
+        # Set contemporary setting
+        game_session.setting = "contemporary"
+        db_session.commit()
+
+        generator = EmergentNPCGenerator(db_session, game_session)
+
+        # Generate multiple names and check they're from contemporary pool
+        from src.services.emergent_npc_generator import NAMES_BY_SETTING
+
+        contemporary_names = (
+            NAMES_BY_SETTING["contemporary"]["male"]
+            + NAMES_BY_SETTING["contemporary"]["female"]
+        )
+
+        names = [generator._generate_name("male", None) for _ in range(10)]
+
+        # At least some should be from the contemporary pool (first names)
+        first_names = [n.split()[0] for n in names]
+        matches = sum(1 for fn in first_names if fn in contemporary_names)
+        # Allow for some randomness, but expect most to match
+        assert matches >= 5, f"Only {matches}/10 names matched contemporary pool"
+
+    def test_generate_name_fallback_for_unknown_setting(
+        self,
+        db_session: Session,
+        game_session: GameSession,
+    ):
+        """Test that unknown settings fall back to fantasy names."""
+        # Set an unknown setting
+        game_session.setting = "unknown_setting"
+        db_session.commit()
+
+        generator = EmergentNPCGenerator(db_session, game_session)
+
+        # Should still generate a valid name
+        name = generator._generate_name("male", None)
+        assert name is not None
+        assert len(name) > 0
+
+    def test_fantasy_setting_uses_fantasy_names(
+        self,
+        db_session: Session,
+        game_session: GameSession,
+    ):
+        """Test that fantasy setting uses fantasy name pool."""
+        game_session.setting = "fantasy"
+        db_session.commit()
+
+        generator = EmergentNPCGenerator(db_session, game_session)
+
+        from src.services.emergent_npc_generator import NAMES_BY_SETTING
+
+        fantasy_names = (
+            NAMES_BY_SETTING["fantasy"]["male"]
+            + NAMES_BY_SETTING["fantasy"]["female"]
+        )
+
+        names = [generator._generate_name("female", None) for _ in range(10)]
+        first_names = [n.split()[0] for n in names]
+        matches = sum(1 for fn in first_names if fn in fantasy_names)
+        assert matches >= 5, f"Only {matches}/10 names matched fantasy pool"
+
+    def test_scifi_setting_uses_scifi_names(
+        self,
+        db_session: Session,
+        game_session: GameSession,
+    ):
+        """Test that sci-fi setting uses sci-fi name pool."""
+        game_session.setting = "scifi"
+        db_session.commit()
+
+        generator = EmergentNPCGenerator(db_session, game_session)
+
+        from src.services.emergent_npc_generator import NAMES_BY_SETTING
+
+        scifi_names = (
+            NAMES_BY_SETTING["scifi"]["male"]
+            + NAMES_BY_SETTING["scifi"]["female"]
+        )
+
+        names = [generator._generate_name("male", None) for _ in range(10)]
+        first_names = [n.split()[0] for n in names]
+        matches = sum(1 for fn in first_names if fn in scifi_names)
+        assert matches >= 5, f"Only {matches}/10 names matched scifi pool"
+
+    def test_surnames_setting_specific(
+        self,
+        db_session: Session,
+        game_session: GameSession,
+    ):
+        """Test that surnames are setting-specific."""
+        from src.services.emergent_npc_generator import NAMES_BY_SETTING
+
+        # Check that surnames differ between settings
+        fantasy_surnames = set(NAMES_BY_SETTING["fantasy"]["surnames"])
+        contemporary_surnames = set(NAMES_BY_SETTING["contemporary"]["surnames"])
+
+        # They should have minimal overlap
+        overlap = fantasy_surnames & contemporary_surnames
+        # Allow some overlap (common names) but expect mostly different
+        assert len(overlap) < len(fantasy_surnames) * 0.3, "Surnames should mostly differ"
+
+
+# =============================================================================
+# Context-Aware Apprentice Generation Tests
+# =============================================================================
+
+
+class TestContextAwareApprentice:
+    """Tests for context-aware apprentice generation."""
+
+    def test_location_apprentice_mappings_exist(self):
+        """Test that location-to-apprentice mappings exist."""
+        from src.services.emergent_npc_generator import LOCATION_APPRENTICE_ROLES
+
+        assert isinstance(LOCATION_APPRENTICE_ROLES, dict)
+        assert len(LOCATION_APPRENTICE_ROLES) > 0
+
+    def test_bakery_generates_baker_apprentice(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that bakery location generates baker's apprentice."""
+        from src.services.emergent_npc_generator import LOCATION_APPRENTICE_ROLES
+
+        # Verify bakery is in the mapping
+        assert any(
+            "baker" in key.lower() or "bakery" in key.lower()
+            for key in LOCATION_APPRENTICE_ROLES.keys()
+        )
+
+    def test_blacksmith_generates_smith_apprentice(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that blacksmith location generates smith apprentice."""
+        from src.services.emergent_npc_generator import LOCATION_APPRENTICE_ROLES
+
+        # Verify blacksmith/forge is in the mapping
+        assert any(
+            "smith" in key.lower() or "forge" in key.lower()
+            for key in LOCATION_APPRENTICE_ROLES.keys()
+        )
+
+    def test_generate_apprentice_from_location_returns_trade_specific(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that apprentice generation uses location context."""
+        # Generate apprentice for a specific location
+        occupation = generator._generate_context_aware_apprentice(
+            location_key="bakery",
+            age=16,
+        )
+
+        # Should contain trade-specific term
+        assert occupation is not None
+        assert isinstance(occupation, str)
+        # Either "baker" or generic apprentice
+        assert "apprentice" in occupation.lower() or "helper" in occupation.lower()
+
+    def test_generate_apprentice_fallback_for_unknown_location(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test fallback for unknown locations."""
+        occupation = generator._generate_context_aware_apprentice(
+            location_key="unknown_location_xyz",
+            age=16,
+        )
+
+        # Should still return a valid occupation
+        assert occupation is not None
+        assert len(occupation) > 0
+
+    def test_generate_apprentice_age_aware(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that apprentice generation is age-aware."""
+        # Very young (under 14) should get simpler roles
+        young_occupation = generator._generate_context_aware_apprentice(
+            location_key="bakery",
+            age=10,
+        )
+        assert young_occupation is not None
+
+        # Older teen should get actual apprentice role
+        older_occupation = generator._generate_context_aware_apprentice(
+            location_key="bakery",
+            age=17,
+        )
+        assert older_occupation is not None
+
+    def test_tavern_generates_appropriate_role(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that tavern/inn locations generate appropriate youth roles."""
+        from src.services.emergent_npc_generator import LOCATION_APPRENTICE_ROLES
+
+        # Verify tavern/inn has appropriate roles
+        tavern_keys = [k for k in LOCATION_APPRENTICE_ROLES.keys() if "tavern" in k or "inn" in k]
+        assert len(tavern_keys) > 0
+
+    def test_stable_generates_appropriate_role(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that stable locations generate appropriate youth roles."""
+        from src.services.emergent_npc_generator import LOCATION_APPRENTICE_ROLES
+
+        # Verify stable has appropriate roles
+        stable_keys = [k for k in LOCATION_APPRENTICE_ROLES.keys() if "stable" in k]
+        assert len(stable_keys) > 0

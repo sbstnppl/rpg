@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Birthplace System** - NPCs now have birthplace and derive traits from it
+  - New `birthplace` field on Entity model with database migration
+  - New `src/schemas/regions.py` with region definitions by setting:
+    - **Contemporary**: Northern Europe, Mediterranean, Sub-Saharan Africa, East Asia, South Asia, North America, Latin America, Middle East, Southeast Asia
+    - **Fantasy**: Northern Kingdoms, Elven Lands, Dwarven Mountains, Southern Deserts, Eastern Empire, Jungle Tribes, Central Plains
+    - **Sci-Fi**: Earth Standard, Martian Colonies, Outer Rim, Cyborg Enclaves, Alien Homeworlds
+  - `RegionCulture` dataclass with skin color weights, accent style, common foods/drinks, naming style, height modifier
+  - Birthplace generation: 87% local, 13% migrant from other regions
+  - Skin color now derived from birthplace demographics using weighted random selection
+- **Age-Aware Height Generation** - Children and teens now get realistic heights
+  - Growth curve percentages: age 5 = 55% adult height, age 10 = 70%, age 15 = 93%, age 18+ = 100%
+  - Gender-appropriate adult base heights (female: 170cm, male: 180cm)
+- **Age-Aware Voice Generation** - Pre-voice-break voices for children and teens
+  - Child voices (<10): "high and clear", "piping", "soft", "childlike", "bright"
+  - Teen voices (pre-voice-break): "youthful", "clear", "light", "bright", "unbroken"
+  - Voice break ages: males ~15, females ~13
+- **Setting-Specific Name Pools** - Names now match the game setting
+  - `NAMES_BY_SETTING` dictionary with fantasy, contemporary, and sci-fi name pools
+  - Contemporary names include diverse cultural backgrounds (James, Carlos, Wei, Priya, etc.)
+  - Sci-fi names include futuristic options (Zex, Nova, Axiom, Vortex, etc.)
+  - Automatic setting detection from game session
+- **Context-Aware Apprentice Generation** - Youth occupations now match their location
+  - `LOCATION_APPRENTICE_ROLES` mapping 50+ location types to trade-specific youth roles
+  - Examples: bakery → "baker's apprentice", blacksmith → "forge helper", tavern → "pot boy"
+  - Age-aware: under 14 gets helper roles, 14-17 gets apprentice roles
+- **Player Character Height & Voice** - Character creation now supports height and voice
+  - Added `height` and `voice_description` fields to `CharacterCreationState`
+  - Updated wizard_appearance.md template to prompt for these fields
+  - Fields are now saved to Entity when character is created
+
 ### Changed
 - **Age-Relative Attraction System** - Improved realism in NPC age preferences
   - **Age-Relative Decay Rate**: Younger NPCs are now pickier about age gaps

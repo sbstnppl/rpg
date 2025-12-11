@@ -100,6 +100,208 @@ SURNAMES = [
     "Porter", "Turner", "Ward", "Hunter", "Fowler", "Forester", "Gardner",
 ]
 
+# =============================================================================
+# Setting-Specific Name Pools
+# =============================================================================
+
+NAMES_BY_SETTING: dict[str, dict[str, list[str]]] = {
+    "fantasy": {
+        "male": [
+            "Marcus", "Thomas", "Erik", "William", "Roland", "Geoffrey", "Aldric",
+            "Garrett", "Edmund", "Cedric", "Frederick", "Heinrich", "Ludwig",
+            "Bruno", "Otto", "Conrad", "Reinhardt", "Sebastian", "Victor", "Hugo",
+            "Finn", "Declan", "Ronan", "Magnus", "Bjorn", "Sven", "Tobias", "Lukas",
+            "Felix", "Max", "Leon", "Elias", "Jonas", "Liam", "Oscar",
+        ],
+        "female": [
+            "Elena", "Mira", "Sophia", "Isabella", "Clara", "Rosalind", "Adelaide",
+            "Beatrice", "Catherine", "Diana", "Evangeline", "Fiona", "Giselle",
+            "Helena", "Ingrid", "Josephine", "Katherine", "Lillian", "Margaret",
+            "Nadia", "Ophelia", "Priscilla", "Rebecca", "Tabitha",
+            "Ursula", "Victoria", "Wilhelmina", "Yvonne", "Zelda", "Astrid",
+            "Elara", "Luna", "Aurora", "Celeste", "Ivy", "Violet", "Ruby", "Hazel",
+        ],
+        "neutral": [
+            "Sage", "River", "Ash", "Rowan", "Quinn", "Morgan", "Riley",
+            "Avery", "Casey", "Devon", "Ellis", "Finley",
+        ],
+        "surnames": [
+            "Thornwood", "Blackwood", "Ironforge", "Stoneheart", "Brightwater",
+            "Shadowmere", "Goldleaf", "Silverbrook", "Oakenshield", "Ravencrest",
+            "Winterbourne", "Summerfield", "Greenwood", "Whitmore", "Ashford",
+            "Crawford", "Fletcher", "Cooper", "Miller", "Baker", "Taylor",
+            "Fisher", "Weaver", "Potter", "Carpenter", "Mason", "Thatcher", "Wright",
+        ],
+    },
+    "contemporary": {
+        "male": [
+            "James", "Michael", "David", "John", "Robert", "William", "Daniel",
+            "Matthew", "Christopher", "Andrew", "Joseph", "Brian", "Kevin", "Steven",
+            "Jason", "Ryan", "Anthony", "Eric", "Mark", "Timothy", "Jeffrey", "Scott",
+            "Brandon", "Nicholas", "Justin", "Tyler", "Jacob", "Ethan", "Noah", "Mason",
+            "Carlos", "Miguel", "Jose", "Luis", "Diego", "Jamal", "Marcus", "Tyrone",
+            "Wei", "Hiroshi", "Raj", "Mohammed", "Ahmed", "Omar", "Aleksei", "Ivan",
+        ],
+        "female": [
+            "Sarah", "Emily", "Jessica", "Amanda", "Jennifer", "Michelle", "Ashley",
+            "Stephanie", "Nicole", "Elizabeth", "Megan", "Samantha", "Lauren", "Rachel",
+            "Hannah", "Brittany", "Heather", "Christina", "Rebecca", "Amber", "Kimberly",
+            "Tiffany", "Melissa", "Kelly", "Amy", "Lisa", "Angela", "Sophia", "Emma",
+            "Maria", "Isabella", "Gabriela", "Rosa", "Keisha", "Aaliyah", "Jasmine",
+            "Lin", "Yuki", "Priya", "Aisha", "Fatima", "Olga", "Natasha", "Ingrid",
+        ],
+        "neutral": [
+            "Alex", "Sam", "Charlie", "Jordan", "Taylor", "Morgan", "Casey",
+            "Jamie", "Drew", "Riley", "Quinn", "Avery", "Skylar", "Dakota",
+        ],
+        "surnames": [
+            "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller",
+            "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez",
+            "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin",
+            "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark",
+            "Lewis", "Robinson", "Walker", "Young", "Allen", "King", "Wright",
+            "Scott", "Torres", "Nguyen", "Hill", "Flores", "Green", "Adams", "Nelson",
+            "Baker", "Hall", "Rivera", "Campbell", "Mitchell", "Carter", "Roberts",
+            "Chen", "Kim", "Patel", "Singh", "Yamamoto", "Tanaka", "Ivanov", "Petrov",
+        ],
+    },
+    "scifi": {
+        "male": [
+            "Zex", "Kiran", "Axel", "Nova-7", "Ryder", "Jax", "Kane", "Orion",
+            "Cyrus", "Phoenix", "Dax", "Zander", "Blaze", "Kai", "Rex", "Talon",
+            "Vex", "Cade", "Neo", "Ryker", "Maddox", "Knox", "Atlas", "Titan",
+            "Sigma", "Vector", "Prometheus", "Helios", "Zenith", "Flux", "Nexus",
+        ],
+        "female": [
+            "Nova", "Zara", "Lyra", "Vex", "Aria", "Luna", "Stella", "Aurora",
+            "Phoenix", "Ember", "Seren", "Celeste", "Astrid", "Freya", "Electra",
+            "Nyx", "Echo", "Vega", "Jade", "Raven", "Storm", "Solara", "Nebula",
+            "Zenith", "Delta", "Omega", "Andromeda", "Cassiopeia", "Oriana",
+        ],
+        "neutral": [
+            "Zero", "Unit", "Cipher", "Null", "Binary", "Flux", "Quantum",
+            "Vector", "Pixel", "Byte", "Nano", "Chrome", "Synth", "Ion",
+        ],
+        "surnames": [
+            "Axiom", "Nexus", "Vortex", "Prime", "Vector", "Stellar", "Quantum",
+            "Cyber", "Nova", "Flux", "Helix", "Prism", "Chrome", "Volt", "Pulse",
+            "Zenith", "Arc", "Drift", "Core", "Matrix", "Spark", "Shade", "Void",
+            "Null", "Byte", "Node", "Link", "Wave", "Beam", "Surge", "Jet",
+            "7X", "K9", "X-12", "V-Prime", "Zero-One", "Alpha-7", "Omega-3",
+        ],
+    },
+}
+
+# Setting aliases for name lookup
+_SETTING_NAME_ALIASES: dict[str, str] = {
+    "fantasy": "fantasy",
+    "medieval": "fantasy",
+    "contemporary": "contemporary",
+    "modern": "contemporary",
+    "scifi": "scifi",
+    "sci-fi": "scifi",
+    "cyberpunk": "scifi",
+    "space": "scifi",
+}
+
+# =============================================================================
+# Location-Based Apprentice Roles
+# =============================================================================
+
+# Maps location keywords to context-appropriate youth occupations.
+# Each location type has: (apprentice_role, young_helper_role)
+# - apprentice_role: For ages 14-17 (actual apprenticeship)
+# - young_helper_role: For ages under 14 (simpler tasks)
+
+LOCATION_APPRENTICE_ROLES: dict[str, tuple[str, str]] = {
+    # Crafts and trades
+    "bakery": ("baker's apprentice", "baker's helper"),
+    "baker": ("baker's apprentice", "baker's helper"),
+    "blacksmith": ("blacksmith's apprentice", "forge helper"),
+    "forge": ("blacksmith's apprentice", "forge helper"),
+    "smithy": ("blacksmith's apprentice", "forge helper"),
+    "tailor": ("tailor's apprentice", "tailor's helper"),
+    "dressmaker": ("tailor's apprentice", "tailor's helper"),
+    "cobbler": ("cobbler's apprentice", "cobbler's helper"),
+    "shoemaker": ("cobbler's apprentice", "cobbler's helper"),
+    "carpenter": ("carpenter's apprentice", "carpenter's helper"),
+    "woodworker": ("carpenter's apprentice", "carpenter's helper"),
+    "butcher": ("butcher's apprentice", "butcher's helper"),
+    "tanner": ("tanner's apprentice", "tanner's helper"),
+    "leatherworker": ("leatherworker's apprentice", "leather shop helper"),
+    "potter": ("potter's apprentice", "potter's helper"),
+    "jeweler": ("jeweler's apprentice", "shop assistant"),
+    "goldsmith": ("goldsmith's apprentice", "shop assistant"),
+    "weaver": ("weaver's apprentice", "weaver's helper"),
+    "mason": ("mason's apprentice", "mason's helper"),
+    "glassblower": ("glassblower's apprentice", "workshop helper"),
+
+    # Food and hospitality
+    "tavern": ("tavern worker", "pot boy"),
+    "inn": ("inn servant", "pot boy"),
+    "pub": ("barback", "pot boy"),
+    "bar": ("barback", "cleaner"),
+    "restaurant": ("kitchen apprentice", "busboy"),
+    "kitchen": ("kitchen apprentice", "kitchen boy"),
+    "brewery": ("brewer's apprentice", "barrel boy"),
+    "winery": ("vintner's apprentice", "cellar helper"),
+    "distillery": ("distiller's apprentice", "cellar helper"),
+
+    # Animals and farming
+    "stable": ("stable hand", "stable boy"),
+    "stables": ("stable hand", "stable boy"),
+    "farm": ("farm hand", "farm helper"),
+    "ranch": ("ranch hand", "ranch helper"),
+    "mill": ("miller's apprentice", "mill helper"),
+    "fishmonger": ("fishmonger's apprentice", "fish runner"),
+    "kennels": ("kennel assistant", "kennel boy"),
+
+    # Commerce
+    "shop": ("shop apprentice", "shop assistant"),
+    "store": ("shop apprentice", "shop assistant"),
+    "market": ("market runner", "market helper"),
+    "merchant": ("merchant's apprentice", "shop assistant"),
+    "warehouse": ("warehouse worker", "warehouse helper"),
+    "trading": ("trader's apprentice", "runner"),
+
+    # Services
+    "apothecary": ("apothecary's apprentice", "shop assistant"),
+    "herbalist": ("herbalist's apprentice", "herb gatherer"),
+    "healer": ("healer's apprentice", "assistant"),
+    "barber": ("barber's apprentice", "shop assistant"),
+    "scribe": ("scribe's apprentice", "page"),
+    "library": ("library assistant", "page"),
+    "temple": ("acolyte", "temple helper"),
+    "church": ("acolyte", "altar boy"),
+    "shrine": ("shrine attendant", "shrine helper"),
+
+    # Ships and docks
+    "dock": ("dock worker", "dock runner"),
+    "harbor": ("dock worker", "dock runner"),
+    "ship": ("cabin boy", "ship's boy"),
+    "shipyard": ("shipwright's apprentice", "yard helper"),
+
+    # Military and guard
+    "barracks": ("squire", "page"),
+    "guard": ("trainee guard", "messenger"),
+    "garrison": ("trainee guard", "runner"),
+    "armory": ("armorer's apprentice", "armory helper"),
+
+    # Entertainment
+    "theater": ("stage hand", "theater runner"),
+    "playhouse": ("stage hand", "theater runner"),
+    "music": ("musician's apprentice", "music student"),
+}
+
+# Generic fallback roles for unknown locations
+_GENERIC_APPRENTICE_ROLES: list[str] = [
+    "apprentice", "trainee", "assistant", "helper",
+]
+
+_GENERIC_YOUNG_ROLES: list[str] = [
+    "errand runner", "helper", "messenger", "page",
+]
+
 # Personality trait pools
 PERSONALITY_TRAITS = [
     "shy", "confident", "curious", "cautious", "bold", "timid", "friendly",
@@ -149,6 +351,18 @@ SKIN_TONES = [
     "fair", "pale", "light", "olive", "tan", "bronze", "brown", "dark brown", "dark",
     "freckled fair", "ruddy", "weathered", "sun-kissed",
 ]
+
+# Height growth percentages by age (percentage of adult height)
+# Based on standard pediatric growth curves
+GROWTH_PERCENTAGES: dict[int, float] = {
+    5: 0.55, 6: 0.58, 7: 0.61, 8: 0.64, 9: 0.67,
+    10: 0.70, 11: 0.74, 12: 0.78, 13: 0.83, 14: 0.88,
+    15: 0.93, 16: 0.96, 17: 0.98,
+}
+
+# Voice pools by age category
+VOICES_CHILD = ["high and clear", "piping", "soft", "childlike", "bright"]
+VOICES_TEEN = ["youthful", "clear", "light", "bright", "unbroken"]
 
 # Occupation-based skill templates
 OCCUPATION_SKILLS: dict[str, list[str]] = {
@@ -610,17 +824,40 @@ class EmergentNPCGenerator:
         return random.choice(["male", "female"])
 
     def _generate_name(self, gender: str, constraints: NPCConstraints | None) -> str:
-        """Generate full name."""
+        """Generate full name using setting-appropriate name pools.
+
+        Uses the game session's setting to select culturally appropriate names.
+        Falls back to fantasy names for unknown settings.
+
+        Args:
+            gender: Character's gender (male, female, neutral)
+            constraints: Optional constraints that may include a specific name
+
+        Returns:
+            Full name string (first name, or first + surname)
+        """
         if constraints and constraints.name:
             return constraints.name
 
+        # Get setting-specific name pool
+        setting = self.game_session.setting.lower() if self.game_session.setting else "fantasy"
+        canonical_setting = _SETTING_NAME_ALIASES.get(setting, "fantasy")
+        name_pool_data = NAMES_BY_SETTING.get(canonical_setting, NAMES_BY_SETTING["fantasy"])
+
         # Pick first name based on gender
-        name_pool = NAMES_BY_GENDER.get(gender, NAMES_BY_GENDER["neutral"])
+        gender_key = gender if gender in name_pool_data else "neutral"
+        name_pool = name_pool_data.get(gender_key, name_pool_data.get("neutral", []))
+
+        # Fallback to old NAMES_BY_GENDER if pool is empty
+        if not name_pool:
+            name_pool = NAMES_BY_GENDER.get(gender, NAMES_BY_GENDER["neutral"])
+
         first_name = random.choice(name_pool)
 
         # 70% chance of having a surname
         if random.random() < 0.7:
-            surname = random.choice(SURNAMES)
+            surnames = name_pool_data.get("surnames", SURNAMES)
+            surname = random.choice(surnames)
             return f"{first_name} {surname}"
         return first_name
 
@@ -652,6 +889,41 @@ class EmergentNPCGenerator:
             # Most adults are 20-50
             return random.randint(20, 50)
 
+    def _calculate_height(self, gender: str, age: int) -> int:
+        """Calculate height in cm based on gender and age.
+
+        Uses growth percentages to scale child/teen heights appropriately.
+        Adults (18+) get full adult height ranges.
+
+        Args:
+            gender: "male" or "female"
+            age: Character's age in years
+
+        Returns:
+            Height in centimeters
+        """
+        # Adult base heights and variance
+        if gender == "female":
+            adult_base = 170
+            adult_variance = 15
+        else:
+            adult_base = 180
+            adult_variance = 15
+
+        # Calculate what the adult height would be
+        adult_height = random.randint(
+            adult_base - adult_variance,
+            adult_base + adult_variance,
+        )
+
+        # Adults (18+) get full height
+        if age >= 18:
+            return adult_height
+
+        # Children/teens get percentage of adult height based on growth curve
+        percentage = GROWTH_PERCENTAGES.get(age, 0.50 if age < 5 else 1.0)
+        return int(adult_height * percentage)
+
     def _generate_appearance(
         self,
         gender: str,
@@ -660,11 +932,8 @@ class EmergentNPCGenerator:
         constraints: NPCConstraints | None,
     ) -> NPCAppearance:
         """Generate physical appearance."""
-        # Height based on gender with some randomness
-        if gender == "female":
-            height_cm = random.randint(150, 180)
-        else:
-            height_cm = random.randint(160, 195)
+        # Height based on gender and age
+        height_cm = self._calculate_height(gender, age)
 
         # Build influenced by occupation
         build = self._role_appropriate_build(role)
@@ -688,6 +957,10 @@ class EmergentNPCGenerator:
         if constraints and constraints.species:
             species = constraints.species
 
+        # Generate birthplace region and derive skin color from it
+        birthplace_region = self._generate_birthplace()
+        skin_color = self._generate_skin_color_from_birthplace(birthplace_region)
+
         return NPCAppearance(
             age=age,
             gender=gender,
@@ -698,7 +971,7 @@ class EmergentNPCGenerator:
             build=build,
             hair=f"{hair_color}, {hair_style}",
             eyes=random.choice(EYE_COLORS),
-            skin=random.choice(SKIN_TONES),
+            skin=skin_color,
             notable_features=notable_features,
             clothing=clothing,
             voice=self._generate_voice(gender, age),
@@ -773,7 +1046,23 @@ class EmergentNPCGenerator:
         return random.choice(features)
 
     def _generate_voice(self, gender: str, age: int) -> str:
-        """Generate voice description."""
+        """Generate voice description based on gender and age.
+
+        Handles different voice categories:
+        - Children (<10): High, childlike voices
+        - Pre-voice-break teens: Youthful, unbroken voices
+          - Males: voice breaks around age 15
+          - Females: voice breaks around age 13
+        - Adults: Full adult voice characteristics
+        - Elderly (60+): Age-affected voices
+
+        Args:
+            gender: "male" or "female"
+            age: Character's age in years
+
+        Returns:
+            Voice description string
+        """
         voices_male = [
             "deep and resonant", "gravelly", "warm baritone", "quiet and measured",
             "booming", "soft-spoken", "rough from shouting", "melodic",
@@ -787,9 +1076,21 @@ class EmergentNPCGenerator:
             "crackling", "patient and slow",
         ]
 
-        if age > 60:
+        # Children under 10 have childlike voices regardless of gender
+        if age < 10:
+            return random.choice(VOICES_CHILD)
+
+        # Pre-voice-break: males ~15, females ~13
+        voice_break_age = 15 if gender == "male" else 13
+        if age < voice_break_age:
+            return random.choice(VOICES_TEEN)
+
+        # Elderly voices
+        if age >= 60:
             return random.choice(voices_elderly)
-        elif gender == "female":
+
+        # Adult voices by gender
+        if gender == "female":
             return random.choice(voices_female)
         else:
             return random.choice(voices_male)
@@ -801,6 +1102,7 @@ class EmergentNPCGenerator:
         location_context: str,
         age: int,
         gender: str,
+        location_key: str | None = None,
     ) -> OccupationDetails:
         """Query LLM for setting-appropriate occupation.
 
@@ -814,6 +1116,7 @@ class EmergentNPCGenerator:
             location_context: Description of location, e.g. "tavern in medieval village"
             age: Character's age (affects occupation appropriateness)
             gender: Character's gender
+            location_key: Optional location key for context-aware fallback
 
         Returns:
             OccupationDetails with occupation, skills, typical_items, education,
@@ -830,11 +1133,15 @@ class EmergentNPCGenerator:
             # Handle case where event loop is already running
             if "cannot be called from a running event loop" in str(e):
                 logger.warning("Event loop already running, using fallback")
-                return self._generate_occupation_fallback(role_hint, age, setting)
+                return self._generate_occupation_fallback(
+                    role_hint, age, setting, location_key
+                )
             raise
         except Exception as e:
             logger.warning(f"LLM occupation generation failed: {e}, using fallback")
-            return self._generate_occupation_fallback(role_hint, age, setting)
+            return self._generate_occupation_fallback(
+                role_hint, age, setting, location_key
+            )
 
     async def _generate_occupation_from_llm_async(
         self,
@@ -879,20 +1186,32 @@ Generate occupation details that fit naturally in this setting."""
         role_hint: str,
         age: int,
         setting: str,
+        location_key: str | None = None,
     ) -> OccupationDetails:
         """Fallback occupation generation when LLM fails.
 
         Uses hardcoded pools for fantasy setting, generic defaults for others.
+        For youth occupations (ages under 18), uses location-aware apprentice
+        generation when location_key is provided.
+
+        Args:
+            role_hint: Role hint like "customer", "worker"
+            age: Character's age
+            setting: Setting type (fantasy, contemporary, scifi)
+            location_key: Optional location key for context-aware youth roles
+
+        Returns:
+            OccupationDetails with occupation, skills, items, etc.
         """
-        # For youth, use age-appropriate occupations
-        if age < 14:
-            occupation = random.choice(["child", "youth", "street_urchin"])
-        elif age < 18:
-            youth_occupations = [
-                "apprentice", "stable_boy", "kitchen_boy", "errand_boy",
-                "farm_hand", "fisher_boy", "shepherd_boy", "page",
-            ]
-            occupation = random.choice(youth_occupations)
+        # For youth, use context-aware apprentice generation
+        if age < 18:
+            if location_key:
+                occupation = self._generate_context_aware_apprentice(location_key, age)
+            elif age < 14:
+                occupation = random.choice(["child", "youth", "street_urchin"])
+            else:
+                # Generic fallback for ages 14-17 without location context
+                occupation = random.choice(_GENERIC_APPRENTICE_ROLES)
         elif role_hint in OCCUPATION_SKILLS:
             occupation = role_hint
         else:
@@ -940,6 +1259,42 @@ Generate occupation details that fit naturally in this setting."""
             wealth_level=wealth_level,
         )
 
+    def _generate_context_aware_apprentice(
+        self,
+        location_key: str,
+        age: int,
+    ) -> str:
+        """Generate a context-aware apprentice/youth occupation based on location.
+
+        Uses the location key to determine what type of trade or business is nearby,
+        then generates an appropriate apprentice or helper role for that trade.
+
+        Args:
+            location_key: The key of the current location (e.g., "bakery", "tavern")
+            age: Character's age (affects whether they get apprentice vs helper role)
+
+        Returns:
+            Context-appropriate occupation string like "baker's apprentice" or "pot boy"
+        """
+        location_lower = location_key.lower()
+
+        # Try to find a matching location type
+        matched_role = None
+        for keyword, roles in LOCATION_APPRENTICE_ROLES.items():
+            if keyword in location_lower:
+                matched_role = roles
+                break
+
+        if matched_role:
+            apprentice_role, young_role = matched_role
+            # Age 14+ gets apprentice role, younger gets helper role
+            return apprentice_role if age >= 14 else young_role
+
+        # Fallback: generic youth roles
+        if age < 14:
+            return random.choice(_GENERIC_YOUNG_ROLES)
+        return random.choice(_GENERIC_APPRENTICE_ROLES)
+
     def _generate_background(
         self,
         role: str,
@@ -980,6 +1335,7 @@ Generate occupation details that fit naturally in this setting."""
                 location_context=location_context,
                 age=age,
                 gender=gender,
+                location_key=scene_context.location_key,
             )
             occupation = occupation_details.occupation
 
@@ -996,14 +1352,93 @@ Generate occupation details that fit naturally in this setting."""
             background_summary=occupation_details.background_summary,
         )
 
-    def _generate_birthplace(self) -> str:
-        """Generate birthplace."""
-        places = [
-            "this very town", "a nearby village", "the capital",
-            "a farming community", "a coastal settlement", "the mountains",
-            "a trading town", "foreign lands", "unknown", "a small hamlet",
-        ]
-        return random.choice(places)
+    def _generate_birthplace(
+        self,
+        local_region: str | None = None,
+        regions: dict | None = None,
+    ) -> str:
+        """Generate birthplace region.
+
+        Most NPCs (85-90%) are born locally, with a small percentage (10-15%)
+        being migrants from other regions.
+
+        Args:
+            local_region: The local region where the NPC is located.
+                If None, uses a default based on setting.
+            regions: Dictionary of region name to RegionCulture.
+                If None, uses regions for the current setting.
+
+        Returns:
+            Region name (e.g., "Northern Europe", "Central Plains")
+        """
+        from src.schemas.regions import get_default_region_for_setting, get_regions_for_setting
+
+        # Get setting from game session if available
+        setting = "fantasy"  # Default
+        if self.game_session and hasattr(self.game_session, 'setting_type'):
+            setting = self.game_session.setting_type or "fantasy"
+
+        # Use provided regions or get from setting
+        if regions is None:
+            regions = get_regions_for_setting(setting)
+
+        # Use provided local region or get default for setting
+        if local_region is None:
+            local_region = get_default_region_for_setting(setting)
+
+        # Ensure local_region is valid
+        if local_region not in regions:
+            local_region = get_default_region_for_setting(setting)
+
+        # 87% chance of being local, 13% chance of being a migrant
+        if random.random() < 0.87:
+            return local_region
+        else:
+            # Migrant from another region
+            other_regions = [r for r in regions if r != local_region]
+            if other_regions:
+                return random.choice(other_regions)
+            return local_region
+
+    def _generate_skin_color_from_birthplace(
+        self,
+        birthplace: str,
+        regions: dict | None = None,
+    ) -> str:
+        """Generate skin color based on birthplace region demographics.
+
+        Uses weighted random selection based on the region's skin color
+        distribution.
+
+        Args:
+            birthplace: Region name (e.g., "Northern Europe")
+            regions: Dictionary of region name to RegionCulture.
+                If None, uses regions for the current setting.
+
+        Returns:
+            Skin color string (e.g., "fair", "olive", "dark brown")
+        """
+        from src.schemas.regions import get_regions_for_setting
+
+        # Get setting from game session if available
+        setting = "fantasy"  # Default
+        if self.game_session and hasattr(self.game_session, 'setting_type'):
+            setting = self.game_session.setting_type or "fantasy"
+
+        # Use provided regions or get from setting
+        if regions is None:
+            regions = get_regions_for_setting(setting)
+
+        # Get region culture
+        region_culture = regions.get(birthplace)
+        if region_culture is None:
+            # Fallback to random skin tone
+            return random.choice(SKIN_TONES)
+
+        # Weighted random selection
+        colors = list(region_culture.skin_color_weights.keys())
+        weights = list(region_culture.skin_color_weights.values())
+        return random.choices(colors, weights=weights, k=1)[0]
 
     def _generate_family_situation(self, age: int) -> str:
         """Generate family situation based on age."""
