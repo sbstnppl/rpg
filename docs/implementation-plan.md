@@ -947,3 +947,622 @@
 - [x] 1 new dice module (contested.py)
 - [x] 3 Alembic migrations
 - [x] 101 new tests total
+
+---
+
+## Phase 14: Social Systems (Tier 3 - Medium Priority)
+
+### 14.1 Rumor System (Complete)
+
+**Purpose:** Player actions propagate through social networks. NPCs gossip about player deeds, and reputation precedes the player to new locations.
+
+**Design:**
+- Rumors have origin (who witnessed), spread rate, decay over time
+- Social connections determine propagation paths
+- Distortion: rumors mutate as they spread (exaggeration, minimization, inversion)
+- Location-based: rumors spread faster in taverns, markets, social hubs
+
+**Database Models:**
+- [x] Create `src/database/models/rumors.py`
+  - `Rumor` model:
+    - `rumor_key: str` - unique identifier
+    - `subject_entity_key: str` - who the rumor is about
+    - `content: str` - the rumor text
+    - `truth_value: float` - 0.0 (false) to 1.0 (true), tracks distortion
+    - `original_event_id: int | None` - link to WorldEvent that spawned it
+    - `origin_location_key: str` - where rumor started
+    - `origin_turn: int` - when rumor started
+    - `spread_rate: float` - how fast it propagates (0.1-1.0)
+    - `decay_rate: float` - how fast it fades (0.01-0.1 per day)
+    - `intensity: float` - current strength (0.0-1.0)
+    - `sentiment: str` - positive, negative, neutral
+    - `tags: list[str]` - categorization (violence, romance, theft, heroism, etc.)
+  - `RumorKnowledge` model:
+    - `entity_id: int` - NPC who knows the rumor
+    - `rumor_id: int` - the rumor
+    - `learned_turn: int` - when they heard it
+    - `believed: bool` - do they believe it
+    - `will_spread: bool` - will they tell others
+    - `local_distortion: str | None` - how they've modified it
+
+**Manager:**
+- [x] Create `src/managers/rumor_manager.py`
+  - `create_rumor()` - create from player action or event
+  - `spread_rumors()` - called on time advance, propagate through social network
+  - `get_rumors_known_by()` - what an NPC knows
+  - `get_rumors_about()` - all rumors about an entity
+  - `get_rumors_at_location()` - rumors circulating in a place
+  - `decay_rumors()` - reduce intensity over time
+  - `distort_rumor()` - mutate content based on NPC personality
+  - `check_rumor_reaction()` - how NPC reacts to hearing about player
+  - `get_rumor_context()` - formatted for GM prompt
+
+**Integration Points:**
+- `WorldEvent` creation triggers rumor generation for significant events
+- `RelationshipManager` - rumors affect initial attitudes with strangers
+- `ContextCompiler` - include relevant rumors in scene context
+- NPCs may reference rumors in dialogue
+
+**Example Flow:**
+1. Player kills bandit leader in village square (witnesses present)
+2. Rumor created: "A stranger slew the bandit chief with a single blow"
+3. Witnesses spread to friends/family (social connections)
+4. Rumor reaches tavern → rapid spread to travelers
+5. Player arrives in next town → NPCs already heard "a mighty warrior" is coming
+6. Some distortion: "single blow" becomes "bare hands" after 3 hops
+
+---
+
+### 14.2 Relationship Arc Templates (Complete + LLM Enhancement)
+
+**Purpose:** Provide narrative scaffolding for relationship development. Templates suggest dramatic beats for common relationship patterns.
+
+**Design:**
+- Predefined arc types with milestone progression
+- Each arc has trigger conditions, suggested scenes, climax moment
+- GM receives hints when arc conditions are met
+- Player unaware of arc mechanics (emergent storytelling)
+
+**Arc Types:**
+1. **Enemies to Lovers** - initial hostility → grudging respect → attraction → confession
+2. **Mentor's Fall** - admiration → learning → mentor's flaw revealed → disillusionment or forgiveness
+3. **Betrayal** - trust building → secret agenda hints → betrayal → confrontation
+4. **Redemption** - villain/morally gray → player influence → crisis point → redemption or rejection
+5. **Rivalry** - competition → escalation → mutual respect or enmity
+6. **Found Family** - strangers → shared hardship → loyalty → family bond
+7. **Lost Love Rekindled** - past connection → reunion → obstacles → resolution
+8. **Corruption** - innocent ally → temptation → moral decay → player choice to save or condemn
+
+**Database Models:**
+- [x] Create `src/database/models/relationship_arcs.py`
+  - `RelationshipArcType` enum - arc type names
+  - `RelationshipArcPhase` enum - introduction, development, crisis, climax, resolution
+  - `RelationshipArc` model:
+    - `arc_key: str` - unique identifier
+    - `arc_type: RelationshipArcType`
+    - `entity1_key: str` - usually player
+    - `entity2_key: str` - the NPC
+    - `current_phase: RelationshipArcPhase`
+    - `phase_progress: int` - 0-100 progress in current phase
+    - `milestones_hit: list[str]` - JSON list of achieved milestones
+    - `suggested_next_beat: str | None` - hint for GM
+    - `arc_tension: int` - 0-100 dramatic tension
+    - `is_active: bool`
+    - `started_turn: int`
+    - `completed_turn: int | None`
+  - `ArcTemplate` - static definitions (could be JSON config instead)
+    - `arc_type: RelationshipArcType`
+    - `phases: dict` - phase definitions with milestones
+    - `trigger_conditions: list[str]` - when to suggest this arc
+    - `climax_options: list[str]` - possible climax scenarios
+
+**Manager:**
+- [x] Create `src/managers/relationship_arc_manager.py`
+  - `suggest_arc()` - analyze relationship, suggest fitting arc
+  - `start_arc()` - begin tracking an arc
+  - `check_milestone()` - evaluate if milestone conditions met
+  - `advance_phase()` - move to next arc phase
+  - `get_arc_hint()` - GM guidance for current phase
+  - `get_active_arcs()` - all in-progress relationship arcs
+  - `complete_arc()` - mark arc as resolved
+  - `get_arc_context()` - formatted for GM prompt
+
+**Template Example - Enemies to Lovers:**
+```python
+{
+    "arc_type": "enemies_to_lovers",
+    "phases": {
+        "introduction": {
+            "description": "Initial antagonism established",
+            "milestones": ["first_conflict", "verbal_sparring", "physical_confrontation"],
+            "attitude_range": {"liking": (-100, -30)},
+            "suggested_scenes": ["Forced to work together", "Rescue despite hatred"]
+        },
+        "development": {
+            "description": "Grudging respect develops",
+            "milestones": ["acknowledge_skill", "share_vulnerability", "defend_reputation"],
+            "attitude_range": {"liking": (-30, 20), "respect": (30, 100)},
+            "suggested_scenes": ["See them in new light", "Learn their backstory"]
+        },
+        "crisis": {
+            "description": "Feelings surface, must be addressed",
+            "milestones": ["jealousy_moment", "almost_kiss", "confession_interrupted"],
+            "suggested_scenes": ["Third party romantic interest", "Separation threat"]
+        },
+        "climax": {
+            "description": "Declaration or rejection",
+            "milestones": ["love_confession", "grand_gesture"],
+            "suggested_scenes": ["Life-threatening situation", "Choice between duty and love"]
+        },
+        "resolution": {
+            "description": "New relationship status established",
+            "milestones": ["relationship_defined", "future_discussed"],
+            "suggested_scenes": ["Quiet moment together", "Public acknowledgment"]
+        }
+    },
+    "trigger_conditions": [
+        "liking < -50 AND respect > 30",
+        "has_tag('romantic_potential') AND has_tag('initial_enemy')"
+    ]
+}
+```
+
+**LLM Enhancement (Complete):**
+
+Arcs can now be fully generated by LLM based on relationship dynamics, not limited to predefined types.
+
+- [x] Create `src/agents/schemas/arc_generation.py`
+  - `ArcPhaseTemplate` schema - phase with milestones and suggested scenes
+  - `GeneratedArcTemplate` schema - full arc with phases, endings, tension triggers
+- [x] Create `data/templates/arc_generator.md` - prompt template for arc generation
+- [x] Database changes:
+  - `arc_type` changed from `String(30)` to `String(100)` (allows any LLM-generated type)
+  - `current_phase` changed from `String(20)` to `String(50)` (custom phase names)
+  - Added `arc_template: JSON` - stores LLM-generated template
+  - Added `arc_description: Text` - arc summary
+  - Migration: `4fbbe5395f6d_llm_generated_arcs_and_voices.py`
+- [x] Manager enhancements:
+  - `generate_arc_for_relationship()` - async method generates custom arc via LLM
+  - `create_arc_from_generated()` - create arc from LLM template
+  - `get_arc_beat_suggestion()` - uses stored arc_template when available
+  - `ArcInfo` extended with `arc_description`, `is_custom` fields
+  - Predefined arcs retained as `WellKnownArcType` enum (examples/fallback)
+
+**Critical Design: Arcs as Guidance, Not Scripts**
+
+| Aspect | Arc System Does | Arc System Does NOT |
+|--------|-----------------|---------------------|
+| Suggestions | "This trajectory could lead to betrayal" | "At turn 50, NPC betrays player" |
+| Milestones | "Watch for moments of vulnerability" | Force scenes to happen |
+| Endings | "Possible: reconciliation OR enmity" | Lock in a predetermined ending |
+| Relationships | Leave values unchanged | Override or script relationship changes |
+
+Player agency preserved - arcs inspire GM, actual outcomes depend on player actions.
+
+---
+
+### 14.3 NPC Voice Templates (Complete + LLM Enhancement)
+
+**Purpose:** Provide consistent speech patterns for NPCs based on social class, occupation, region, and personality. GM uses these to maintain voice consistency.
+
+**Design:**
+- Voice templates define vocabulary, sentence structure, verbal tics
+- Templates combined: base (class) + occupation modifier + personality modifier + regional dialect
+- Include example phrases for common situations
+- Stored as configuration (not database) for easy editing
+
+**Configuration Structure:**
+- [x] Create `data/templates/voices/` directory
+- [x] Create voice template files:
+
+**Base Templates (Social Class):**
+```yaml
+# data/templates/voices/base_noble.yaml
+noble:
+  vocabulary_level: sophisticated
+  sentence_structure: complex, complete
+  contractions: never
+  swearing: euphemisms only ("By the stars", "Confound it")
+  greetings: ["Good morrow", "Well met", "I bid you welcome"]
+  farewells: ["Fare thee well", "Until we meet again", "I take my leave"]
+  affirmatives: ["Indeed", "Quite so", "As you say"]
+  negatives: ["I think not", "That would be... inadvisable", "Regrettably, no"]
+  filler_words: ["Perhaps", "One might consider", "It would seem"]
+  speech_patterns:
+    - Uses third person ("One does not simply...")
+    - Indirect requests ("It would please me if...")
+    - Formal titles always
+  example_dialogue:
+    greeting_stranger: "Ah, a visitor. State your business, if you would be so kind."
+    refusing_request: "While I appreciate your... enthusiasm, I fear I must decline."
+    expressing_anger: "This is most vexing. You try my patience, truly."
+```
+
+```yaml
+# data/templates/voices/base_commoner.yaml
+commoner:
+  vocabulary_level: simple
+  sentence_structure: short, direct
+  contractions: frequent
+  swearing: common, work-related ("Bloody hell", "Damn the rot")
+  greetings: ["Hey there", "Oi", "What d'ya want"]
+  farewells: ["See ya", "Take care now", "Off with ya"]
+  affirmatives: ["Aye", "Right", "Sure thing"]
+  negatives: ["Nah", "No way", "Can't do it"]
+  filler_words: ["Well", "Y'know", "Thing is"]
+  speech_patterns:
+    - Dropped letters ("goin'", "'bout", "nothin'")
+    - Double negatives acceptable
+    - First names or nicknames
+  example_dialogue:
+    greeting_stranger: "Oi, you new 'round here? What're ya after?"
+    refusing_request: "Sorry mate, can't help ya there."
+    expressing_anger: "What in the bloody hell d'ya think you're doin'?!"
+```
+
+**Occupation Modifiers:**
+```yaml
+# data/templates/voices/occupation_merchant.yaml
+merchant:
+  additional_vocabulary: ["deal", "bargain", "value", "worth", "coin", "trade"]
+  verbal_tics: ["speaking of value", "between you and me", "I'll tell you what"]
+  speech_patterns:
+    - Relates things to money/trade
+    - Tries to find common ground
+    - Uses flattery strategically
+  occupation_phrases:
+    haggling: "Now now, surely we can come to an arrangement..."
+    greeting: "Welcome, welcome! You look like someone with discerning taste."
+    farewell: "May your purse stay heavy and your roads stay safe!"
+```
+
+```yaml
+# data/templates/voices/occupation_soldier.yaml
+soldier:
+  additional_vocabulary: ["orders", "duty", "formation", "watch", "enemy", "blade"]
+  verbal_tics: ["on my honor", "by the code", "soldier to soldier"]
+  speech_patterns:
+    - Brief, efficient communication
+    - Military metaphors
+    - Ranks and chain of command references
+  occupation_phrases:
+    greeting: "State your name and business."
+    warning: "That's your first warning. Won't be a second."
+    respect: "You handle yourself well. Soldier?"
+```
+
+**Personality Modifiers:**
+```yaml
+# data/templates/voices/personality_nervous.yaml
+nervous:
+  speech_patterns:
+    - Incomplete sentences
+    - Self-interruption
+    - Excessive apologies
+  verbal_tics: ["um", "er", "sorry", "I didn't mean", "that is to say"]
+  modifications:
+    sentence_length: shorter
+    pause_frequency: high
+  example_dialogue:
+    any: "I... well, that is... sorry, what I meant was... never mind, it's nothing."
+```
+
+**Regional Dialects:**
+```yaml
+# data/templates/voices/region_northern.yaml
+northern:
+  accent_notes: "Hard consonants, rolling Rs"
+  vocabulary_replacements:
+    hello: "well met"
+    friend: "kinsman"
+    stranger: "outlander"
+    cold: "bitter"
+  regional_expressions: ["By the frost", "Cold as a witch's heart", "Sturdy as mountain stone"]
+```
+
+**Manager:**
+- [x] Create `src/managers/voice_manager.py`
+  - `build_voice_template()` - combine templates for an NPC
+  - `get_example_dialogue()` - get example for situation type
+  - `get_base_class()`, `get_occupation()`, `get_personality()`, `get_region()` - individual template access
+  - `get_voice_context()` - formatted for GM prompt
+  - `get_available_base_classes()`, `get_available_occupations()`, etc. - list available templates
+
+**Integration:**
+- `ContextCompiler` includes voice guidance for NPCs in scene
+- `NPCExtension` stores voice template keys (class, occupation, personality, region)
+- GM prompt section: "NPC Voice Guidelines" with merged template info
+
+**LLM Enhancement (Complete):**
+
+Voices can now be fully generated by LLM based on NPC characteristics and setting.
+
+- [x] Create `src/agents/schemas/voice_generation.py`
+  - `GeneratedVoiceTemplate` schema with 20+ fields:
+    - Core: vocabulary_level, sentence_structure, formality, speaking_pace
+    - Patterns: verbal_tics, speech_patterns, filler_words
+    - Vocabulary: favorite_expressions, greetings, farewells, affirmatives, negatives
+    - Swearing: swearing_style, swear_examples
+    - Dialogue: example_dialogue (dict of situation → example line)
+    - Regional: accent_notes, dialect_features, vocabulary_notes
+    - Context changes: formal_context_changes, stress_context_changes
+    - Summary: voice_summary (one-sentence voice description)
+- [x] Create `data/templates/voice_generator.md` - prompt template with setting-specific guidance:
+  - Fantasy: Medieval speech, class distinctions, regional dialects
+  - Contemporary: Modern slang, professional jargon, regional accents
+  - Sci-fi: Technical terminology, alien speech patterns, futuristic expressions
+- [x] Database changes:
+  - Added `voice_template_json: JSON` to NPCExtension for persistence
+  - Migration: `4fbbe5395f6d_llm_generated_arcs_and_voices.py`
+- [x] Manager enhancements:
+  - `generate_voice_template()` - async method generates custom voice via LLM
+  - `format_generated_voice_context()` - formats voice for GM prompt
+  - `voice_template_from_dict()` - loads cached voice from database
+  - YAML templates retained as few-shot examples in LLM prompts
+
+---
+
+## Phase 15: World Simulation (Tier 4 - Lower Priority) [COMPLETE]
+
+### 15.1 Economic Events System [COMPLETE]
+
+**Purpose:** Dynamic economy with market fluctuations, trade routes, supply/demand. Creates living world where prices change based on events.
+
+**Design:**
+- Base prices per item per region
+- Modifiers: scarcity, demand, events, season, trade route status
+- Events trigger price changes (war → weapons expensive, famine → food expensive)
+- Trade routes connect regions; disruption affects availability
+
+**Database Models:**
+- [x] Create `src/database/models/economy.py`
+  - `MarketPrice` model:
+    - `location_key: str` - market location
+    - `item_key: str` - item being priced
+    - `base_price: int` - standard price in copper
+    - `current_price: int` - actual current price
+    - `supply_level: str` - scarce, low, normal, abundant, oversupply
+    - `demand_level: str` - none, low, normal, high, desperate
+    - `price_trend: str` - rising, stable, falling
+    - `last_updated_turn: int`
+  - `TradeRoute` model:
+    - `route_key: str`
+    - `origin_location_key: str`
+    - `destination_location_key: str`
+    - `goods_traded: list[str]` - item categories
+    - `route_status: str` - active, disrupted, blocked, destroyed
+    - `disruption_reason: str | None`
+    - `travel_time_days: int`
+    - `danger_level: int` - 0-100
+  - `EconomicEvent` model:
+    - `event_key: str`
+    - `event_type: str` - famine, war, festival, discovery, plague, etc.
+    - `affected_locations: list[str]`
+    - `affected_items: list[str]`
+    - `price_modifier: float` - multiplier (0.5 = half price, 2.0 = double)
+    - `supply_effect: str` - decrease, increase, none
+    - `start_turn: int`
+    - `duration_turns: int | None` - None = permanent until resolved
+    - `is_active: bool`
+
+**Manager:**
+- [x] Create `src/managers/economy_manager.py`
+  - `get_price()` - current price for item at location
+  - `update_prices()` - recalculate based on events/supply/demand
+  - `create_economic_event()` - trigger economic change
+  - `resolve_economic_event()` - end an event
+  - `get_trade_routes()` - routes to/from location
+  - `disrupt_trade_route()` - block a route
+  - `restore_trade_route()` - reopen a route
+  - `get_market_summary()` - overview for location
+  - `get_economy_context()` - formatted for GM prompt
+
+**Price Calculation:**
+```python
+def calculate_price(base_price, supply, demand, events, season):
+    modifier = 1.0
+
+    # Supply modifier
+    supply_mods = {"scarce": 2.0, "low": 1.3, "normal": 1.0, "abundant": 0.8, "oversupply": 0.5}
+    modifier *= supply_mods[supply]
+
+    # Demand modifier
+    demand_mods = {"none": 0.5, "low": 0.8, "normal": 1.0, "high": 1.3, "desperate": 2.0}
+    modifier *= demand_mods[demand]
+
+    # Event modifiers (multiplicative)
+    for event in events:
+        modifier *= event.price_modifier
+
+    # Season modifier (food more expensive in winter, etc.)
+    modifier *= get_seasonal_modifier(item_category, season)
+
+    return int(base_price * modifier)
+```
+
+---
+
+### 15.2 Magic System [COMPLETE]
+
+**Purpose:** Flexible magic system adaptable to different settings. Core mechanics that can be flavored for fantasy, sci-fi (psionics), or supernatural horror.
+
+**Design Principles:**
+- Resource-based casting (mana, spell slots, fatigue)
+- Schools/traditions for categorization
+- Scaling effects based on power invested
+- Consequences for overuse or failure
+
+**Core Mechanics:**
+- [x] Create `src/database/models/magic.py`
+  - `MagicTradition` enum - arcane, divine, primal, psionic, occult (setting-configurable)
+  - `SpellSchool` enum - evocation, illusion, necromancy, etc.
+  - `SpellDefinition` model:
+    - `spell_key: str`
+    - `name: str`
+    - `tradition: MagicTradition`
+    - `school: SpellSchool`
+    - `base_cost: int` - mana/power points
+    - `casting_time: str` - action, bonus, ritual (minutes)
+    - `range: str` - self, touch, 30ft, sight, unlimited
+    - `duration: str` - instant, concentration, 1 hour, permanent
+    - `description: str`
+    - `effects: dict` - structured effect data
+    - `scaling: dict | None` - how spell improves with more power
+    - `components: list[str]` - verbal, somatic, material
+    - `material_cost: str | None` - consumed materials
+  - `EntityMagic` model (extension to Entity):
+    - `entity_id: int`
+    - `tradition: MagicTradition`
+    - `max_mana: int`
+    - `current_mana: int`
+    - `mana_regen_rate: int` - per rest
+    - `known_spells: list[str]` - spell_keys
+    - `prepared_spells: list[str]` - if preparation system used
+    - `spell_slots: dict | None` - if slot-based system
+  - `SpellCast` model (history):
+    - `caster_entity_id: int`
+    - `spell_key: str`
+    - `turn_cast: int`
+    - `target_entity_keys: list[str]`
+    - `power_used: int`
+    - `success: bool`
+    - `outcome: str`
+
+**Manager:**
+- [x] Create `src/managers/magic_manager.py`
+  - `learn_spell()` - add spell to known list
+  - `prepare_spell()` - ready spell for casting
+  - `can_cast()` - check resources and conditions
+  - `cast_spell()` - execute spell, consume resources
+  - `get_spell_effect()` - calculate effect based on caster stats
+  - `apply_spell_effect()` - modify target state
+  - `regenerate_mana()` - restore on rest
+  - `get_known_spells()` - list caster's spells
+  - `get_magic_context()` - formatted for GM prompt
+
+**Spell Effect Structure:**
+```python
+{
+    "damage": {"dice": "3d6", "type": "fire", "save": "dexterity", "half_on_save": True},
+    "healing": {"dice": "2d8+4"},
+    "condition": {"apply": "frightened", "duration": 3, "save": "wisdom"},
+    "buff": {"attribute": "strength", "bonus": 4, "duration": 10},
+    "summon": {"entity_template": "fire_elemental", "duration": 60},
+    "utility": {"effect": "light", "radius": 20, "duration": 60}
+}
+```
+
+---
+
+### 15.3 Prophesy & Destiny Tracking [COMPLETE]
+
+**Purpose:** Track foreshadowing, prophesies, and destiny elements. Ensure planted narrative seeds are harvested.
+
+**Design:**
+- Prophesies have conditions for fulfillment
+- Multiple interpretation paths (subverted, fulfilled literally, fulfilled metaphorically)
+- GM receives reminders when prophesy elements appear
+- Player choices can alter destiny (or seal it)
+
+**Database Models:**
+- [x] Create `src/database/models/destiny.py`
+  - `Prophesy` model:
+    - `prophesy_key: str`
+    - `prophesy_text: str` - the actual prophesy wording
+    - `true_meaning: str` - GM-only actual meaning
+    - `source: str` - who/what delivered it
+    - `delivered_turn: int`
+    - `status: str` - active, fulfilled, subverted, abandoned
+    - `fulfillment_conditions: list[str]` - what must happen
+    - `subversion_conditions: list[str]` - how it could be avoided
+    - `interpretation_hints: list[str]` - clues for player
+    - `fulfilled_turn: int | None`
+    - `fulfillment_description: str | None`
+  - `DestinyElement` model:
+    - `element_key: str`
+    - `element_type: str` - omen, sign, portent, vision
+    - `description: str`
+    - `linked_prophesy_key: str | None`
+    - `witnessed_by: list[str]` - entity_keys
+    - `turn_occurred: int`
+    - `significance_level: int` - 1-5
+    - `player_noticed: bool`
+
+**Manager:**
+- [x] Create `src/managers/destiny_manager.py`
+  - `create_prophesy()` - establish a prophesy
+  - `add_destiny_element()` - plant foreshadowing
+  - `check_prophesy_status()` - evaluate fulfillment conditions
+  - `fulfill_prophesy()` - mark as fulfilled
+  - `subvert_prophesy()` - mark as subverted
+  - `get_active_prophesies()` - all in-progress prophesies
+  - `get_relevant_elements()` - destiny elements for current scene
+  - `get_prophesy_hints()` - GM reminders for prophesy progression
+  - `get_destiny_context()` - formatted for GM prompt
+
+---
+
+### 15.4 Encumbrance & Weight System [COMPLETE]
+
+**Purpose:** Track carrying capacity and movement penalties. Creates meaningful inventory decisions.
+
+**Design:**
+- Strength-based carrying capacity
+- Weight categories: light, medium, heavy, over-encumbered
+- Movement and combat penalties when over-burdened
+- Container capacity (bags, backpacks)
+
+**Implementation:**
+- [x] Add to `src/database/models/items.py`:
+  - `weight: float` field on Item model (in pounds/kg)
+  - `capacity: float | None` field for containers
+
+- [x] Create `src/managers/encumbrance_manager.py`
+  - `get_carried_weight()` - total weight carried by entity
+  - `get_carry_capacity()` - max weight based on Strength
+  - `get_encumbrance_level()` - light/medium/heavy/over
+  - `get_movement_penalty()` - speed reduction
+  - `get_combat_penalty()` - disadvantage on checks
+  - `can_pick_up()` - check if item fits in capacity
+  - `get_encumbrance_context()` - formatted for display
+
+**Capacity Calculation:**
+```python
+def get_carry_capacity(strength: int) -> dict:
+    base = strength * 15  # pounds
+    return {
+        "light": base * 0.33,      # No penalty
+        "medium": base * 0.66,     # -10 speed
+        "heavy": base,             # -20 speed, disadvantage on physical checks
+        "max_lift": base * 2       # Can lift but not move
+    }
+```
+
+**Movement Penalties:**
+```python
+ENCUMBRANCE_EFFECTS = {
+    "light": {"speed_penalty": 0, "check_penalty": None},
+    "medium": {"speed_penalty": 10, "check_penalty": None},
+    "heavy": {"speed_penalty": 20, "check_penalty": "disadvantage_physical"},
+    "over": {"speed_penalty": "immobile", "check_penalty": "disadvantage_all"}
+}
+```
+
+---
+
+## Phase 16: Future Considerations
+
+### 16.1 Potential Additions (Not Planned)
+- **Crafting System** - create items from materials
+- **Weather Impact** - weather affects travel, combat, NPC behavior
+- **Disease & Plague** - illness mechanics beyond injury
+- **Mount & Vehicle System** - travel speeds, mounted combat
+- **Base Building** - player-owned structures
+- **Time Skip Mechanics** - fast-forward through downtime
+- **Multiplayer Support** - multiple player characters
+
+### 16.2 Setting-Specific Modules
+- **Fantasy Module** - full magic, divine intervention, mythical creatures
+- **Sci-Fi Module** - technology, hacking, space travel
+- **Horror Module** - sanity system, supernatural dread
+- **Historical Module** - realistic constraints, period accuracy

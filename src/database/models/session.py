@@ -9,9 +9,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.database.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from src.database.models.destiny import DestinyElement, Prophesy
     from src.database.models.entities import Entity
     from src.database.models.faction import Faction
     from src.database.models.goals import NPCGoal
+    from src.database.models.magic import EntityMagicProfile, SpellCastRecord, SpellDefinition
     from src.database.models.narrative import Conflict, Mystery, StoryArc
     from src.database.models.progression import Achievement
     from src.database.models.tasks import Appointment, Quest, Task
@@ -140,6 +142,26 @@ class GameSession(Base, TimestampMixin):
     )
     factions: Mapped[list["Faction"]] = relationship(
         back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    spell_definitions: Mapped[list["SpellDefinition"]] = relationship(
+        back_populates="game_session",
+        cascade="all, delete-orphan",
+    )
+    entity_magic_profiles: Mapped[list["EntityMagicProfile"]] = relationship(
+        back_populates="game_session",
+        cascade="all, delete-orphan",
+    )
+    spell_cast_records: Mapped[list["SpellCastRecord"]] = relationship(
+        back_populates="game_session",
+        cascade="all, delete-orphan",
+    )
+    prophesies: Mapped[list["Prophesy"]] = relationship(
+        back_populates="game_session",
+        cascade="all, delete-orphan",
+    )
+    destiny_elements: Mapped[list["DestinyElement"]] = relationship(
+        back_populates="game_session",
         cascade="all, delete-orphan",
     )
 

@@ -8,6 +8,184 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **LLM-Driven Relationship Arcs & Voice Generation** - Transform static templates to dynamic LLM-generated content
+  - **Arc Generation System** (`src/agents/schemas/arc_generation.py`, `data/templates/arc_generator.md`)
+    - `ArcPhaseTemplate` schema - phase definition with milestones and suggested scenes
+    - `GeneratedArcTemplate` schema - full arc template with phases, endings, tension triggers
+    - Prompt template with relationship context, character details, and example arcs
+    - Arc types changed from enum to flexible strings (any LLM-generated type allowed)
+    - `arc_template` JSON column stores LLM-generated template per-arc
+    - `arc_description` text column for arc summary
+  - **Voice Generation System** (`src/agents/schemas/voice_generation.py`, `data/templates/voice_generator.md`)
+    - `GeneratedVoiceTemplate` schema - comprehensive voice definition with 20+ fields
+    - Includes vocabulary_level, verbal_tics, speech_patterns, example_dialogue
+    - Setting-specific guidance (fantasy, contemporary, sci-fi)
+    - `voice_template_json` JSON column added to NPCExtension for persistence
+  - **RelationshipArcManager Enhancements** (`src/managers/relationship_arc_manager.py`)
+    - `generate_arc_for_relationship()` async method - LLM generates custom arc based on relationship dynamics
+    - `create_arc_from_generated()` - create arc from LLM template
+    - Updated `get_arc_beat_suggestion()` to use stored arc_template
+    - `ArcInfo` dataclass extended with `arc_description`, `is_custom` fields
+    - Predefined arcs remain as examples/fallback via `WellKnownArcType` enum
+  - **VoiceManager Enhancements** (`src/managers/voice_manager.py`)
+    - `generate_voice_template()` async method - LLM generates voice based on NPC characteristics
+    - `format_generated_voice_context()` - formats voice for GM prompt
+    - `voice_template_from_dict()` - loads cached voice from database
+    - YAML templates retained as few-shot examples in prompts
+    - Setting-specific voice guidance (medieval, contemporary slang, sci-fi terminology)
+  - **Database Migration** (`alembic/versions/4fbbe5395f6d_llm_generated_arcs_and_voices.py`)
+    - `relationship_arcs.arc_type` column extended to 100 chars (was 30)
+    - `relationship_arcs.current_phase` column extended to 50 chars (was 20)
+    - Added `relationship_arcs.arc_template` JSON column
+    - Added `relationship_arcs.arc_description` Text column
+    - Added `npc_extensions.voice_template_json` JSON column
+  - **Schema Exports** - Added `ArcPhaseTemplate`, `GeneratedArcTemplate`, `GeneratedVoiceTemplate` to `src/agents/schemas/__init__.py`
+
+- **Future Phases Documentation** - Comprehensive specifications for Tier 3-4 features in `docs/implementation-plan.md`
+  - **Phase 14: Social Systems** (Tier 3 - Medium Priority)
+    - Rumor System - social network propagation, distortion mechanics, decay over time
+    - Relationship Arc Templates - 8 arc types (enemies-to-lovers, betrayal, redemption, etc.) with milestone tracking
+    - NPC Voice Templates - YAML-based speech patterns by social class, occupation, personality, region
+  - **Phase 15: World Simulation** (Tier 4 - Lower Priority)
+    - Economic Events System - market prices, trade routes, supply/demand, seasonal modifiers
+    - Magic System - flexible mana-based casting with spell definitions and effect structures
+    - Prophesy & Destiny Tracking - fulfillment conditions, multiple interpretation paths
+    - Encumbrance & Weight System - Strength-based capacity, movement penalties
+  - **Phase 16: Future Considerations** - crafting, weather, disease, mounts, base building
+
+- **Phase 14: Social Systems (Implementation)** - NPC communication and social dynamics
+  - **Rumor System** (`src/database/models/rumors.py`, `src/managers/rumor_manager.py`)
+    - `Rumor` model with truth_value, spread_rate, decay_rate, intensity, sentiment, tags
+    - `RumorKnowledge` model - tracks which NPCs know which rumors with belief and distortion
+    - `RumorSentiment` enum (positive, negative, neutral, scandalous, heroic)
+    - `RumorManager` with:
+      - `create_rumor()`, `get_rumor()`, `get_rumors_about()`, `get_active_rumors()`
+      - `add_knowledge()`, `get_rumors_known_by()`, `entity_knows_rumor()`
+      - `decay_rumors()` - intensity reduction over time, deactivates weak rumors
+      - `spread_rumor_to_entity()` - propagation with optional distortion
+      - `get_rumor_info()`, `get_rumor_context_for_entity()`, `get_rumors_context()`
+    - Migration: `232c117be2f2_add_rumor_system_tables.py`
+    - 36 tests in `tests/test_managers/test_rumor_manager.py`
+
+  - **Relationship Arc Templates** (`src/database/models/relationship_arcs.py`, `src/managers/relationship_arc_manager.py`)
+    - `RelationshipArcType` enum - 8 arc types:
+      - enemies_to_lovers, mentors_fall, betrayal, redemption
+      - rivalry, found_family, lost_love_rekindled, corruption
+    - `RelationshipArcPhase` enum (introduction, development, crisis, climax, resolution)
+    - `RelationshipArc` model with phase_progress, milestones_hit, arc_tension, suggested_next_beat
+    - `ARC_TEMPLATES` dictionary with suggested scenes and milestones for each arc/phase
+    - `RelationshipArcManager` with:
+      - `create_arc()`, `get_arc()`, `get_active_arcs()`, `get_arcs_for_entity()`
+      - `advance_phase()`, `update_phase_progress()`, `update_tension()`
+      - `hit_milestone()`, `has_milestone()`
+      - `complete_arc()`, `abandon_arc()`
+      - `get_arc_beat_suggestion()`, `set_suggested_beat()`
+      - `get_arc_info()`, `get_arc_context()`, `get_arc_context_for_entity()`
+    - Migration: `111af31a57d1_add_relationship_arcs_table.py`
+    - 29 tests in `tests/test_managers/test_relationship_arc_manager.py`
+
+  - **NPC Voice Templates** (`src/managers/voice_manager.py`, `data/templates/voices/`)
+    - YAML-based voice template configuration:
+      - `base_classes.yaml` - noble, merchant, commoner, scholar, criminal
+      - `occupations.yaml` - soldier, innkeeper, blacksmith, healer, priest, guard, farmer, sailor
+      - `personalities.yaml` - nervous, confident, friendly, hostile, mysterious, jovial, melancholic, arrogant, shy
+      - `regions.yaml` - northern, southern, eastern, western, coastal, mountain, urban
+    - `VoiceTemplate` dataclass with vocabulary_level, contractions, greetings, speech_patterns, verbal_tics
+    - `VoiceManager` with:
+      - `get_base_class()`, `get_occupation()`, `get_personality()`, `get_region()`
+      - `build_voice_template()` - merges base class with modifiers
+      - `get_example_dialogue()`, `get_occupation_phrase()`
+      - `get_voice_context()` - formatted voice guidance for GM
+    - 25 tests in `tests/test_managers/test_voice_manager.py`
+
+  - **Phase 14 Summary:**
+    - 2 new database models (Rumor, RumorKnowledge)
+    - 1 new database model (RelationshipArc)
+    - 3 new managers (RumorManager, RelationshipArcManager, VoiceManager)
+    - 4 YAML voice template files
+    - 2 Alembic migrations
+    - 90 new tests total
+
+- **Phase 15: World Simulation (Implementation)** - World dynamics and player capabilities
+  - **Encumbrance System** (`src/managers/encumbrance_manager.py`)
+    - `EncumbranceLevel` enum (light, medium, heavy, over)
+    - `EncumbranceStatus` dataclass with carried_weight, capacity, level, speed_penalty, combat_penalty, percentage
+    - `EncumbranceManager` with:
+      - `get_carry_capacity()` - strength × 15 pounds formula
+      - `get_entity_capacity()` - capacity from entity's strength attribute
+      - `get_carried_weight()` - sums held item weights
+      - `get_encumbrance_status()` - full encumbrance breakdown
+      - `can_pick_up()` - checks if entity can carry additional item
+      - `get_encumbrance_context()` - formatted encumbrance for GM prompt
+    - Encumbrance levels: Light (0-33%), Medium (34-66%), Heavy (67-100%), Over (>100%)
+    - Movement penalties: -10 ft (medium), -20 ft (heavy), immobile (over)
+    - Combat penalties: disadvantage on physical (heavy), disadvantage on all (over)
+    - Migration: `12d9e2934e02_add_item_weight_field.py`
+    - 25 tests in `tests/test_managers/test_encumbrance_manager.py`
+
+  - **Economy System** (`src/database/models/economy.py`, `src/managers/economy_manager.py`)
+    - `SupplyLevel` enum (scarce, low, normal, abundant, oversupply)
+    - `DemandLevel` enum (none, low, normal, high, desperate)
+    - `RouteStatus` enum (active, disrupted, blocked, destroyed)
+    - `MarketPrice` model - tracks item category prices at locations with supply/demand levels
+    - `TradeRoute` model - connections between markets with goods_traded, travel_days, danger_level
+    - `EconomicEvent` model - market-affecting events with price_modifier, affected_locations, duration
+    - `PriceInfo` dataclass with base_price, current_price, supply/demand levels, modifiers breakdown
+    - `MarketSummary` dataclass with categories, connected_routes, active_events
+    - `EconomyManager` with:
+      - `set_market_price()`, `get_market_price()`, `get_market_prices_for_location()`
+      - `calculate_price()` - applies supply/demand/event modifiers
+      - `create_trade_route()`, `get_trade_route()`, `get_routes_for_location()`
+      - `disrupt_trade_route()`, `block_trade_route()`, `restore_trade_route()`
+      - `create_economic_event()`, `get_event()`, `get_active_events()`, `end_event()`
+      - `get_market_summary()`, `get_economy_context()`
+    - Price formula: base × location × supply × demand × events
+    - Migration: `d44072093509_add_economy_tables.py`
+    - 31 tests in `tests/test_managers/test_economy_manager.py`
+
+  - **Magic System** (`src/database/models/magic.py`, `src/managers/magic_manager.py`)
+    - `MagicTradition` enum (arcane, divine, primal, psionic, occult)
+    - `SpellSchool` enum (abjuration, conjuration, divination, enchantment, evocation, illusion, necromancy, transmutation)
+    - `CastingTime` enum (action, bonus_action, reaction, ritual)
+    - `SpellDefinition` model - spell templates with level, cost, components, effects (JSON), scaling
+    - `EntityMagicProfile` model - entity mana pool, known/prepared spells, mana regen
+    - `SpellCastRecord` model - cast history with targets, mana spent, success
+    - `SpellInfo` dataclass with spell details and cast availability
+    - `CastResult` dataclass with success, mana_spent, effect_description, targets_affected
+    - `MagicManager` with:
+      - `get_or_create_magic_profile()`, `get_magic_profile()`, `set_magic_profile()`
+      - `create_spell()`, `get_spell()`, `get_spells_by_tradition()`, `get_spells_by_school()`, `get_spells_by_level()`
+      - `learn_spell()`, `forget_spell()`, `prepare_spell()`, `unprepare_spell()`
+      - `spend_mana()`, `restore_mana()`, `regenerate_mana()` (long/short rest)
+      - `can_cast_spell()`, `cast_spell()` with upcast support
+      - `get_known_spells()`, `get_spell_cast_history()`, `get_magic_context()`
+    - Cantrips (level 0) are free to cast
+    - Upcast cost: +2 mana per level above base
+    - Migration: `7247cbddafd1_add_magic_system_tables.py`
+    - 41 tests in `tests/test_managers/test_magic_manager.py`
+
+  - **Destiny System** (`src/database/models/destiny.py`, `src/managers/destiny_manager.py`)
+    - `ProphesyStatus` enum (active, fulfilled, subverted, abandoned)
+    - `DestinyElementType` enum (omen, sign, portent, vision)
+    - `Prophesy` model - prophecy tracking with player-visible text, GM-only true_meaning, fulfillment/subversion conditions, interpretation hints
+    - `DestinyElement` model - omens/signs linked to prophecies, witnessed_by tracking, significance level
+    - `ProphesyProgress` dataclass with conditions_met/total, elements_manifested, hints_available
+    - `DestinyManager` with:
+      - `create_prophesy()`, `get_prophesy()`, `get_active_prophesies()`
+      - `fulfill_prophesy()`, `subvert_prophesy()`, `abandon_prophesy()`
+      - `add_destiny_element()`, `get_destiny_element()`, `get_elements_for_prophesy()`
+      - `mark_element_noticed()`, `get_elements_by_type()`, `get_unnoticed_elements()`
+      - `check_prophesy_progress()`, `mark_condition_met()`, `add_interpretation_hint()`
+      - `get_recent_elements()`, `get_destiny_context()`
+    - Migration: `7deb1bdd87cc_add_destiny_tables.py`
+    - 28 tests in `tests/test_managers/test_destiny_manager.py`
+
+  - **Phase 15 Summary:**
+    - 8 new database models (MarketPrice, TradeRoute, EconomicEvent, SpellDefinition, EntityMagicProfile, SpellCastRecord, Prophesy, DestinyElement)
+    - 4 new managers (EncumbranceManager, EconomyManager, MagicManager, DestinyManager)
+    - 4 Alembic migrations
+    - 125 new tests total
+
 - **Phase 2: Narrative Systems** - Story structure and dramatic tension management
   - **Story Arc Model & Manager** (`src/database/models/narrative.py`, `src/managers/story_arc_manager.py`)
     - `StoryArc` model with `ArcType` (main_quest, side_quest, character_arc, mystery, romance, faction, world_event)

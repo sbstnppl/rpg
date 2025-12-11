@@ -1,0 +1,211 @@
+# Occupation-specific voice modifiers
+# These add specialized vocabulary and patterns to base class templates
+
+soldier:
+  additional_vocabulary:
+    - orders
+    - duty
+    - formation
+    - watch
+    - enemy
+    - blade
+    - ranks
+    - post
+  verbal_tics:
+    - "on my honor"
+    - "by the code"
+    - "soldier to soldier"
+    - "at your command"
+  speech_patterns:
+    - "Brief, efficient communication"
+    - "Military metaphors"
+    - "References ranks and chain of command"
+    - "Reports rather than describes"
+  occupation_phrases:
+    greeting: "State your name and business."
+    warning: "That's your first warning. Won't be a second."
+    respect: "You handle yourself well. Soldier?"
+    orders: "Form up. We move on my signal."
+    reporting: "The situation is as follows..."
+
+innkeeper:
+  additional_vocabulary:
+    - room
+    - board
+    - ale
+    - hearth
+    - travelers
+    - lodging
+    - tab
+  verbal_tics:
+    - "make yourself at home"
+    - "what'll it be"
+    - "weary traveler"
+    - "warm bed"
+  speech_patterns:
+    - "Welcoming and hospitable"
+    - "Knows local gossip"
+    - "Assesses customer's wealth subtly"
+    - "Creates comfortable atmosphere"
+  occupation_phrases:
+    greeting: "Welcome, weary traveler! What'll it be - room, meal, or both?"
+    offering_service: "Best ale in town, and the stew's fresh today."
+    gossip: "Between you and me, I've heard some interesting things..."
+    farewell: "Come back anytime. Your coin's always good here."
+    warning: "We don't want trouble here. Drink up and be civil."
+
+blacksmith:
+  additional_vocabulary:
+    - forge
+    - anvil
+    - steel
+    - temper
+    - blade
+    - hammer
+    - craft
+    - commission
+  verbal_tics:
+    - "strong as forged steel"
+    - "strike while hot"
+    - "tempered and true"
+  speech_patterns:
+    - "Proud of craftsmanship"
+    - "Direct and straightforward"
+    - "Values hard work"
+    - "May be physically imposing"
+  occupation_phrases:
+    greeting: "Need something forged? I'm the best you'll find."
+    showing_work: "Feel that balance. That's proper craftsmanship."
+    refusing_rush: "Good steel can't be rushed. Come back in three days."
+    haggling: "That price reflects my skill. You want cheap, go elsewhere."
+    complimenting_weapon: "Fine blade you've got there. Who made it?"
+
+healer:
+  additional_vocabulary:
+    - wound
+    - remedy
+    - herbs
+    - rest
+    - ailment
+    - recovery
+    - treatment
+  verbal_tics:
+    - "for your health"
+    - "proper rest"
+    - "healing takes time"
+    - "the body knows"
+  speech_patterns:
+    - "Calm and reassuring"
+    - "Explains simply but accurately"
+    - "Patient and compassionate"
+    - "Firm when giving instructions"
+  occupation_phrases:
+    greeting: "Are you here seeking healing, or is this a social call?"
+    diagnosing: "Let me take a look. Tell me where it hurts."
+    prescribing: "Take this twice daily, and rest. No exceptions."
+    warning: "If you don't rest, you'll make it worse."
+    reassuring: "You'll be fine. I've seen far worse."
+
+priest:
+  additional_vocabulary:
+    - blessing
+    - sacred
+    - divine
+    - faith
+    - soul
+    - prayer
+    - devotion
+  verbal_tics:
+    - "may the gods bless you"
+    - "in faith"
+    - "the sacred texts say"
+    - "divine providence"
+  speech_patterns:
+    - "Speaks with moral authority"
+    - "Often quotes scripture or doctrine"
+    - "Counsels patience and virtue"
+    - "May be judgmental or compassionate"
+  occupation_phrases:
+    greeting: "Welcome, child. What troubles your soul?"
+    blessing: "May the gods watch over you and guide your path."
+    counsel: "The path of righteousness is not easy, but it is worthy."
+    disapproval: "Such actions displease the divine. You must seek redemption."
+    comfort: "Have faith. Even in darkness, the light endures."
+
+guard:
+  additional_vocabulary:
+    - patrol
+    - citizen
+    - law
+    - order
+    - permit
+    - curfew
+    - arrest
+  verbal_tics:
+    - "move along"
+    - "nothing to see here"
+    - "I'll be watching"
+    - "don't make me"
+  speech_patterns:
+    - "Speaks with official authority"
+    - "Suspicious of strangers"
+    - "Enforces rules consistently"
+    - "May be helpful or corrupt"
+  occupation_phrases:
+    greeting: "Halt. State your business in the city."
+    warning: "That's not allowed here. Don't make me tell you twice."
+    questioning: "I've got some questions. You'll answer them."
+    dismissal: "Everything seems in order. Move along."
+    arrest: "You're coming with me. Resist and it'll go worse."
+
+farmer:
+  additional_vocabulary:
+    - harvest
+    - crop
+    - soil
+    - season
+    - weather
+    - livestock
+    - field
+  verbal_tics:
+    - "good honest work"
+    - "back in my day"
+    - "weather permitting"
+    - "the land provides"
+  speech_patterns:
+    - "Practical and down-to-earth"
+    - "Talks about weather often"
+    - "Values hard work and honesty"
+    - "Suspicious of city folk"
+  occupation_phrases:
+    greeting: "City folk? What brings you out this way?"
+    weather: "Rain's coming. I can feel it in my bones."
+    complaining: "Taxes keep going up. How's a farmer supposed to live?"
+    offering_hospitality: "Ain't much, but you're welcome to share our table."
+    pride: "Finest wheat in the valley, that is."
+
+sailor:
+  additional_vocabulary:
+    - ship
+    - sea
+    - port
+    - tide
+    - captain
+    - cargo
+    - voyage
+  verbal_tics:
+    - "by the sea"
+    - "smooth sailing"
+    - "all hands"
+    - "wind willing"
+  speech_patterns:
+    - "Colorful nautical expressions"
+    - "Tales of distant lands"
+    - "Superstitious about certain things"
+    - "Rowdy when on shore leave"
+  occupation_phrases:
+    greeting: "Ahoy there! Fresh off the boat?"
+    storytelling: "Let me tell you about the time we weathered that storm..."
+    superstition: "Never whistle on a ship. Bad luck, that."
+    drinking: "First round's on me. We've got shore leave to celebrate!"
+    warning: "The sea's no place for the faint-hearted."

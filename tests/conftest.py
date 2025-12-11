@@ -29,10 +29,13 @@ def engine():
     # Import all models to ensure they're registered with Base
     from src.database.models import (  # noqa: F401
         character_state,
+        destiny,
+        economy,
         entities,
         goals,
         injuries,
         items,
+        magic,
         mental_state,
         navigation,
         relationships,

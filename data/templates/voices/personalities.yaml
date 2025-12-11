@@ -1,0 +1,193 @@
+# Personality-based voice modifiers
+# These adjust how the character speaks regardless of class or occupation
+
+nervous:
+  speech_modifications:
+    sentence_length: shorter
+    pause_frequency: high
+    interrupts_self: true
+  verbal_tics:
+    - "um"
+    - "er"
+    - "sorry"
+    - "I didn't mean"
+    - "that is to say"
+    - "if you don't mind"
+  speech_patterns:
+    - "Incomplete sentences"
+    - "Self-interruption"
+    - "Excessive apologies"
+    - "Avoids eye contact (describe in action)"
+    - "Speaks quietly"
+  example_dialogue:
+    any: "I... well, that is... sorry, what I meant was... never mind, it's nothing."
+    greeting: "Oh! I didn't... you startled me. Can I help... is there something...?"
+    refusing: "I really... it's not that I don't want to, but... sorry, I just can't."
+
+confident:
+  speech_modifications:
+    sentence_length: normal
+    pause_frequency: low
+    speaks_first: true
+  verbal_tics:
+    - "obviously"
+    - "of course"
+    - "naturally"
+    - "as I said"
+  speech_patterns:
+    - "Complete, declarative sentences"
+    - "Doesn't hedge or qualify"
+    - "Takes control of conversations"
+    - "Direct eye contact (describe in action)"
+    - "Projects voice"
+  example_dialogue:
+    any: "Here's what we're going to do."
+    greeting: "You're here about the job. Good. Let me tell you how this works."
+    refusing: "No. That's not going to happen."
+
+friendly:
+  speech_modifications:
+    warmth: high
+    uses_names: frequently
+    asks_questions: true
+  verbal_tics:
+    - "friend"
+    - "my dear"
+    - "isn't that wonderful"
+    - "how lovely"
+  speech_patterns:
+    - "Inclusive language ('we', 'us')"
+    - "Remembers personal details"
+    - "Asks about wellbeing"
+    - "Offers help unprompted"
+    - "Genuine compliments"
+  example_dialogue:
+    greeting: "Oh, how wonderful to see you! How have you been? Is your family well?"
+    offering_help: "If there's anything at all I can do, you just say the word."
+    farewell: "Do take care of yourself! Come visit again soon!"
+
+hostile:
+  speech_modifications:
+    warmth: low
+    interrupts_others: true
+    volume: louder
+  verbal_tics:
+    - "listen here"
+    - "I don't care"
+    - "get out"
+    - "watch yourself"
+  speech_patterns:
+    - "Short, aggressive sentences"
+    - "Challenging questions"
+    - "Dismissive responses"
+    - "Invades personal space (describe in action)"
+    - "Openly contemptuous"
+  example_dialogue:
+    greeting: "What do you want? Make it quick."
+    refusing: "Did I stutter? I said no. Now leave."
+    threatening: "Try that again and see what happens."
+
+mysterious:
+  speech_modifications:
+    information_given: minimal
+    speaks_in_riddles: sometimes
+    pause_for_effect: frequent
+  verbal_tics:
+    - "perhaps"
+    - "in time"
+    - "all will be revealed"
+    - "that remains to be seen"
+  speech_patterns:
+    - "Cryptic statements"
+    - "Answers questions with questions"
+    - "Knowing smiles (describe in action)"
+    - "Hints at hidden knowledge"
+    - "Dramatic pauses"
+  example_dialogue:
+    any: "Some questions... are better left unasked."
+    greeting: "I wondered when you would come. The signs spoke of this meeting."
+    information: "I could tell you... but would you believe me?"
+
+jovial:
+  speech_modifications:
+    energy: high
+    laugh_frequency: high
+    storytelling: frequent
+  verbal_tics:
+    - "ha!"
+    - "marvelous"
+    - "splendid"
+    - "let me tell you"
+  speech_patterns:
+    - "Enthusiastic exclamations"
+    - "Tells jokes and stories"
+    - "Laughs easily and loudly"
+    - "Big gestures (describe in action)"
+    - "Finds humor in situations"
+  example_dialogue:
+    greeting: "Ah, a new face! Splendid! Come, come, sit down and share a drink!"
+    storytelling: "That reminds me of the time - oh, you'll love this one!"
+    bad_news: "Well, that's rather unfortunate. Still, could be worse! Once I..."
+
+melancholic:
+  speech_modifications:
+    energy: low
+    sighs: frequent
+    dwells_on_past: true
+  verbal_tics:
+    - "alas"
+    - "if only"
+    - "once upon a time"
+    - "I remember when"
+  speech_patterns:
+    - "Wistful references to better times"
+    - "Pessimistic outlook"
+    - "Sighs frequently"
+    - "Slow, measured speech"
+    - "Finds sadness in beauty"
+  example_dialogue:
+    any: "It reminds me of... no, forgive me. Some memories are best left buried."
+    greeting: "Welcome, I suppose. Though there's little joy to be found here."
+    good_news: "That's... good. I wish I could feel happier about it."
+
+arrogant:
+  speech_modifications:
+    condescension: high
+    name_dropping: frequent
+    self_reference: excessive
+  verbal_tics:
+    - "obviously"
+    - "surely you know"
+    - "in my experience"
+    - "as I always say"
+  speech_patterns:
+    - "Talks down to others"
+    - "Interrupts frequently"
+    - "Steers conversations to own accomplishments"
+    - "Dismisses others' opinions"
+    - "Corrects others unnecessarily"
+  example_dialogue:
+    greeting: "Ah yes, you must be here to see me. Everyone is, eventually."
+    correcting: "Actually, that's not quite right. Let me explain it properly."
+    dismissing: "I'm sure you did your best. Not everyone can excel."
+
+shy:
+  speech_modifications:
+    volume: quiet
+    eye_contact: avoided
+    speaks_briefly: true
+  verbal_tics:
+    - "I suppose"
+    - "if you think so"
+    - "it's nothing"
+    - "sorry to bother"
+  speech_patterns:
+    - "Mumbles or trails off"
+    - "Answers with minimal words"
+    - "Deflects attention"
+    - "Blushes easily (describe in action)"
+    - "Struggles to initiate conversation"
+  example_dialogue:
+    greeting: "Oh... hello. Did you need... something?"
+    receiving_compliment: "That's... I mean... it's nothing, really..."
+    speaking_up: "Excuse me, I... never mind. It's not important."

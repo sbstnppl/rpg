@@ -21,6 +21,7 @@ from src.database.models.base import Base, TimestampMixin
 from src.database.models.enums import EntityType
 
 if TYPE_CHECKING:
+    from src.database.models.magic import EntityMagicProfile, SpellCastRecord
     from src.database.models.session import GameSession
 
 
@@ -230,6 +231,15 @@ class Entity(Base, TimestampMixin):
     )
     goals: Mapped[list["NPCGoal"]] = relationship(
         back_populates="entity",
+        cascade="all, delete-orphan",
+    )
+    magic_profile: Mapped["EntityMagicProfile | None"] = relationship(
+        back_populates="entity",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    spell_casts: Mapped[list["SpellCastRecord"]] = relationship(
+        back_populates="caster",
         cascade="all, delete-orphan",
     )
 
@@ -486,7 +496,12 @@ class NPCExtension(Base, TimestampMixin):
     speech_pattern: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
-        comment="How they speak (accent, vocabulary, quirks)",
+        comment="How they speak (accent, vocabulary, quirks) - legacy field",
+    )
+    voice_template_json: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="LLM-generated voice template with speech patterns, verbal tics, example dialogue",
     )
 
     # Personality traits affecting relationship dynamics

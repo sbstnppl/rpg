@@ -11,6 +11,17 @@ from src.managers.conflict_manager import ConflictManager, ConflictStatus
 from src.managers.consistency import ConsistencyIssue, ConsistencyValidator, TemporalEffects
 from src.managers.context_compiler import ContextCompiler, SceneContext
 from src.managers.death import DeathManager, DeathSaveResult, RevivalResult
+from src.managers.destiny_manager import DestinyManager, ProphesyProgress
+from src.managers.economy_manager import (
+    EconomyManager,
+    MarketSummary,
+    PriceInfo,
+)
+from src.managers.encumbrance_manager import (
+    EncumbranceLevel,
+    EncumbranceManager,
+    EncumbranceStatus,
+)
 from src.managers.entity_manager import EntityManager
 from src.managers.event_manager import EventManager
 from src.managers.fact_manager import FactManager
@@ -18,6 +29,7 @@ from src.managers.goal_manager import GoalManager
 from src.managers.grief import GriefManager, GriefStageInfo
 from src.managers.injuries import ActivityImpact, InjuryManager, InjuryRecoveryTime
 from src.managers.item_manager import ItemManager
+from src.managers.magic_manager import CastResult, MagicManager, SpellInfo
 from src.managers.location_manager import LocationManager
 from src.managers.memory_manager import MemoryManager
 from src.managers.mystery_manager import MysteryManager, MysteryStatus
@@ -52,6 +64,17 @@ from src.managers.combat_condition_manager import (
     ConditionEffect,
     ConditionInfo,
 )
+from src.managers.rumor_manager import (
+    RumorInfo,
+    RumorManager,
+    RumorSpreadResult,
+)
+from src.managers.relationship_arc_manager import (
+    ArcBeatSuggestion,
+    ArcInfo,
+    RelationshipArcManager,
+)
+from src.managers.voice_manager import VoiceManager, VoiceTemplate
 from src.managers.schedule_manager import ScheduleManager
 from src.managers.secret_manager import BetrayalRisk, NPCSecret, SecretManager
 from src.managers.story_arc_manager import ArcSummary, PacingHint, StoryArcManager
@@ -136,4 +159,30 @@ __all__ = [
     "CombatConditionManager",
     "ConditionEffect",
     "ConditionInfo",
+    # Rumors
+    "RumorManager",
+    "RumorInfo",
+    "RumorSpreadResult",
+    # Relationship Arcs
+    "RelationshipArcManager",
+    "ArcInfo",
+    "ArcBeatSuggestion",
+    # Voice Templates
+    "VoiceManager",
+    "VoiceTemplate",
+    # Encumbrance
+    "EncumbranceManager",
+    "EncumbranceStatus",
+    "EncumbranceLevel",
+    # Economy
+    "EconomyManager",
+    "PriceInfo",
+    "MarketSummary",
+    # Magic
+    "MagicManager",
+    "SpellInfo",
+    "CastResult",
+    # Destiny
+    "DestinyManager",
+    "ProphesyProgress",
 ]

@@ -132,6 +132,48 @@ from src.database.models.combat_conditions import (
     EntityCondition,
 )
 
+# Rumor system
+from src.database.models.rumors import (
+    Rumor,
+    RumorKnowledge,
+    RumorSentiment,
+)
+
+# Relationship arcs
+from src.database.models.relationship_arcs import (
+    RelationshipArc,
+    RelationshipArcPhase,
+    RelationshipArcType,
+)
+
+# Economy system
+from src.database.models.economy import (
+    DemandLevel,
+    EconomicEvent,
+    MarketPrice,
+    RouteStatus,
+    SupplyLevel,
+    TradeRoute,
+)
+
+# Magic system
+from src.database.models.magic import (
+    CastingTime,
+    EntityMagicProfile,
+    MagicTradition,
+    SpellCastRecord,
+    SpellDefinition,
+    SpellSchool,
+)
+
+# Destiny system
+from src.database.models.destiny import (
+    DestinyElement,
+    DestinyElementType,
+    Prophesy,
+    ProphesyStatus,
+)
+
 __all__ = [
     # Base
     "Base",
@@ -264,4 +306,34 @@ __all__ = [
     # Combat conditions
     "CombatCondition",
     "EntityCondition",
+    # Rumor system
+    "Rumor",
+    "RumorKnowledge",
+    "RumorSentiment",
+    # Relationship arcs
+    "RelationshipArc",
+    "RelationshipArcPhase",
+    "RelationshipArcType",
+    # Economy enums
+    "SupplyLevel",
+    "DemandLevel",
+    "RouteStatus",
+    # Economy models
+    "MarketPrice",
+    "TradeRoute",
+    "EconomicEvent",
+    # Magic enums
+    "MagicTradition",
+    "SpellSchool",
+    "CastingTime",
+    # Magic models
+    "SpellDefinition",
+    "EntityMagicProfile",
+    "SpellCastRecord",
+    # Destiny enums
+    "ProphesyStatus",
+    "DestinyElementType",
+    # Destiny models
+    "Prophesy",
+    "DestinyElement",
 ]

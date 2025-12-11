@@ -1,0 +1,238 @@
+# Base voice templates by social class
+# These define core speech patterns that occupation and personality modifiers build upon
+
+noble:
+  vocabulary_level: sophisticated
+  sentence_structure: complex
+  contractions: never
+  swearing_style: euphemisms_only
+  swear_examples:
+    - "By the stars"
+    - "Confound it"
+    - "How vexing"
+  greetings:
+    - "Good morrow"
+    - "Well met"
+    - "I bid you welcome"
+    - "Ah, a visitor"
+  farewells:
+    - "Fare thee well"
+    - "Until we meet again"
+    - "I take my leave"
+    - "May fortune favor you"
+  affirmatives:
+    - "Indeed"
+    - "Quite so"
+    - "As you say"
+    - "Most certainly"
+  negatives:
+    - "I think not"
+    - "That would be inadvisable"
+    - "Regrettably, no"
+    - "I must decline"
+  filler_words:
+    - "Perhaps"
+    - "One might consider"
+    - "It would seem"
+    - "As it were"
+  speech_patterns:
+    - "Uses third person self-reference ('One does not simply...')"
+    - "Indirect requests ('It would please me if...')"
+    - "Always uses formal titles"
+    - "Avoids contractions entirely"
+    - "Complex sentence structure with subordinate clauses"
+  example_dialogue:
+    greeting_stranger: "Ah, a visitor. State your business, if you would be so kind."
+    refusing_request: "While I appreciate your... enthusiasm, I fear I must decline."
+    expressing_anger: "This is most vexing. You try my patience, truly."
+    showing_gratitude: "You have my sincere gratitude. Such service shall not be forgotten."
+    giving_orders: "See to it that this matter is resolved with all due haste."
+
+merchant:
+  vocabulary_level: moderate
+  sentence_structure: moderate
+  contractions: occasional
+  swearing_style: mild
+  swear_examples:
+    - "Blast it"
+    - "Coin's curse"
+    - "By the ledger"
+  greetings:
+    - "Welcome, welcome"
+    - "Good day to you"
+    - "What can I help you with"
+    - "A customer! Excellent"
+  farewells:
+    - "Safe travels"
+    - "May your purse stay heavy"
+    - "Come again soon"
+    - "Pleasure doing business"
+  affirmatives:
+    - "Certainly"
+    - "Of course"
+    - "Consider it done"
+    - "We can arrange that"
+  negatives:
+    - "I'm afraid not"
+    - "That's beyond my means"
+    - "Not at that price"
+    - "I cannot in good conscience"
+  filler_words:
+    - "Speaking of value"
+    - "Between you and me"
+    - "I'll tell you what"
+    - "Now then"
+  speech_patterns:
+    - "Relates things to money and trade"
+    - "Tries to find common ground"
+    - "Uses flattery strategically"
+    - "Always looking for the deal"
+    - "Polite but efficient"
+  example_dialogue:
+    greeting_stranger: "Welcome, welcome! You look like someone with discerning taste."
+    refusing_request: "I wish I could help, truly I do, but business is business."
+    expressing_anger: "Now see here! I won't be cheated, not in my own establishment!"
+    showing_gratitude: "A fair deal for both of us. This is how fortunes are made."
+    haggling: "Now now, surely we can come to an arrangement that suits us both..."
+
+commoner:
+  vocabulary_level: simple
+  sentence_structure: short
+  contractions: frequent
+  swearing_style: common
+  swear_examples:
+    - "Bloody hell"
+    - "Damn the rot"
+    - "Gods above"
+    - "Blazes"
+  greetings:
+    - "Hey there"
+    - "Oi"
+    - "What d'ya want"
+    - "Who's this then"
+  farewells:
+    - "See ya"
+    - "Take care now"
+    - "Off with ya"
+    - "Be seein' you"
+  affirmatives:
+    - "Aye"
+    - "Right"
+    - "Sure thing"
+    - "S'pose so"
+  negatives:
+    - "Nah"
+    - "No way"
+    - "Can't do it"
+    - "Not a chance"
+  filler_words:
+    - "Well"
+    - "Y'know"
+    - "Thing is"
+    - "Look"
+  speech_patterns:
+    - "Drops letters ('goin'', 'bout', 'nothin'')"
+    - "Double negatives acceptable"
+    - "Uses first names or nicknames"
+    - "Short, direct sentences"
+    - "May use local dialect words"
+  example_dialogue:
+    greeting_stranger: "Oi, you new 'round here? What're ya after?"
+    refusing_request: "Sorry mate, can't help ya there."
+    expressing_anger: "What in the bloody hell d'ya think you're doin'?!"
+    showing_gratitude: "Thanks, friend. Won't forget this."
+    giving_directions: "Head down that way, past the old mill. Can't miss it."
+
+scholar:
+  vocabulary_level: academic
+  sentence_structure: complex
+  contractions: rarely
+  swearing_style: archaic
+  swear_examples:
+    - "By the ancients"
+    - "Confound these interruptions"
+    - "Fascinating, yet troubling"
+  greetings:
+    - "Greetings"
+    - "Ah, an inquiring mind"
+    - "How may I assist your research"
+    - "Welcome, seeker of knowledge"
+  farewells:
+    - "May wisdom guide you"
+    - "Until our paths cross again"
+    - "Farewell, and good fortune in your studies"
+  affirmatives:
+    - "Precisely"
+    - "That is correct"
+    - "The evidence supports this"
+    - "A logical conclusion"
+  negatives:
+    - "I must respectfully disagree"
+    - "The evidence suggests otherwise"
+    - "That theory has been disproven"
+    - "A common misconception"
+  filler_words:
+    - "Theoretically speaking"
+    - "In my experience"
+    - "The literature suggests"
+    - "If I recall correctly"
+  speech_patterns:
+    - "Uses technical terminology"
+    - "Often cites sources or precedents"
+    - "Tends toward lengthy explanations"
+    - "Qualifies statements carefully"
+    - "May go off on tangents"
+  example_dialogue:
+    greeting_stranger: "Greetings. Are you here seeking knowledge, or merely lost?"
+    refusing_request: "While I appreciate the inquiry, that falls outside my area of expertise."
+    expressing_anger: "This is a gross oversimplification! The nuances are being completely ignored!"
+    showing_gratitude: "Your contribution to my research is most valuable. I shall cite you appropriately."
+    explaining: "You see, the fundamental principle here is quite straightforward once you understand..."
+
+criminal:
+  vocabulary_level: street
+  sentence_structure: short
+  contractions: always
+  swearing_style: crude
+  swear_examples:
+    - "Damn"
+    - "Hell"
+    - "Bloody"
+    - "Bastard"
+  greetings:
+    - "What's this"
+    - "Who're you"
+    - "State your business"
+    - "Got something for me"
+  farewells:
+    - "Watch your back"
+    - "Don't be a stranger"
+    - "You never saw me"
+    - "Keep your mouth shut"
+  affirmatives:
+    - "Done"
+    - "Consider it handled"
+    - "You got it"
+    - "Easy enough"
+  negatives:
+    - "Not worth my time"
+    - "Find someone else"
+    - "Too risky"
+    - "You crazy"
+  filler_words:
+    - "Listen"
+    - "Here's the thing"
+    - "Word is"
+    - "Between us"
+  speech_patterns:
+    - "Speaks in code or euphemisms for illegal activity"
+    - "Always aware of who's listening"
+    - "Establishes dominance in conversation"
+    - "Trust must be earned"
+    - "Information has value"
+  example_dialogue:
+    greeting_stranger: "Don't recognize you. Who sent you?"
+    refusing_request: "Not my problem. Find someone who cares."
+    expressing_anger: "You think you can play me? Big mistake."
+    showing_gratitude: "You're alright. I'll remember this."
+    making_threats: "Be a shame if something happened to that nice shop of yours..."

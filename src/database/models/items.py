@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -208,6 +209,12 @@ class Item(Base, TimestampMixin):
     durability: Mapped[int | None] = mapped_column(
         nullable=True,
         comment="0-100 durability",
+    )
+
+    # Physical properties
+    weight: Mapped[float | None] = mapped_column(
+        nullable=True,
+        comment="Weight in pounds (for encumbrance calculation)",
     )
 
     # Stacking (for consumables)

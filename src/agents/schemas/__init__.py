@@ -1,5 +1,9 @@
 """Pydantic schemas for LLM structured output."""
 
+from src.agents.schemas.arc_generation import (
+    ArcPhaseTemplate,
+    GeneratedArcTemplate,
+)
 from src.agents.schemas.extraction import (
     CharacterExtraction,
     ItemExtraction,
@@ -17,6 +21,7 @@ from src.agents.schemas.goals import (
     GoalUpdate,
     GoalStepResult,
 )
+from src.agents.schemas.voice_generation import GeneratedVoiceTemplate
 from src.agents.schemas.npc_state import (
     # Sub-components
     NPCAppearance,
@@ -52,6 +57,11 @@ from src.agents.schemas.gm_response import (
 )
 
 __all__ = [
+    # Arc generation schemas
+    "ArcPhaseTemplate",
+    "GeneratedArcTemplate",
+    # Voice generation schemas
+    "GeneratedVoiceTemplate",
     # Extraction schemas
     "CharacterExtraction",
     "ItemExtraction",

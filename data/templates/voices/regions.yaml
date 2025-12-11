@@ -1,0 +1,156 @@
+# Regional dialect modifiers
+# These add regional flavor to speech patterns
+
+northern:
+  accent_notes: "Hard consonants, rolling Rs, clipped vowels"
+  vocabulary_replacements:
+    hello: "well met"
+    friend: "kinsman"
+    stranger: "outlander"
+    cold: "bitter"
+    home: "hearth"
+    fight: "clash"
+    brave: "stalwart"
+  regional_expressions:
+    - "By the frost"
+    - "Cold as a witch's heart"
+    - "Sturdy as mountain stone"
+    - "Winter's coming"
+    - "Blood of the north"
+  cultural_notes:
+    - "Values directness and honesty"
+    - "Respects strength and endurance"
+    - "Suspicious of flattery"
+    - "Hospitality is sacred"
+
+southern:
+  accent_notes: "Soft consonants, drawn out vowels, melodic cadence"
+  vocabulary_replacements:
+    hello: "good day, darlin'"
+    friend: "sugar"
+    stranger: "newcomer"
+    hot: "swelterin'"
+    home: "homestead"
+    fight: "tussle"
+    clever: "sharp"
+  regional_expressions:
+    - "Bless your heart"
+    - "Sweet as summer wine"
+    - "Slower than molasses"
+    - "That dog won't hunt"
+    - "Come sit a spell"
+  cultural_notes:
+    - "Emphasizes courtesy and hospitality"
+    - "Indirect when delivering criticism"
+    - "'Bless your heart' can be sincere or cutting"
+    - "Storytelling tradition"
+
+eastern:
+  accent_notes: "Precise pronunciation, formal cadence"
+  vocabulary_replacements:
+    hello: "greetings"
+    friend: "associate"
+    stranger: "visitor"
+    money: "currency"
+    home: "residence"
+    fight: "conflict"
+    smart: "educated"
+  regional_expressions:
+    - "As the scholars say"
+    - "In the old traditions"
+    - "By ancient law"
+    - "The archives record"
+    - "A matter of protocol"
+  cultural_notes:
+    - "Values education and tradition"
+    - "Formal in most situations"
+    - "Bureaucratic tendencies"
+    - "Respects titles and credentials"
+
+western:
+  accent_notes: "Casual, practical tone"
+  vocabulary_replacements:
+    hello: "howdy"
+    friend: "partner"
+    stranger: "newcomer"
+    land: "territory"
+    home: "homestead"
+    fight: "showdown"
+    free: "untamed"
+  regional_expressions:
+    - "Wide open spaces"
+    - "This ain't my first rodeo"
+    - "Straight shooter"
+    - "Head for the hills"
+    - "Freedom of the frontier"
+  cultural_notes:
+    - "Values independence and self-reliance"
+    - "Informal and practical"
+    - "Actions speak louder than words"
+    - "Respects those who earn their way"
+
+coastal:
+  accent_notes: "Rhythmic, influenced by maritime culture"
+  vocabulary_replacements:
+    hello: "ahoy"
+    friend: "mate"
+    stranger: "landlubber"
+    storm: "tempest"
+    home: "port"
+    fight: "scrap"
+    wealth: "treasure"
+  regional_expressions:
+    - "Smooth sailing"
+    - "All hands on deck"
+    - "Weather the storm"
+    - "Ships that pass"
+    - "Lost at sea"
+  cultural_notes:
+    - "Superstitious about the sea"
+    - "Values freedom and adventure"
+    - "Shares stories of voyages"
+    - "Distrustful of landlocked folk"
+
+mountain:
+  accent_notes: "Slow, deliberate, echoing quality"
+  vocabulary_replacements:
+    hello: "well now"
+    friend: "neighbor"
+    stranger: "valley folk"
+    home: "holler"
+    fight: "feud"
+    family: "kin"
+    stubborn: "set in their ways"
+  regional_expressions:
+    - "High country ways"
+    - "Older than these mountains"
+    - "Blood runs deep"
+    - "Set in stone"
+    - "Born of the rock"
+  cultural_notes:
+    - "Values family and tradition above all"
+    - "Slow to trust outsiders"
+    - "Long memories for slights"
+    - "Deeply connected to the land"
+
+urban:
+  accent_notes: "Quick, clipped, efficiency-focused"
+  vocabulary_replacements:
+    hello: "hey"
+    friend: "contact"
+    stranger: "new in town"
+    home: "place"
+    money: "coin"
+    fight: "altercation"
+    busy: "slammed"
+  regional_expressions:
+    - "Time is money"
+    - "Know the right people"
+    - "Word on the street"
+    - "Nothing personal, just business"
+    - "City never sleeps"
+  cultural_notes:
+    - "Values connections and information"
+    - "Fast-paced interactions"
+    - "Everything has a price"
+    - "Privacy is valued"
