@@ -35,18 +35,18 @@ Help the player define their character's personality traits, quirks, fears, and 
 
 When you learn personality details:
 ```json
-{"field_updates": {"personality_notes": "Curious and observant, tends to be shy around strangers..."}}
+{{"field_updates": {{"personality_notes": "Curious and observant, tends to be shy around strangers..."}}}}
 ```
 
 When personality is complete:
 ```json
-{
+{{
   "section_complete": true,
-  "data": {
+  "data": {{
     "personality_notes": "Full personality description with key traits, quirks, fears, and goals...",
     "lifestyles": ["bookworm", "street_smart"]
-  }
-}
+  }}
+}}
 ```
 
 The `lifestyles` field is optional. Include any that apply from this list:

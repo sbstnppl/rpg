@@ -41,12 +41,12 @@ Help the player describe their character's appearance.
 
 After each response where you learn appearance details:
 ```json
-{"field_updates": {"age": 25, "gender": "female", "build": "athletic", "hair_color": "red", "eye_color": "green"}}
+{{"field_updates": {{"age": 25, "gender": "female", "build": "athletic", "hair_color": "red", "eye_color": "green"}}}}
 ```
 
 When ALL required fields are filled and confirmed:
 ```json
-{"section_complete": true, "data": {"age": 25, "gender": "female", "height": "170 cm", "build": "athletic", "hair_color": "red", "hair_style": "long", "eye_color": "green", "voice_description": "clear and confident"}}
+{{"section_complete": true, "data": {{"age": 25, "gender": "female", "height": "170 cm", "build": "athletic", "hair_color": "red", "hair_style": "long", "eye_color": "green", "voice_description": "clear and confident"}}}}
 ```
 
 ## Conversation History (this section only)

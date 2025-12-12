@@ -55,20 +55,20 @@ Examples:
 
 When you learn background details:
 ```json
-{"field_updates": {"background": "Brief summary of what you've learned so far..."}}
+{{"field_updates": {{"background": "Brief summary of what you've learned so far..."}}}}
 ```
 
 When the background is complete:
 ```json
-{
+{{
   "section_complete": true,
-  "data": {
+  "data": {{
     "background": "Full background story text...",
     "occupation": "farmer",
     "occupation_years": 3,
     "hidden_backstory": "Unknown to [name], their father was actually a disgraced knight who..."
-  }
-}
+  }}
+}}
 ```
 
 ## Conversation History (this section only)

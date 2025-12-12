@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Character Creation Wizard KeyError** - Fixed `KeyError: '"section_complete"'` that occurred when starting a new game. The bug was caused by JSON examples in wizard templates (`data/templates/wizard/*.md`) containing unescaped braces that Python's `str.format()` interpreted as format placeholders. Fixed by escaping braces in all wizard template JSON examples.
+
 ### Added
+- **Comprehensive E2E Tests for CLI Commands** - 45 new tests covering all game commands
+  - Tests for `rpg game` commands: start, list, delete, play, turn
+  - Tests for `rpg world` commands: time, locations, npcs, events, zones
+  - Tests for `rpg character` commands: status, inventory
+  - Tests for wizard response JSON parsing with edge cases
+  - Tests for character record creation
+  - Tests for session isolation and cascade deletion
+  - Tests for error handling and edge cases
+
 - **Urban Fantasy Setting** - Contemporary world with secret magic societies
   - Full setting configuration (`data/settings/urban_fantasy.json`)
     - 7 attributes including Willpower for magic

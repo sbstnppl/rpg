@@ -32,7 +32,7 @@ Help the player choose a name (and species if multiple are available).
 
 When the player provides or confirms a name:
 ```json
-{"section_complete": true, "data": {"name": "CharacterName", "species": "human"}}
+{{"section_complete": true, "data": {{"name": "CharacterName", "species": "human"}}}}
 ```
 
 Species defaults to "human" if not specified or if the setting only has humans.
