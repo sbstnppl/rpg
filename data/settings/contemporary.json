@@ -1,6 +1,7 @@
 {
   "name": "contemporary",
   "description": "Modern-day setting. Characters navigate urban environments, deal with everyday challenges, and may encounter subtle supernatural elements.",
+  "species": ["Human"],
   "attributes": [
     {
       "key": "strength",

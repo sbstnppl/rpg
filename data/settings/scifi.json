@@ -1,6 +1,7 @@
 {
   "name": "scifi",
   "description": "Far-future science fiction setting. Characters explore space, interact with advanced technology, and may encounter alien species.",
+  "species": ["Human", "Android", "Cyborg", "Alien (Humanoid)", "Uplifted Animal"],
   "attributes": [
     {
       "key": "physical",

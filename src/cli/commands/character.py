@@ -198,8 +198,8 @@ class CharacterCreationState:
 class WizardSectionName(str, Enum):
     """Names of wizard sections in order."""
 
-    NAME = "name"
-    APPEARANCE = "appearance"
+    SPECIES = "species"  # Species & Gender (was NAME)
+    NAME = "name"  # Name & Appearance (was APPEARANCE)
     BACKGROUND = "background"
     PERSONALITY = "personality"
     ATTRIBUTES = "attributes"
@@ -208,8 +208,8 @@ class WizardSectionName(str, Enum):
 
 # Section display order
 WIZARD_SECTION_ORDER = [
+    WizardSectionName.SPECIES,
     WizardSectionName.NAME,
-    WizardSectionName.APPEARANCE,
     WizardSectionName.BACKGROUND,
     WizardSectionName.PERSONALITY,
     WizardSectionName.ATTRIBUTES,
@@ -218,8 +218,8 @@ WIZARD_SECTION_ORDER = [
 
 # Section display names
 WIZARD_SECTION_TITLES = {
-    WizardSectionName.NAME: "Name & Species",
-    WizardSectionName.APPEARANCE: "Appearance",
+    WizardSectionName.SPECIES: "Species & Gender",
+    WizardSectionName.NAME: "Name & Appearance",
     WizardSectionName.BACKGROUND: "Background",
     WizardSectionName.PERSONALITY: "Personality",
     WizardSectionName.ATTRIBUTES: "Attributes",
@@ -228,8 +228,8 @@ WIZARD_SECTION_TITLES = {
 
 # Required fields per section
 WIZARD_SECTION_REQUIREMENTS: dict[WizardSectionName, list[str]] = {
-    WizardSectionName.NAME: ["name"],
-    WizardSectionName.APPEARANCE: ["age", "gender", "build", "hair_color", "eye_color"],
+    WizardSectionName.SPECIES: ["species", "gender"],
+    WizardSectionName.NAME: ["name", "age", "build", "hair_color", "eye_color"],
     WizardSectionName.BACKGROUND: ["background"],
     WizardSectionName.PERSONALITY: ["personality_notes"],
     WizardSectionName.ATTRIBUTES: ["attributes"],
@@ -239,23 +239,23 @@ WIZARD_SECTION_REQUIREMENTS: dict[WizardSectionName, list[str]] = {
 # Prerequisites: which sections must be complete before accessing a section
 # Allows sequential unlocking while permitting revisiting completed sections
 WIZARD_SECTION_PREREQUISITES: dict[WizardSectionName, list[WizardSectionName]] = {
-    WizardSectionName.NAME: [],  # No prerequisites
-    WizardSectionName.APPEARANCE: [WizardSectionName.NAME],
-    WizardSectionName.BACKGROUND: [WizardSectionName.NAME, WizardSectionName.APPEARANCE],
+    WizardSectionName.SPECIES: [],  # No prerequisites
+    WizardSectionName.NAME: [WizardSectionName.SPECIES],
+    WizardSectionName.BACKGROUND: [WizardSectionName.SPECIES, WizardSectionName.NAME],
     WizardSectionName.PERSONALITY: [
+        WizardSectionName.SPECIES,
         WizardSectionName.NAME,
-        WizardSectionName.APPEARANCE,
         WizardSectionName.BACKGROUND,
     ],
     WizardSectionName.ATTRIBUTES: [
+        WizardSectionName.SPECIES,
         WizardSectionName.NAME,
-        WizardSectionName.APPEARANCE,
         WizardSectionName.BACKGROUND,
         WizardSectionName.PERSONALITY,
     ],
     WizardSectionName.REVIEW: [
+        WizardSectionName.SPECIES,
         WizardSectionName.NAME,
-        WizardSectionName.APPEARANCE,
         WizardSectionName.BACKGROUND,
         WizardSectionName.PERSONALITY,
         WizardSectionName.ATTRIBUTES,
@@ -2941,7 +2941,32 @@ async def _run_section_conversation(
 
     # Section-specific context preparation
     extra_context = {}
-    if section_name == WizardSectionName.ATTRIBUTES:
+
+    if section_name == WizardSectionName.NAME:
+        # Show what name/appearance fields have been saved so far
+        char = wizard_state.character
+        appearance_fields = []
+        for field, label in [
+            ("name", "Name"),
+            ("age", "Age"),
+            ("build", "Build"),
+            ("hair_color", "Hair color"),
+            ("eye_color", "Eye color"),
+            ("height", "Height"),
+            ("hair_style", "Hair style"),
+            ("skin_tone", "Skin tone"),
+        ]:
+            value = getattr(char, field, None)
+            if value:
+                appearance_fields.append(f"- {label}: {value} [SAVED]")
+            else:
+                is_required = field in ["name", "age", "build", "hair_color", "eye_color"]
+                marker = "[REQUIRED - NOT YET SAVED]" if is_required else "[optional]"
+                appearance_fields.append(f"- {label}: {marker}")
+
+        extra_context["current_appearance_fields"] = "\n".join(appearance_fields)
+
+    elif section_name == WizardSectionName.ATTRIBUTES:
         # For attributes, we need to roll potential and calculate current
         from src.services.attribute_calculator import (
             roll_potential_stats,
@@ -3018,6 +3043,29 @@ async def _run_section_conversation(
 
         section.conversation_history.append(f"Player: {player_input}")
 
+        # Update name/appearance fields context (so AI sees latest saved state)
+        if section_name == WizardSectionName.NAME:
+            char = wizard_state.character
+            appearance_fields = []
+            for field, label in [
+                ("name", "Name"),
+                ("age", "Age"),
+                ("build", "Build"),
+                ("hair_color", "Hair color"),
+                ("eye_color", "Eye color"),
+                ("height", "Height"),
+                ("hair_style", "Hair style"),
+                ("skin_tone", "Skin tone"),
+            ]:
+                value = getattr(char, field, None)
+                if value:
+                    appearance_fields.append(f"- {label}: {value} [SAVED]")
+                else:
+                    is_required = field in ["name", "age", "build", "hair_color", "eye_color"]
+                    marker = "[REQUIRED - NOT YET SAVED]" if is_required else "[optional]"
+                    appearance_fields.append(f"- {label}: {marker}")
+            extra_context["current_appearance_fields"] = "\n".join(appearance_fields)
+
         # Build prompt
         prompt = template.format(
             setting_name=schema.name,
@@ -3052,9 +3100,19 @@ async def _run_section_conversation(
             if section_complete:
                 if section_data:
                     _apply_wizard_section_data(wizard_state, section_name, section_data)
-                section.status = "complete"
-                display_section_complete(title)
-                return True
+
+                # Validate that all required fields are actually filled
+                if section.is_complete(wizard_state.character):
+                    section.status = "complete"
+                    display_section_complete(title)
+                    return True
+                else:
+                    # AI said complete but required fields are missing
+                    missing = section.get_missing_fields(wizard_state.character)
+                    if missing:
+                        console.print(
+                            f"[yellow]Still need: {', '.join(missing)}[/yellow]"
+                        )
 
         except Exception as e:
             display_error(f"AI error: {e}")

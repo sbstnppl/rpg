@@ -116,6 +116,7 @@ class SettingSchema:
 
     name: str
     description: str = ""
+    species: list[str] = field(default_factory=lambda: ["Human"])
     attributes: list[AttributeDefinition] = field(default_factory=list)
     point_buy_total: int = 27
     point_buy_min: int = 8
@@ -216,6 +217,7 @@ def _parse_setting_json(data: dict[str, Any]) -> SettingSchema:
     return SettingSchema(
         name=data["name"],
         description=data.get("description", ""),
+        species=data.get("species", ["Human"]),
         attributes=attributes,
         point_buy_total=point_buy.get("total_points", 27),
         point_buy_min=point_buy.get("min_value", 8),
