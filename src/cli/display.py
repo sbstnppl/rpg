@@ -780,6 +780,7 @@ def display_character_wizard_menu(
     section_statuses: dict[str, str],
     section_titles: dict[str, str],
     section_order: list[str],
+    section_accessible: dict[str, bool] | None = None,
 ) -> None:
     """Display the character creation wizard menu.
 
@@ -787,6 +788,8 @@ def display_character_wizard_menu(
         section_statuses: Dict of section_name -> status ("not_started", "in_progress", "complete")
         section_titles: Dict of section_name -> display title
         section_order: List of section names in display order
+        section_accessible: Optional dict of section_name -> is_accessible. If None, all sections
+            are considered accessible. Locked sections show [-] indicator.
     """
     console.print()
 
@@ -795,9 +798,16 @@ def display_character_wizard_menu(
     for i, section_name in enumerate(section_order, 1):
         title = section_titles.get(section_name, section_name.title())
         status = section_statuses.get(section_name, "not_started")
+        is_accessible = (
+            section_accessible.get(section_name, True)
+            if section_accessible
+            else True
+        )
 
-        # Status indicator
-        if status == "complete":
+        # Status indicator - locked takes priority over not_started
+        if not is_accessible:
+            status_text = "[dim][-][/dim]"
+        elif status == "complete":
             status_text = "[green][✓][/green]"
         elif status == "in_progress":
             status_text = "[yellow][~][/yellow]"

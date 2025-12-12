@@ -98,6 +98,9 @@ class CharacterCreationState:
     # Conversation history for context
     conversation_history: list[str] = field(default_factory=list)
 
+    # Whether the user has confirmed the character in the Review section
+    confirmed: bool = False
+
     def get_missing_groups(self) -> list[str]:
         """Return list of incomplete group names.
 
@@ -233,6 +236,32 @@ WIZARD_SECTION_REQUIREMENTS: dict[WizardSectionName, list[str]] = {
     WizardSectionName.REVIEW: [],  # No fields, just confirmation
 }
 
+# Prerequisites: which sections must be complete before accessing a section
+# Allows sequential unlocking while permitting revisiting completed sections
+WIZARD_SECTION_PREREQUISITES: dict[WizardSectionName, list[WizardSectionName]] = {
+    WizardSectionName.NAME: [],  # No prerequisites
+    WizardSectionName.APPEARANCE: [WizardSectionName.NAME],
+    WizardSectionName.BACKGROUND: [WizardSectionName.NAME, WizardSectionName.APPEARANCE],
+    WizardSectionName.PERSONALITY: [
+        WizardSectionName.NAME,
+        WizardSectionName.APPEARANCE,
+        WizardSectionName.BACKGROUND,
+    ],
+    WizardSectionName.ATTRIBUTES: [
+        WizardSectionName.NAME,
+        WizardSectionName.APPEARANCE,
+        WizardSectionName.BACKGROUND,
+        WizardSectionName.PERSONALITY,
+    ],
+    WizardSectionName.REVIEW: [
+        WizardSectionName.NAME,
+        WizardSectionName.APPEARANCE,
+        WizardSectionName.BACKGROUND,
+        WizardSectionName.PERSONALITY,
+        WizardSectionName.ATTRIBUTES,
+    ],
+}
+
 
 @dataclass
 class WizardSection:
@@ -258,6 +287,10 @@ class WizardSection:
         Returns:
             True if all required fields for this section are filled.
         """
+        # REVIEW section requires explicit confirmation, not just empty requirements
+        if self.name == WizardSectionName.REVIEW:
+            return character_state.confirmed
+
         requirements = WIZARD_SECTION_REQUIREMENTS.get(self.name, [])
 
         for field_name in requirements:
@@ -374,6 +407,25 @@ class CharacterWizardState:
             if section_name == WizardSectionName.REVIEW:
                 continue
             if self.get_section_status(section_name) != "complete":
+                return False
+        return True
+
+    def is_section_accessible(self, section_name: WizardSectionName) -> bool:
+        """Check if a section can be accessed based on prerequisites.
+
+        Sections unlock sequentially - a section is accessible if all its
+        prerequisites are complete. Once completed, sections remain accessible
+        for editing.
+
+        Args:
+            section_name: The section to check accessibility for.
+
+        Returns:
+            True if the section can be accessed.
+        """
+        prerequisites = WIZARD_SECTION_PREREQUISITES.get(section_name, [])
+        for prereq in prerequisites:
+            if self.get_section_status(prereq) != "complete":
                 return False
         return True
 
@@ -3127,8 +3179,14 @@ async def _wizard_character_creation_async(
         }
         order = [section.value for section in WIZARD_SECTION_ORDER]
 
-        # Display menu
-        display_character_wizard_menu(statuses, titles, order)
+        # Build section accessibility
+        accessible = {
+            section.value: wizard_state.is_section_accessible(section)
+            for section in WIZARD_SECTION_ORDER
+        }
+
+        # Display menu with accessibility info
+        display_character_wizard_menu(statuses, titles, order, accessible)
 
         # Check if ready for review
         can_review = wizard_state.is_ready_for_review()
@@ -3143,6 +3201,11 @@ async def _wizard_character_creation_async(
         # Convert choice to section name
         section_idx = choice - 1 if isinstance(choice, int) else len(order) - 1
         section_name = WIZARD_SECTION_ORDER[section_idx]
+
+        # Check if section is accessible (prerequisites complete)
+        if not wizard_state.is_section_accessible(section_name):
+            display_error("Complete previous sections first.")
+            continue
 
         # Handle review section
         if section_name == WizardSectionName.REVIEW:
@@ -3173,6 +3236,7 @@ async def _wizard_character_creation_async(
             # Confirm or edit
             result = prompt_review_confirmation()
             if result == 'confirm':
+                wizard_state.character.confirmed = True
                 console.print("\n[bold green]Character creation complete![/bold green]")
                 return wizard_state
             elif result == 'quit':
