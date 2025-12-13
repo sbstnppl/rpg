@@ -41,6 +41,7 @@ from src.database.models.session import GameSession
 from src.database.models.world import TimeState
 from src.llm.factory import get_extraction_provider
 from src.llm.message_types import Message
+from src.services.preference_calculator import generate_preferences
 
 
 logger = logging.getLogger(__name__)
@@ -325,7 +326,30 @@ class NPCGeneratorService:
 
             self._create_npc_skills(entity.id, generation_result.skills)
             self._create_npc_inventory(entity, generation_result.inventory)
-            self._create_npc_preferences(entity.id, generation_result.preferences)
+
+            # Generate preferences using formula-based calculator (not LLM)
+            gender = generation_result.appearance.gender or "other"
+            age = generation_result.appearance.age or 25
+            formula_prefs = generate_preferences(gender, age)
+
+            # Convert to NPCPreferences schema for _create_npc_preferences
+            npc_preferences = NPCPreferences(
+                social_tendency=formula_prefs.social_tendency,
+                preferred_group_size=formula_prefs.preferred_group_size,
+                drive_level=formula_prefs.drive_level,
+                intimacy_style=formula_prefs.intimacy_style,
+                alcohol_tolerance=formula_prefs.alcohol_tolerance,
+                favorite_foods=formula_prefs.favorite_foods,
+                disliked_foods=formula_prefs.disliked_foods,
+                is_greedy_eater=formula_prefs.is_greedy_eater,
+                is_picky_eater=formula_prefs.is_picky_eater,
+                is_social_butterfly=formula_prefs.is_social_butterfly,
+                is_loner=formula_prefs.is_loner,
+                has_high_stamina=formula_prefs.has_high_stamina,
+                has_low_stamina=formula_prefs.has_low_stamina,
+            )
+
+            self._create_npc_preferences(entity.id, npc_preferences)
             self._create_npc_needs(entity.id, generation_result.initial_needs)
 
             self.db.flush()

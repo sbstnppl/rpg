@@ -56,6 +56,13 @@ from src.database.models.enums import (
 from src.database.models.items import Item
 from src.database.models.session import GameSession
 from src.database.models.world import TimeState
+from src.services.preference_calculator import (
+    PHYSICAL_ATTRACTION_TRAITS,
+    PERSONALITY_ATTRACTION_TRAITS,
+    generate_gender_attraction,
+    generate_age_offset,
+    generate_preferences,
+)
 
 if TYPE_CHECKING:
     pass
@@ -492,23 +499,7 @@ OCCUPATION_INVENTORY: dict[str, list[dict[str, Any]]] = {
     ],
 }
 
-# Physical attraction traits
-PHYSICAL_ATTRACTION_TRAITS = [
-    "lean build", "muscular build", "athletic build", "soft curves",
-    "dark hair", "light hair", "red hair", "long hair", "short hair",
-    "tall stature", "average height", "shorter stature",
-    "sharp features", "soft features", "strong jaw", "delicate features",
-    "bright eyes", "dark eyes", "expressive face", "mysterious look",
-    "well-groomed", "rugged appearance", "elegant bearing", "warm smile",
-]
-
-# Personality attraction traits
-PERSONALITY_ATTRACTION_TRAITS = [
-    "confidence", "kindness", "wit", "humor", "intelligence", "strength",
-    "gentleness", "passion", "ambition", "creativity", "mystery", "warmth",
-    "stability", "adventurousness", "wisdom", "charm", "honesty", "loyalty",
-    "protectiveness", "sensitivity", "assertiveness", "playfulness",
-]
+# Physical and personality attraction traits are imported from preference_calculator
 
 
 # =============================================================================
@@ -1542,10 +1533,7 @@ Generate occupation details that fit naturally in this setting."""
     def _generate_gender_attraction(self, npc_gender: str) -> list[str]:
         """Generate attracted-to genders with realistic probability distribution.
 
-        Based on real-world statistics:
-        - ~90-95% heterosexual
-        - ~3-5% homosexual
-        - ~2-4% bisexual
+        Delegates to shared preference_calculator module.
 
         Args:
             npc_gender: The NPC's gender.
@@ -1553,34 +1541,12 @@ Generate occupation details that fit naturally in this setting."""
         Returns:
             List of genders the NPC is attracted to.
         """
-        roll = random.random()
-
-        if npc_gender == "male":
-            if roll < 0.92:
-                return ["female"]           # Heterosexual
-            elif roll < 0.97:
-                return ["male"]             # Homosexual
-            else:
-                return ["male", "female"]   # Bisexual
-        elif npc_gender == "female":
-            if roll < 0.90:
-                return ["male"]             # Heterosexual
-            elif roll < 0.96:
-                return ["female"]           # Homosexual
-            else:
-                return ["male", "female"]   # Bisexual
-        else:
-            # Non-binary or other: random distribution
-            return random.choice([["male"], ["female"], ["male", "female"]])
+        return generate_gender_attraction(npc_gender)
 
     def _generate_age_offset(self, npc_age: int) -> int:
         """Generate fixed age preference offset at character creation.
 
-        Uses a truncated skew-normal distribution where:
-        - Most NPCs prefer similar ages (offset ~0)
-        - Spread scales with age (older NPCs have wider preference spread)
-        - Young adults slightly prefer older, older adults prefer younger
-        - Bounds ensure adults prefer 18+, minors can prefer minors
+        Delegates to shared preference_calculator module.
 
         Args:
             npc_age: The NPC's age.
@@ -1589,43 +1555,7 @@ Generate occupation details that fit naturally in this setting."""
             Integer offset from NPC's age to their preferred partner age.
             Example: offset=5 means NPC prefers partners 5 years older.
         """
-        # Spread scales with age: older NPCs have wider preference spread
-        sigma = 5.0 * math.sqrt(npc_age / 40)
-
-        # Age-dependent skew (young prefer older, old prefer younger)
-        if npc_age < 25:
-            skew = 0.5  # Slight preference for older
-        elif npc_age < 40:
-            skew = 0.0  # Symmetric
-        elif npc_age < 55:
-            skew = -0.3  # Slight preference for younger
-        else:
-            skew = -0.8  # Stronger preference for younger
-
-        # Asymmetric bounds - minors can prefer minors, adults must prefer 18+
-        max_partner_age = 85
-        if npc_age < 18:
-            # Minors: can prefer down to ~2 years younger, but not below 10
-            min_offset = max(10 - npc_age, -2)
-            max_offset = min(max_partner_age - npc_age, max(30, npc_age - 10))
-        else:
-            # Adults: must prefer 16+
-            min_offset = 16 - npc_age  # 18yo: -2, 40yo: -24, 70yo: -54
-            max_offset = min(max_partner_age - npc_age, max(30, npc_age - 10))
-
-        # Sample from skew-normal with rejection sampling
-        max_iterations = 1000
-        for _ in range(max_iterations):
-            u = random.gauss(0, 1)
-            v = random.gauss(0, 1)
-            delta = skew / math.sqrt(1 + skew**2)
-            x = delta * abs(u) + math.sqrt(1 - delta**2) * v
-            offset = x * sigma
-            if min_offset <= offset <= max_offset:
-                return int(round(offset))
-
-        # Fallback: clamp to bounds (should rarely happen)
-        return int(round(max(min_offset, min(max_offset, 0))))
+        return generate_age_offset(npc_age)
 
     def _generate_preferences(
         self,
@@ -1635,160 +1565,48 @@ Generate occupation details that fit naturally in this setting."""
     ) -> NPCPreferences:
         """Generate preferences including attraction traits.
 
+        Delegates to shared preference_calculator module and converts
+        to NPCPreferences Pydantic model.
+
         Args:
             gender: NPC's gender for attraction generation.
             age: NPC's age for age-attraction preferences.
-            personality: NPC's personality traits.
+            personality: NPC's personality traits (currently unused but kept for API).
 
         Returns:
             NPCPreferences with all preference fields populated.
         """
-        # Gender and age attraction
-        attracted_to_genders = self._generate_gender_attraction(gender)
-        offset = self._generate_age_offset(age)
+        # Generate preferences using shared calculator
+        prefs = generate_preferences(gender, age)
 
-        # Physical attraction (2-4 traits)
-        attracted_physical = random.sample(PHYSICAL_ATTRACTION_TRAITS, random.randint(2, 4))
-
-        # Personality attraction (2-4 traits)
-        attracted_personality = random.sample(PERSONALITY_ATTRACTION_TRAITS, random.randint(2, 4))
-
-        # Food/drink lists
-        all_foods = [
-            "honey cakes", "roasted chicken", "fresh bread", "apple pie",
-            "stew", "grilled fish", "cheese", "berries", "meat pies",
-            "porridge", "liver", "onions", "turnips", "bitter greens",
-            "pickled vegetables", "boiled cabbage", "fish stew", "mutton",
-        ]
-        all_drinks = [
-            "ale", "wine", "mead", "cider", "water", "milk", "tea",
-            "herbal tea", "fruit juice", "hot chocolate", "coffee",
-        ]
-
-        # Favorites
-        favorite_foods = random.sample(all_foods[:9], random.randint(1, 3))
-        favorite_drinks = random.sample(all_drinks, random.randint(1, 2))
-
-        # Disliked (exclude favorites)
-        available_for_dislike = [f for f in all_foods if f not in favorite_foods]
-        disliked_foods = random.sample(available_for_dislike, random.randint(1, 3))
-        available_drinks_dislike = [d for d in all_drinks if d not in favorite_drinks]
-        disliked_drinks = random.sample(available_drinks_dislike, random.randint(0, 2))
-
-        favorite_activities = random.sample([
-            "reading", "music", "gardening", "cooking", "dancing",
-            "hunting", "crafting", "storytelling", "exploring", "games",
-        ], random.randint(1, 3))
-
-        # Dislikes (personality/behavior dislikes)
-        dislikes = random.sample([
-            "arrogance", "cruelty", "loud crowds", "dishonesty", "rudeness",
-            "laziness", "cowardice", "waste", "violence", "prejudice",
-        ], random.randint(2, 4))
-
-        # Fears (1-2)
-        fears = random.sample([
-            "rejection", "being alone", "failure", "heights", "darkness",
-            "crowds", "death", "poverty", "embarrassment", "losing loved ones",
-        ], random.randint(1, 2))
-
-        # Food preferences (booleans) - low probability for special diets
-        is_vegetarian = random.random() < 0.08
-        is_vegan = random.random() < 0.02 if not is_vegetarian else False
-        is_greedy_eater = random.random() < 0.15
-        is_picky_eater = random.random() < 0.20 if not is_greedy_eater else False
-
-        # Food allergies (5% chance)
-        food_allergies: list[str] = []
-        if random.random() < 0.05:
-            allergy_options = ["nuts", "shellfish", "dairy", "eggs", "wheat"]
-            food_allergies = random.sample(allergy_options, random.randint(1, 2))
-
-        # Alcohol preferences - correlated with age
-        if age < 16:
-            is_alcoholic = False
-            is_teetotaler = random.random() < 0.80  # Most minors don't drink
-        else:
-            is_alcoholic = random.random() < 0.05
-            is_teetotaler = random.random() < 0.15 if not is_alcoholic else False
-
-        # Intimacy preferences
-        drive_roll = random.random()
-        if age < 10:
-            # Children have no drive
-            drive_level = "low"
-            drive_threshold = 0
-            is_actively_seeking = False
-        if age < 16:
-            # Minors have lower/developing drive
-            drive_level = "low"
-            drive_threshold = 70 + random.randint(0, 20)  # Higher threshold
-            is_actively_seeking = False
-            if drive_roll < 0.3 + 0.1 * (16 - age):
-                drive_level = "low"
-                drive_threshold = 60 + random.randint(0, 30)
-            elif drive_roll < 0.77 + 0.03 * (16 - age):
-                drive_level = "moderate"
-                drive_threshold = 40 + random.randint(0, 30)
-            else:
-                drive_level = "high"
-                drive_threshold = 20 + random.randint(0, 30)
-            is_actively_seeking = random.random() < 0.30
-        else:
-            if drive_roll < 0.25:
-                drive_level = "low"
-                drive_threshold = 60 + random.randint(0, 30)
-            elif drive_roll < 0.75:
-                drive_level = "moderate"
-                drive_threshold = 40 + random.randint(0, 30)
-            else:
-                drive_level = "high"
-                drive_threshold = 20 + random.randint(0, 30)
-            is_actively_seeking = random.random() < 0.30
-
-        # Partnership status (correlates with age)
-        if age < 16:
-            has_regular_partner = random.random() < 0.25 - 0.025 * (16 - age)  # Young crushes
-        elif age < 30:
-            has_regular_partner = random.random() < 0.35
-        elif age < 50:
-            has_regular_partner = random.random() < 0.65
-        else:
-            has_regular_partner = random.random() < 0.55
-
-        # Stamina/sleep preferences
-        has_high_stamina = random.random() < 0.20
-        has_low_stamina = random.random() < 0.20 if not has_high_stamina else False
-        is_insomniac = random.random() < 0.10
-        is_heavy_sleeper = random.random() < 0.15 if not is_insomniac else False
-
+        # Convert dataclass to Pydantic model
         return NPCPreferences(
-            attracted_to_genders=attracted_to_genders,
-            attracted_age_offset=offset,
-            attracted_to_physical=attracted_physical,
-            attracted_to_personality=attracted_personality,
-            favorite_foods=favorite_foods,
-            disliked_foods=disliked_foods,
-            is_vegetarian=is_vegetarian,
-            is_vegan=is_vegan,
-            food_allergies=food_allergies,
-            is_greedy_eater=is_greedy_eater,
-            is_picky_eater=is_picky_eater,
-            favorite_drinks=favorite_drinks,
-            disliked_drinks=disliked_drinks,
-            is_alcoholic=is_alcoholic,
-            is_teetotaler=is_teetotaler,
-            favorite_activities=favorite_activities,
-            dislikes=dislikes,
-            fears=fears,
-            drive_level=drive_level,
-            drive_threshold=drive_threshold,
-            has_regular_partner=has_regular_partner,
-            is_actively_seeking=is_actively_seeking,
-            has_high_stamina=has_high_stamina,
-            has_low_stamina=has_low_stamina,
-            is_insomniac=is_insomniac,
-            is_heavy_sleeper=is_heavy_sleeper,
+            attracted_to_genders=prefs.attracted_to_genders,
+            attracted_age_offset=prefs.attracted_age_offset,
+            attracted_to_physical=prefs.attracted_to_physical,
+            attracted_to_personality=prefs.attracted_to_personality,
+            favorite_foods=prefs.favorite_foods,
+            disliked_foods=prefs.disliked_foods,
+            is_vegetarian=prefs.is_vegetarian,
+            is_vegan=prefs.is_vegan,
+            food_allergies=prefs.food_allergies,
+            is_greedy_eater=prefs.is_greedy_eater,
+            is_picky_eater=prefs.is_picky_eater,
+            favorite_drinks=prefs.favorite_drinks,
+            disliked_drinks=prefs.disliked_drinks,
+            is_alcoholic=prefs.is_alcoholic,
+            is_teetotaler=prefs.is_teetotaler,
+            favorite_activities=prefs.favorite_activities,
+            dislikes=prefs.dislikes,
+            fears=prefs.fears,
+            drive_level=prefs.drive_level,
+            drive_threshold=prefs.drive_threshold,
+            has_regular_partner=prefs.has_regular_partner,
+            is_actively_seeking=prefs.is_actively_seeking,
+            has_high_stamina=prefs.has_high_stamina,
+            has_low_stamina=prefs.has_low_stamina,
+            is_insomniac=prefs.is_insomniac,
+            is_heavy_sleeper=prefs.is_heavy_sleeper,
         )
 
     def _generate_needs(

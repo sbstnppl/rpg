@@ -72,18 +72,7 @@ Include:
 - Clothing appropriate for their status/occupation
 - Mark equipped items with `is_equipped: true` and appropriate `body_slot`
 
-### 5. Preferences
-
-Set personality-driven preferences:
-
-- `social_tendency`: Based on personality (introvert, ambivert, extrovert)
-- `drive_level`: Contextual to character age and role (asexual, very_low, low, moderate, high, very_high)
-- `intimacy_style`: How they approach relationships (casual, emotional, monogamous, polyamorous)
-- `alcohol_tolerance`: Based on occupation and lifestyle (none, low, moderate, high, very_high)
-- `favorite_foods` and `disliked_foods`: Lists appropriate for setting
-- Trait flags if applicable: `is_greedy_eater`, `is_picky_eater`, `is_social_butterfly`, `is_loner`, `has_high_stamina`, `has_low_stamina`
-
-### 6. Initial Needs
+### 5. Initial Needs
 
 Set context-aware starting values (0-100, higher = better):
 
@@ -124,11 +113,6 @@ Return a JSON object matching the NPCGenerationResult schema:
     {{"item_key": "...", "display_name": "...", "item_type": "...", ...}},
     ...
   ],
-  "preferences": {{
-    "social_tendency": "...",
-    "drive_level": "...",
-    ...
-  }},
   "initial_needs": {{
     "hunger": ...,
     "thirst": ...,
@@ -137,5 +121,7 @@ Return a JSON object matching the NPCGenerationResult schema:
   }}
 }}
 ```
+
+Note: Preferences (social_tendency, drive_level, etc.) are generated automatically by the system using probability distributions - do not include them in the output.
 
 Generate the NPC data now.
