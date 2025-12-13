@@ -7,10 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Species-Specific Gender Options** - Genders are now defined per species in setting configurations
+  - Added `SpeciesDefinition` dataclass to `src/schemas/settings.py` with `name` and `genders` fields
+  - Updated all setting JSON files to use the new species object format
+  - Different species can have different genders (e.g., Androids have "None", "Male-presenting", "Female-presenting")
+  - Backward compatible: legacy string format still supported
+  - Updated wizard template to show species-specific gender options
+
 ### Fixed
+- **JSON Output in Wizard Display** - Fixed `section_complete` JSON blocks appearing in character creation wizard output. Added missing regex pattern to `_strip_json_blocks()` function in `src/cli/commands/character.py`.
 - **Character Creation Wizard KeyError** - Fixed `KeyError: '"section_complete"'` that occurred when starting a new game. The bug was caused by JSON examples in wizard templates (`data/templates/wizard/*.md`) containing unescaped braces that Python's `str.format()` interpreted as format placeholders. Fixed by escaping braces in all wizard template JSON examples.
 
-### Added
 - **Comprehensive E2E Tests for CLI Commands** - 45 new tests covering all game commands
   - Tests for `rpg game` commands: start, list, delete, play, turn
   - Tests for `rpg world` commands: time, locations, npcs, events, zones

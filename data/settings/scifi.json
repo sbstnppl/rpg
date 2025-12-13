@@ -1,7 +1,13 @@
 {
   "name": "scifi",
   "description": "Far-future science fiction setting. Characters explore space, interact with advanced technology, and may encounter alien species.",
-  "species": ["Human", "Android", "Cyborg", "Alien (Humanoid)", "Uplifted Animal"],
+  "species": [
+    {"name": "Human", "genders": ["Male", "Female", "Non-binary"]},
+    {"name": "Android", "genders": ["None", "Male-presenting", "Female-presenting"]},
+    {"name": "Cyborg", "genders": ["Male", "Female", "Non-binary"]},
+    {"name": "Alien (Humanoid)", "genders": ["Male", "Female", "Intersex", "Agender"]},
+    {"name": "Uplifted Animal", "genders": ["Male", "Female"]}
+  ],
   "attributes": [
     {
       "key": "physical",

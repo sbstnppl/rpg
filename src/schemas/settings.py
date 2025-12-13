@@ -45,6 +45,20 @@ class StartingItem:
     properties: dict | None = None
 
 
+@dataclass
+class SpeciesDefinition:
+    """Definition for a playable species with gender options.
+
+    Different species can have different available genders. For example:
+    - Humans: Male, Female
+    - Androids: None, Male-presenting, Female-presenting
+    - Alien species: May have 3+ genders or entirely different concepts
+    """
+
+    name: str
+    genders: list[str] = field(default_factory=lambda: ["Male", "Female"])
+
+
 # =============================================================================
 # Need Modifier Settings (Age Curves and Trait Effects)
 # =============================================================================
@@ -116,7 +130,9 @@ class SettingSchema:
 
     name: str
     description: str = ""
-    species: list[str] = field(default_factory=lambda: ["Human"])
+    species: list[SpeciesDefinition] = field(
+        default_factory=lambda: [SpeciesDefinition("Human")]
+    )
     attributes: list[AttributeDefinition] = field(default_factory=list)
     point_buy_total: int = 27
     point_buy_min: int = 8
@@ -159,6 +175,35 @@ def load_setting_from_json(setting_name: str) -> SettingSchema:
     return _parse_setting_json(data)
 
 
+def _parse_species(species_data: list) -> list[SpeciesDefinition]:
+    """Parse species data supporting both legacy and new formats.
+
+    Args:
+        species_data: Either a list of strings (legacy) or list of dicts (new).
+
+    Returns:
+        List of SpeciesDefinition instances.
+    """
+    if not species_data:
+        return [SpeciesDefinition("Human")]
+
+    species_list = []
+    for item in species_data:
+        if isinstance(item, str):
+            # Legacy format: just a species name, use default genders
+            species_list.append(SpeciesDefinition(name=item))
+        elif isinstance(item, dict):
+            # New format: object with name and genders
+            species_list.append(
+                SpeciesDefinition(
+                    name=item["name"],
+                    genders=item.get("genders", ["Male", "Female"]),
+                )
+            )
+
+    return species_list if species_list else [SpeciesDefinition("Human")]
+
+
 def _parse_setting_json(data: dict[str, Any]) -> SettingSchema:
     """Parse a setting JSON structure into a SettingSchema.
 
@@ -168,6 +213,9 @@ def _parse_setting_json(data: dict[str, Any]) -> SettingSchema:
     Returns:
         SettingSchema instance.
     """
+    # Parse species (supports both legacy string format and new object format)
+    species = _parse_species(data.get("species", []))
+
     # Parse attributes
     attributes = []
     for attr_data in data.get("attributes", []):
@@ -217,7 +265,7 @@ def _parse_setting_json(data: dict[str, Any]) -> SettingSchema:
     return SettingSchema(
         name=data["name"],
         description=data.get("description", ""),
-        species=data.get("species", ["Human"]),
+        species=species,
         attributes=attributes,
         point_buy_total=point_buy.get("total_points", 27),
         point_buy_min=point_buy.get("min_value", 8),

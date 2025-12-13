@@ -1,7 +1,16 @@
 {
   "name": "fantasy",
   "description": "Classic fantasy setting inspired by D&D. Heroes explore dungeons, fight monsters, and wield magic in a medieval world of swords and sorcery.",
-  "species": ["Human", "Elf", "Dwarf", "Halfling", "Half-Elf", "Half-Orc", "Gnome", "Tiefling"],
+  "species": [
+    {"name": "Human", "genders": ["Male", "Female"]},
+    {"name": "Elf", "genders": ["Male", "Female"]},
+    {"name": "Dwarf", "genders": ["Male", "Female"]},
+    {"name": "Halfling", "genders": ["Male", "Female"]},
+    {"name": "Half-Elf", "genders": ["Male", "Female"]},
+    {"name": "Half-Orc", "genders": ["Male", "Female"]},
+    {"name": "Gnome", "genders": ["Male", "Female"]},
+    {"name": "Tiefling", "genders": ["Male", "Female"]}
+  ],
   "attributes": [
     {
       "key": "strength",

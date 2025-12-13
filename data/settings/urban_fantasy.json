@@ -1,7 +1,13 @@
 {
   "name": "urban_fantasy",
   "description": "Modern-day Earth where magic exists in secret. Hidden societies of practitioners operate beneath the mundane world, maintaining 'The Veil' that keeps ordinary humans unaware. Players navigate both worlds - holding down jobs, paying rent, and secretly wielding ancient powers.",
-  "species": ["Human", "Human (Awakened)", "Changeling", "Dhampir", "Nephilim"],
+  "species": [
+    {"name": "Human", "genders": ["Male", "Female", "Non-binary"]},
+    {"name": "Human (Awakened)", "genders": ["Male", "Female", "Non-binary"]},
+    {"name": "Changeling", "genders": ["Male", "Female", "Fluid"]},
+    {"name": "Dhampir", "genders": ["Male", "Female"]},
+    {"name": "Nephilim", "genders": ["Male", "Female"]}
+  ],
   "genre": "urban_fantasy",
   "era": "contemporary",
   "attributes": [

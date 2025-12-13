@@ -2282,6 +2282,10 @@ def _strip_json_blocks(text: str) -> str:
     text = re.sub(r'\{[^{}]*"hidden_content"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
     text = re.sub(r'\{[^{}]*"ready_to_play"[^{}]*\}', '', text)
     text = re.sub(r'\{[^{}]*"switch_to_point_buy"[^{}]*\}', '', text)
+    # Strip section_complete JSON (has nested data object)
+    text = re.sub(
+        r'\{"section_complete"\s*:\s*true\s*,\s*"data"\s*:\s*\{[^{}]*\}\s*\}', '', text
+    )
     # Clean up extra whitespace left behind
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
@@ -2934,10 +2938,15 @@ async def _run_section_conversation(
     title = WIZARD_SECTION_TITLES.get(section_name, section_name.value.title())
     display_section_header(title)
 
-    # Get available species for name section
-    available_species = "Human only"  # Default
+    # Build species list with their available genders
+    available_species_with_genders = "Human (Male, Female)"  # Default
     if hasattr(schema, 'species') and schema.species:
-        available_species = ", ".join(schema.species)
+        species_lines = []
+        for sp in schema.species:
+            # SpeciesDefinition has .name and .genders attributes
+            genders_str = ", ".join(sp.genders)
+            species_lines.append(f"- {sp.name}: {genders_str}")
+        available_species_with_genders = "\n".join(species_lines)
 
     # Section-specific context preparation
     extra_context = {}
@@ -3017,7 +3026,7 @@ async def _run_section_conversation(
             setting_name=schema.name,
             setting_description=f"{schema.name.title()} setting",
             completed_data_summary=wizard_state.get_completed_data_summary(),
-            available_species=available_species,
+            available_species_with_genders=available_species_with_genders,
             section_conversation_history="[First turn - greet the player]",
             player_input="[Starting section]",
             **extra_context,
@@ -3071,7 +3080,7 @@ async def _run_section_conversation(
             setting_name=schema.name,
             setting_description=f"{schema.name.title()} setting",
             completed_data_summary=wizard_state.get_completed_data_summary(),
-            available_species=available_species,
+            available_species_with_genders=available_species_with_genders,
             section_conversation_history="\n".join(section.conversation_history[-8:]),
             player_input=player_input,
             **extra_context,
