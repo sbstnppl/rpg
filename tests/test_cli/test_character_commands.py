@@ -723,6 +723,92 @@ Nice to meet you!'''
         assert "Setting name" in result
         assert "done!" in result
 
+    def test_strips_player_input_section(self):
+        """Should remove ## Player Input section echoed by LLM."""
+        from src.cli.commands.character import _strip_json_blocks
+
+        text = '''Great choice! Roran is a strong name.
+
+How old would you like Roran to be?
+
+## Player Input
+25'''
+
+        result = _strip_json_blocks(text)
+
+        assert "## Player Input" not in result
+        assert "How old would you like Roran to be?" in result
+        # The "25" after Player Input header should be stripped
+        assert result.strip().endswith("?")
+
+    def test_strips_player_echo_at_end(self):
+        """Should remove Player: format echoed at end of response."""
+        from src.cli.commands.character import _strip_json_blocks
+
+        text = '''How old would you like Roran to be?
+
+Player: 25'''
+
+        result = _strip_json_blocks(text)
+
+        assert "Player: 25" not in result
+        assert "How old would you like Roran to be?" in result
+
+    def test_strips_conversation_history_section(self):
+        """Should remove ## Conversation History section."""
+        from src.cli.commands.character import _strip_json_blocks
+
+        text = '''Great choice!
+
+## Conversation History
+Player: Male
+Assistant: A human male...
+
+What's next?'''
+
+        result = _strip_json_blocks(text)
+
+        assert "## Conversation History" not in result
+        assert "Great choice!" in result
+
+    def test_strips_multiple_template_sections(self):
+        """Should handle multiple template sections in one response."""
+        from src.cli.commands.character import _strip_json_blocks
+
+        text = '''Here's my response.
+
+## Required Fields
+- name
+- age
+
+## Player Input
+test
+
+More content.'''
+
+        result = _strip_json_blocks(text)
+
+        assert "## Required Fields" not in result
+        assert "## Player Input" not in result
+        assert "Here's my response." in result
+        assert "More content." in result
+
+    def test_preserves_normal_markdown_headers(self):
+        """Should not strip legitimate markdown headers in AI response."""
+        from src.cli.commands.character import _strip_json_blocks
+
+        # Normal headers that are part of AI's response should be kept
+        text = '''## Character Options
+
+Here are some names:
+- Finn
+- Roran'''
+
+        result = _strip_json_blocks(text)
+
+        assert "## Character Options" in result
+        assert "Finn" in result
+
 
 class TestStripJsonComments:
     """Tests for _strip_json_comments function."""

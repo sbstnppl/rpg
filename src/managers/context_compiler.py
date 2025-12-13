@@ -339,7 +339,7 @@ class ContextCompiler(BaseManager):
         for attr in attributes:
             # Use first 3 letters uppercase as abbreviation
             abbrev = attr.attribute_key[:3].upper()
-            attr_strings.append(f"{abbrev} {attr.current_value}")
+            attr_strings.append(f"{abbrev} {attr.value}")
 
         return ", ".join(attr_strings)
 

@@ -2262,16 +2262,16 @@ def _apply_field_updates(state: CharacterCreationState, updates: dict) -> None:
 
 
 def _strip_json_blocks(text: str) -> str:
-    """Remove JSON blocks from AI response before displaying to user.
+    """Remove JSON blocks and template artifacts from AI response.
 
-    Strips both markdown code blocks containing JSON and inline JSON blocks
-    that are meant for machine parsing, not human reading.
+    Strips markdown code blocks containing JSON, inline JSON blocks meant for
+    machine parsing, and prompt template sections that the LLM may echo back.
 
     Args:
-        text: AI response text that may contain JSON blocks.
+        text: AI response text that may contain JSON blocks or template artifacts.
 
     Returns:
-        Text with JSON blocks removed.
+        Text with JSON blocks and template artifacts removed.
     """
     # Strip markdown code blocks containing JSON (```json ... ```)
     text = re.sub(r'```json\s*\{[\s\S]*?\}\s*```', '', text)
@@ -2286,6 +2286,31 @@ def _strip_json_blocks(text: str) -> str:
     text = re.sub(
         r'\{"section_complete"\s*:\s*true\s*,\s*"data"\s*:\s*\{[^{}]*\}\s*\}', '', text
     )
+
+    # Strip prompt template sections that LLM may echo back
+    # These are internal prompt headers that should never appear in output
+    text = re.sub(r'##\s*Player Input\s*\n.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+    text = re.sub(r'##\s*Conversation History.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+    text = re.sub(r'##\s*Required Fields.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+    text = re.sub(r'##\s*Currently Saved Fields.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+    text = re.sub(r'##\s*Optional Fields.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+    text = re.sub(r'##\s*SCOPE BOUNDARIES.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+    text = re.sub(r'##\s*CRITICAL:.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+    # Strip simulated player dialogue and subsequent assistant responses
+    # The LLM sometimes generates fake "Player: ..." lines followed by "Assistant: ..."
+    # We need to remove all of these simulated conversations
+    text = re.sub(r'\n\s*Player:.*?(?=\n\s*Player:|\n\s*$|$)', '', text, flags=re.DOTALL)
+    # Also strip "Assistant:" prefixes that appear after simulated player turns
+    text = re.sub(r'\n\s*Assistant:\s*', '\n\n', text)
+
+    # SAFETY NET: Strip any hidden backstory that leaked into narrative
+    # The hidden_backstory should ONLY be in the JSON, never shown to player
+    text = re.sub(r'(?i)Hidden Backstory[^:]*:.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+    text = re.sub(r'(?i)Secret[^:]*:.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+    text = re.sub(r'(?i)GM Note[^:]*:.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+    # Strip "Unknown to X, ..." pattern that reveals secrets
+    text = re.sub(r'(?i)\n\s*Unknown to \w+,.*?(?=\n\n|\Z)', '', text, flags=re.DOTALL)
+
     # Clean up extra whitespace left behind
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
@@ -2862,27 +2887,30 @@ def _parse_wizard_response(response: str) -> tuple[dict | None, dict | None, boo
     section_data = None
     section_complete = False
 
-    # Look for field_updates JSON
+    # Look for field_updates JSON (code-fenced first, then raw)
     field_match = re.search(
         r'```json\s*\n?\s*\{["\']?field_updates["\']?\s*:\s*(\{[^}]+\})\s*\}\s*```',
         response,
         re.DOTALL,
     )
+    if not field_match:
+        # Fallback: raw JSON
+        field_match = re.search(
+            r'\{["\']?field_updates["\']?\s*:\s*(\{[^}]+\})\s*\}',
+            response,
+            re.DOTALL,
+        )
     if field_match:
         try:
             field_updates = json.loads(field_match.group(1))
         except json.JSONDecodeError:
             pass
 
-    # Look for section_complete JSON
-    complete_match = re.search(
-        r'```json\s*\n?\s*\{[^}]*["\']?section_complete["\']?\s*:\s*true[^}]*\}',
-        response,
-        re.DOTALL | re.IGNORECASE,
-    )
-    if complete_match:
+    # Look for section_complete (with or without code fences)
+    if re.search(r'["\']?section_complete["\']?\s*:\s*true', response, re.IGNORECASE):
         section_complete = True
-        # Try to extract data from the same block
+
+        # Try to extract data - code-fenced JSON first
         data_match = re.search(
             r'```json\s*\n?\s*(\{[^`]+\})\s*```',
             response,
@@ -2894,6 +2922,16 @@ def _parse_wizard_response(response: str) -> tuple[dict | None, dict | None, boo
                 section_data = parsed.get("data", {})
             except json.JSONDecodeError:
                 pass
+        else:
+            # Fallback: raw JSON - find objects with one level of nesting
+            for match in re.finditer(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response):
+                try:
+                    obj = json.loads(match.group())
+                    if obj.get('section_complete') is True:
+                        section_data = obj.get('data', {})
+                        break
+                except json.JSONDecodeError:
+                    continue
 
     return field_updates, section_data, section_complete
 
@@ -3107,11 +3145,37 @@ async def _run_section_conversation(
 
             # Handle section completion
             if section_complete:
+                # Check what fields are ALREADY saved before applying section_data
+                already_saved = set()
+                requirements = WIZARD_SECTION_REQUIREMENTS.get(section_name, [])
+                for field_name in requirements:
+                    value = getattr(wizard_state.character, field_name, None)
+                    if value is not None and value != "":
+                        already_saved.add(field_name)
+
                 if section_data:
                     _apply_wizard_section_data(wizard_state, section_name, section_data)
 
                 # Validate that all required fields are actually filled
                 if section.is_complete(wizard_state.character):
+                    # Check if section_data introduced new values without user confirmation
+                    newly_added = []
+                    for field_name in requirements:
+                        if field_name not in already_saved:
+                            value = getattr(wizard_state.character, field_name, None)
+                            if value is not None and value != "":
+                                newly_added.append(f"{field_name}={value}")
+
+                    if newly_added:
+                        # LLM snuck in values without asking - show them and ask for confirmation
+                        console.print(
+                            f"[yellow]Auto-filled: {', '.join(newly_added)}[/yellow]"
+                        )
+                        console.print(
+                            "[dim]Say 'ok' to accept, or provide different values[/dim]"
+                        )
+                        continue  # Don't mark complete, let user confirm
+
                     section.status = "complete"
                     display_section_complete(title)
                     return True

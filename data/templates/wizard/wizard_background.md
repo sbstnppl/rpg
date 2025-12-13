@@ -37,13 +37,24 @@ If unclear, default to "commoner".
 
 Also estimate how many years they've spent in this occupation.
 
-## HIDDEN BACKSTORY
-Based on the conversation, also generate **hidden backstory elements** that the character doesn't know about themselves. These are secrets for the GM.
+## FORBIDDEN - ABSOLUTELY NEVER DO THIS
+- NEVER mention hidden backstory, secrets, or GM-only information in your narrative response
+- NEVER say "Hidden Backstory:", "Secret:", "Unknown to [character]" in visible text
+- NEVER reveal plot hooks or mysteries in your conversational response
+- The hidden_backstory field goes ONLY in the JSON data block, never in conversation
+- The player must NOT learn any secret information about their character
 
-Examples:
-- "Unknown to {name}, their mother was actually a..."
-- "{name}'s dreams of fire are caused by..."
-- "The village elder who died knew a secret about {name}..."
+## HIDDEN BACKSTORY (JSON ONLY - NEVER SHOW TO PLAYER)
+When completing the section, include a `hidden_backstory` field in the JSON data.
+This is a GM secret that the player should discover through gameplay.
+
+Generate something like:
+- A secret about their family origin
+- An unknown prophecy or destiny
+- A hidden connection to events/people
+- Something they witnessed but don't remember
+
+Put this ONLY in the JSON `hidden_backstory` field. NEVER mention it in your visible response!
 
 ## SCOPE BOUNDARIES
 - ONLY discuss background and history
@@ -66,7 +77,7 @@ When the background is complete:
     "background": "Full background story text...",
     "occupation": "farmer",
     "occupation_years": 3,
-    "hidden_backstory": "Unknown to [name], their father was actually a disgraced knight who..."
+    "hidden_backstory": "Unknown to [character], their father was actually a disgraced knight who..."
   }}
 }}
 ```

@@ -46,12 +46,12 @@ Present the character's attributes in a narrative, story-driven way.
 
 After explaining the attributes:
 ```json
-{
+{{
   "section_complete": true,
-  "data": {
+  "data": {{
     "attributes": {attributes_json}
-  }
-}
+  }}
+}}
 ```
 
 The attributes have already been calculated - you're just presenting them narratively and then confirming.

@@ -16,8 +16,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated wizard template to show species-specific gender options
 
 ### Fixed
+- **Wizard Not Returning to Navigation After Section Completion** - Fixed bug where character creation wizard continued in conversational mode instead of returning to the navigation menu after completing a section (like Species & Gender). The `_parse_wizard_response()` function now handles JSON both with and without markdown code fences, since LLMs sometimes output raw JSON.
+- **Prompt Template Leaking into Wizard Display** - Fixed bug where LLM sometimes echoed back parts of the prompt template (e.g., `## Player Input`, `Player: 25`) in its response. Enhanced `_strip_json_blocks()` to strip these template artifacts before display.
 - **JSON Output in Wizard Display** - Fixed `section_complete` JSON blocks appearing in character creation wizard output. Added missing regex pattern to `_strip_json_blocks()` function in `src/cli/commands/character.py`.
 - **Character Creation Wizard KeyError** - Fixed `KeyError: '"section_complete"'` that occurred when starting a new game. The bug was caused by JSON examples in wizard templates (`data/templates/wizard/*.md`) containing unescaped braces that Python's `str.format()` interpreted as format placeholders. Fixed by escaping braces in all wizard template JSON examples.
+- **Background Template KeyError** - Fixed `{name}` placeholder in `wizard_background.md` that caused KeyError during Background section. Changed to `[character]` to avoid Python format string issues.
+- **Attributes Template Braces** - Fixed unescaped JSON braces in `wizard_attributes.md` that caused KeyError during Attributes section.
+- **Urban Fantasy Spells Showing as Setting** - Moved `urban_fantasy_spells.json` from `data/settings/` to `data/spells/` so it no longer appears as a selectable game setting.
+- **Menu "or quit" Display Bug** - Fixed Rich markup in `display.py` where `[q]uit` and `[r]eview` were being interpreted as style tags, showing as "or uit" and "or eview". Escaped brackets with backslash.
+- **Game Start EntityAttribute Error** - Fixed `'EntityAttribute' object has no attribute 'current_value'` error when starting game. Changed `attr.current_value` to `attr.value` in `context_compiler.py:342`.
+- **LLM Simulating Player Dialogue** - Fixed bug where LLM would generate fake "Player:" dialogue inside its response (e.g., "Player: sounds good", "Player: athletic"). Added regex to `_strip_json_blocks()` to remove all simulated player/assistant dialogue turns.
+- **Wizard Field Updates Not Saving** - Strengthened `wizard_name.md` template with explicit FORBIDDEN section and WRONG/RIGHT examples to ensure LLM includes all discussed fields in the JSON output, not just narrative text.
+- **Wizard Auto-Completing Without Confirmation** - Fixed bug where wizard could mark sections complete while silently filling in values the user never confirmed. Added validation in `character.py` to detect when `section_data` introduces new required values, showing "Auto-filled: field=value" and requiring explicit confirmation before proceeding.
+- **Hidden Backstory Leaking to Player** - CRITICAL fix for wizard revealing GM-only secrets in visible text (e.g., "Hidden Backstory Element: Unknown to Calum..."). Updated `wizard_background.md` with explicit FORBIDDEN section and added safety net regex in `_strip_json_blocks()` to strip any "Hidden Backstory:", "Secret:", "GM Note:", or "Unknown to X," patterns that leak into narrative.
 
 - **Comprehensive E2E Tests for CLI Commands** - 45 new tests covering all game commands
   - Tests for `rpg game` commands: start, list, delete, play, turn
@@ -37,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Supernatural creatures (vampires, werewolves, ghosts, demons, fae, constructs)
     - Modern starting equipment with magical items (focus pendant, chalk pouch, silver knife)
     - Dual currency system (dollars + Council Marks)
-  - Starter spell collection (`data/settings/urban_fantasy_spells.json`)
+  - Starter spell collection (`data/spells/urban_fantasy_spells.json`)
     - 12 spells tailored for urban use with Veil safety ratings
     - Includes: Veil Sight, Minor Ward, Glamour, Forget, Tech Jinx, Sense Lies, Spirit Bolt, Shadow Step, Binding Circle, Psychic Shield, True Name Binding, Healing Touch
     - Spells designed for subtlety and modern scenarios

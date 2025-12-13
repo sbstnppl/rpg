@@ -846,8 +846,8 @@ def prompt_wizard_section_choice(
     while True:
         prompt = f"[bold cyan]Select section (1-{num_sections})"
         if can_review:
-            prompt += ", or [r]eview"
-        prompt += ", or [q]uit: [/bold cyan]"
+            prompt += ", or \\[r]eview"
+        prompt += ", or \\[q]uit: [/bold cyan]"
 
         choice = console.input(prompt).strip().lower()
 

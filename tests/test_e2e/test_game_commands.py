@@ -521,6 +521,41 @@ class TestWizardResponseParsing:
         assert section_data is not None
         assert section_data.get("name") == "Aragorn"
 
+    def test_parse_wizard_response_raw_json_section_complete(self):
+        """Should parse section_complete from raw JSON (no code fences).
+
+        This tests the fix for the bug where LLMs output JSON without markdown
+        code blocks, causing section_complete to not be detected.
+        """
+        from src.cli.commands.character import _parse_wizard_response
+
+        # Raw JSON without code fences - the bug scenario
+        response = '''
+        Excellent! A human male character.
+
+        {"section_complete": true, "data": {"species": "Human", "gender": "male"}}
+        '''
+
+        field_updates, section_data, section_complete = _parse_wizard_response(response)
+
+        assert section_complete is True
+        assert section_data == {"species": "Human", "gender": "male"}
+
+    def test_parse_wizard_response_raw_json_field_updates(self):
+        """Should parse field_updates from raw JSON (no code fences)."""
+        from src.cli.commands.character import _parse_wizard_response
+
+        response = '''
+        I've noted your character's name.
+
+        {"field_updates": {"name": "Gandalf"}}
+        '''
+
+        field_updates, section_data, section_complete = _parse_wizard_response(response)
+
+        assert field_updates == {"name": "Gandalf"}
+        assert section_complete is False
+
     def test_parse_wizard_response_does_not_raise_keyerror(self):
         """Ensure parsing never raises KeyError even with malformed input."""
         from src.cli.commands.character import _parse_wizard_response
