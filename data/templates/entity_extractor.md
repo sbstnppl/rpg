@@ -42,12 +42,25 @@ New information revealed about characters or world. For each:
 - is_secret: true if GM-only information
 
 ### 4. Relationship Changes
-Attitude shifts from this interaction. For each:
-- from_entity: Whose attitude changed
-- to_entity: Toward whom
+Track attitude shifts between characters. **Always extract when NPCs interact with the player.**
+
+**IMPORTANT**: When an NPC has a conversation with the player for the first time, create a "familiarity" change of +10 to +20 to establish the relationship exists.
+
+Common patterns to extract:
+- First meeting/conversation → familiarity +10 to +20
+- NPC acts friendly/helpful → liking +5 to +15
+- NPC shows generosity/kindness → liking +5 to +10, trust +5
+- Player helps NPC → trust +5 to +15, respect +5 to +10
+- Player is polite/respectful → respect +5 to +10
+- NPC is impressed → respect +10 to +15
+- Negative interactions → negative deltas
+
+For each relationship change:
+- from_entity: Entity key whose attitude changed (usually the NPC)
+- to_entity: Entity key toward whom (usually "player" for player interactions, or use player's entity_key like "durgan_stonehammer")
 - dimension: "trust", "liking", "respect", "romantic_interest", "fear", "familiarity"
-- delta: -20 to +20
-- reason: Why
+- delta: -20 to +20 (positive for improvement, negative for worsening)
+- reason: Brief explanation of why
 
 ### 5. Appointments
 Commitments made for future. For each:

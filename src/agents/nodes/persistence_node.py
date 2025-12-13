@@ -239,33 +239,53 @@ def _persist_relationship_change(
     change_data: dict[str, Any],
     player_id: int | None,
 ) -> None:
-    """Persist a relationship change from legacy extraction.
+    """Persist a relationship change from entity extraction.
+
+    Supports both legacy format (entity_key, change) and new format (from_entity, to_entity, delta).
 
     Args:
         entity_manager: EntityManager instance for entity lookup.
         relationship_manager: RelationshipManager instance.
-        change_data: Relationship change data with entity_key, dimension, change.
+        change_data: Relationship change data.
         player_id: Player entity ID.
     """
-    entity_key = change_data.get("entity_key")
+    # Support both old format (entity_key) and new format (from_entity/to_entity)
+    from_entity_key = change_data.get("from_entity") or change_data.get("entity_key")
+    to_entity_key = change_data.get("to_entity")
     dimension = change_data.get("dimension")
-    change = change_data.get("change", 0)
+    # Support both "delta" (new) and "change" (legacy)
+    delta = change_data.get("delta") or change_data.get("change", 0)
     reason = change_data.get("reason", "Interaction")
 
-    if not entity_key or not dimension or not player_id:
+    if not from_entity_key or not dimension:
         return
 
-    # Look up entity by key
-    entity = entity_manager.get_entity(entity_key)
-    if not entity:
+    # Look up from_entity by key
+    from_entity = entity_manager.get_entity(from_entity_key)
+    if not from_entity:
         return
 
-    # Update the relationship between this entity and the player
+    # Determine to_entity: use to_entity_key if provided, otherwise default to player
+    if to_entity_key:
+        # Handle "player" as a special key
+        if to_entity_key == "player":
+            to_id = player_id
+        else:
+            to_entity = entity_manager.get_entity(to_entity_key)
+            to_id = to_entity.id if to_entity else None
+    else:
+        # Legacy format: relationship is always with player
+        to_id = player_id
+
+    if not to_id:
+        return
+
+    # Update the relationship
     relationship_manager.update_attitude(
-        from_id=entity.id,
-        to_id=player_id,
+        from_id=from_entity.id,
+        to_id=to_id,
         dimension=dimension,
-        delta=change,
+        delta=delta,
         reason=reason,
     )
 
