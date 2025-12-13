@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **In-Game Image Prompt Commands** - New `/scene` and `/portrait` commands generate FLUX.1-dev image prompts during gameplay
+  - `/scene [pov|third] [photo|art]` - Generate scene image prompt from current location
+  - `/portrait [base|current] [photo|art]` - Generate character portrait prompt
+  - Uses LLM to intelligently condense game state to ~60 tokens (CLIP limit)
+  - Added `src/services/image_prompt_generator.py` - LLM-based prompt generation service
+  - Added `data/templates/image_prompt.md` - System prompt for LLM
+  - Added `rpg scene dump` and `rpg scene portrait` CLI commands for debugging
 - **Species-Specific Gender Options** - Genders are now defined per species in setting configurations
   - Added `SpeciesDefinition` dataclass to `src/schemas/settings.py` with `name` and `genders` fields
   - Updated all setting JSON files to use the new species object format

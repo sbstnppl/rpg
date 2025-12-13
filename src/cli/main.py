@@ -2,7 +2,7 @@
 
 import typer
 
-from src.cli.commands import session, character, world, game
+from src.cli.commands import session, character, world, game, scene
 
 # Create main app
 app = typer.Typer(
@@ -16,6 +16,7 @@ app.add_typer(session.app, name="session")
 app.add_typer(character.app, name="character")
 app.add_typer(world.app, name="world")
 app.add_typer(game.app, name="game")
+app.add_typer(scene.app, name="scene")
 
 
 @app.command()

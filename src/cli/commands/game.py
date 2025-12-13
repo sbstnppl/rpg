@@ -488,6 +488,18 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
                 db.commit()
                 display_success("Game saved!")
                 continue
+            elif cmd == "scene":
+                args = player_input[1:].lower().split()[1:]
+                perspective = args[0] if len(args) > 0 and args[0] in ("pov", "third") else "pov"
+                style = args[1] if len(args) > 1 and args[1] in ("photo", "art") else "photo"
+                await _handle_scene_command(db, game_session, player, perspective, style)
+                continue
+            elif cmd == "portrait":
+                args = player_input[1:].lower().split()[1:]
+                mode = args[0] if len(args) > 0 and args[0] in ("base", "current") else "current"
+                style = args[1] if len(args) > 1 and args[1] in ("photo", "art") else "photo"
+                await _handle_portrait_command(db, game_session, player, mode, style)
+                continue
             else:
                 display_error(f"Unknown command: /{cmd}")
                 continue
@@ -638,12 +650,76 @@ def _show_help() -> None:
     console.print("  /save      - Save the game")
     console.print("  /quit      - Save and exit")
     console.print()
+    console.print("[bold]Image Prompts[/bold]")
+    console.print("  /scene [pov|third] [photo|art]   - Generate scene image prompt")
+    console.print("  /portrait [base|current] [photo|art] - Generate portrait prompt")
+    console.print()
     console.print("[bold]Gameplay[/bold]")
     console.print("  Type your actions naturally, e.g.:")
     console.print("  - Look around")
     console.print("  - Talk to the bartender")
     console.print("  - Go to the market")
     console.print("  - Attack the goblin")
+    console.print()
+
+
+async def _handle_scene_command(
+    db,
+    game_session: GameSession,
+    player: Entity,
+    perspective: str,
+    style: str,
+) -> None:
+    """Handle the /scene command to generate an image prompt.
+
+    Args:
+        db: Database session.
+        game_session: Current game session.
+        player: Player entity.
+        perspective: 'pov' or 'third'.
+        style: 'photo' or 'art'.
+    """
+    from src.services.image_prompt_generator import ImagePromptGenerator, estimate_tokens
+
+    console.print()
+    with progress_spinner("Generating scene prompt..."):
+        generator = ImagePromptGenerator(db, game_session, player)
+        prompt = await generator.generate_scene_prompt(perspective, style)
+
+    tokens = estimate_tokens(prompt)
+    console.print(f"[bold cyan]== FLUX PROMPT (scene, {perspective}, {style}) ==[/bold cyan]")
+    console.print(f"[white]{prompt}[/white]")
+    console.print(f"[dim](~{tokens} tokens)[/dim]")
+    console.print()
+
+
+async def _handle_portrait_command(
+    db,
+    game_session: GameSession,
+    player: Entity,
+    mode: str,
+    style: str,
+) -> None:
+    """Handle the /portrait command to generate an image prompt.
+
+    Args:
+        db: Database session.
+        game_session: Current game session.
+        player: Player entity.
+        mode: 'base' or 'current'.
+        style: 'photo' or 'art'.
+    """
+    from src.services.image_prompt_generator import ImagePromptGenerator, estimate_tokens
+
+    console.print()
+    with progress_spinner("Generating portrait prompt..."):
+        generator = ImagePromptGenerator(db, game_session, player)
+        prompt = await generator.generate_portrait_prompt(mode, style)
+
+    tokens = estimate_tokens(prompt)
+    console.print(f"[bold cyan]== FLUX PROMPT (portrait, {mode}, {style}) ==[/bold cyan]")
+    console.print(f"[white]{prompt}[/white]")
+    console.print(f"[dim](~{tokens} tokens)[/dim]")
     console.print()
 
 

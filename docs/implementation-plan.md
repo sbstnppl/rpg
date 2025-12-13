@@ -348,6 +348,18 @@
 - [x] Tables for stats/inventory
 - [x] Progress bars for loading
 
+### 6.9 Scene Commands
+- [x] Create `src/cli/commands/scene.py`
+  - `dump` - Output current scene context for image generation
+  - `portrait` - Output player character portrait data
+- [x] Create `src/services/image_prompt_generator.py`
+  - LLM-based FLUX.1-dev prompt generation
+  - `generate_scene_prompt()` and `generate_portrait_prompt()` methods
+- [x] Add in-game commands to `src/cli/commands/game.py`
+  - `/scene [pov|third] [photo|art]` - Generate scene image prompt
+  - `/portrait [base|current] [photo|art]` - Generate character portrait prompt
+- [x] Create `data/templates/image_prompt.md` - System prompt for LLM
+
 ## Phase 7: Polish & Testing
 
 ### 7.1 Tests
