@@ -434,12 +434,14 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
     console.print()
 
     # Initial scene description - introduce the character and scene
+    game_session.total_turns += 1  # Increment for first turn
+
     initial_state = create_initial_state(
         session_id=game_session.id,
         player_id=player.id,
         player_location=player_location,
         player_input="[FIRST TURN: Introduce the player character - describe who they are, what they look like, what they're wearing, and how they feel. Then describe the scene they find themselves in.]",
-        turn_number=game_session.total_turns + 1,
+        turn_number=game_session.total_turns,  # Already incremented above
     )
     initial_state["_db"] = db
     initial_state["_game_session"] = game_session
@@ -512,7 +514,7 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
             player_id=player.id,
             player_location=player_location,
             player_input=player_input,
-            turn_number=game_session.total_turns + 1,
+            turn_number=game_session.total_turns,  # Already incremented above
         )
         state["_db"] = db
         state["_game_session"] = game_session
@@ -538,7 +540,7 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
             _save_turn_immediately(
                 db=db,
                 game_session=game_session,
-                turn_number=game_session.total_turns + 1,
+                turn_number=game_session.total_turns,  # Already incremented above
                 player_input=player_input,
                 gm_response=result["gm_response"],
                 player_location=result.get("player_location", player_location),
@@ -618,6 +620,9 @@ def _save_turn_immediately(
     This creates the Turn record and commits it right away, so if the user
     quits before the full turn processing completes, the GM response is preserved.
 
+    If the turn was already created by persistence_node (during graph execution),
+    this updates it instead of creating a duplicate.
+
     Args:
         db: Database session.
         game_session: Current game session.
@@ -628,14 +633,32 @@ def _save_turn_immediately(
     """
     from src.database.models.session import Turn
 
-    turn = Turn(
-        session_id=game_session.id,
-        turn_number=turn_number,
-        player_input=player_input,
-        gm_response=gm_response,
-        location_at_turn=player_location,
+    # Check if turn already exists (created by persistence_node during graph)
+    existing = (
+        db.query(Turn)
+        .filter(
+            Turn.session_id == game_session.id,
+            Turn.turn_number == turn_number,
+        )
+        .first()
     )
-    db.add(turn)
+
+    if existing:
+        # Update existing turn with response data
+        existing.player_input = player_input
+        existing.gm_response = gm_response
+        existing.location_at_turn = player_location
+    else:
+        # Create new turn
+        turn = Turn(
+            session_id=game_session.id,
+            turn_number=turn_number,
+            player_input=player_input,
+            gm_response=gm_response,
+            location_at_turn=player_location,
+        )
+        db.add(turn)
+
     db.commit()
 
 
@@ -777,7 +800,7 @@ async def _single_turn(
         player_id=player.id,
         player_location="starting_location",
         player_input=player_input,
-        turn_number=game_session.total_turns + 1,
+        turn_number=game_session.total_turns,  # Already incremented above
     )
     state["_db"] = db
     state["_game_session"] = game_session
