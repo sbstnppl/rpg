@@ -500,7 +500,7 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
             player_id=player.id,
             player_location=player_location,
             player_input=player_input,
-            turn_number=game_session.total_turns,
+            turn_number=game_session.total_turns + 1,
         )
         state["_db"] = db
         state["_game_session"] = game_session
@@ -521,6 +521,18 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
         # Display the response
         if result.get("gm_response"):
             display_narrative(result["gm_response"])
+
+            # Immediately persist the turn so it's not lost on quit
+            _save_turn_immediately(
+                db=db,
+                game_session=game_session,
+                turn_number=game_session.total_turns + 1,
+                player_input=player_input,
+                gm_response=result["gm_response"],
+                player_location=result.get("player_location", player_location),
+            )
+        else:
+            display_error("No response from GM (empty narrative). Try rephrasing your action.")
 
         # Update player location if changed
         if result.get("location_changed"):
@@ -579,6 +591,40 @@ def _display_skill_checks_interactive(skill_checks: list[dict]) -> None:
             is_critical_success=check.get("is_critical_success", False),
             is_critical_failure=check.get("is_critical_failure", False),
         )
+
+
+def _save_turn_immediately(
+    db,
+    game_session: GameSession,
+    turn_number: int,
+    player_input: str,
+    gm_response: str,
+    player_location: str,
+) -> None:
+    """Save turn record immediately to prevent data loss on quit.
+
+    This creates the Turn record and commits it right away, so if the user
+    quits before the full turn processing completes, the GM response is preserved.
+
+    Args:
+        db: Database session.
+        game_session: Current game session.
+        turn_number: Turn number for this interaction.
+        player_input: What the player typed.
+        gm_response: The GM's narrative response.
+        player_location: Current location key.
+    """
+    from src.database.models.session import Turn
+
+    turn = Turn(
+        session_id=game_session.id,
+        turn_number=turn_number,
+        player_input=player_input,
+        gm_response=gm_response,
+        location_at_turn=player_location,
+    )
+    db.add(turn)
+    db.commit()
 
 
 def _show_help() -> None:
@@ -655,7 +701,7 @@ async def _single_turn(
         player_id=player.id,
         player_location="starting_location",
         player_input=player_input,
-        turn_number=game_session.total_turns,
+        turn_number=game_session.total_turns + 1,
     )
     state["_db"] = db
     state["_game_session"] = game_session

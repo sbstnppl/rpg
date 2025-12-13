@@ -16,7 +16,7 @@ from src.agents.tools.gm_tools import GM_TOOLS
 from src.agents.tools.executor import GMToolExecutor
 from src.database.models.session import GameSession
 from src.llm.factory import get_gm_provider
-from src.llm.message_types import Message
+from src.llm.message_types import Message, MessageContent, MessageRole
 from src.llm.audit_logger import set_audit_context
 from src.managers.context_validator import ContextValidator
 
@@ -151,10 +151,27 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
         if not response.has_tool_calls:
             break
 
-        # Execute tool calls and add results to conversation
-        assistant_content = response.content
-        if assistant_content:
-            messages.append(Message.assistant(assistant_content))
+        # Build assistant message with both text content and tool_use blocks
+        content_blocks: list[MessageContent] = []
+
+        # Add text content if present
+        if response.content:
+            content_blocks.append(MessageContent(type="text", text=response.content))
+
+        # Add tool_use blocks for each tool call
+        for tool_call in response.tool_calls:
+            content_blocks.append(MessageContent(
+                type="tool_use",
+                tool_use_id=tool_call.id,
+                tool_name=tool_call.name,
+                tool_input=tool_call.arguments,
+            ))
+
+        # Add assistant message with all content blocks
+        messages.append(Message(
+            role=MessageRole.ASSISTANT,
+            content=tuple(content_blocks),
+        ))
 
         for tool_call in response.tool_calls:
             if executor is not None:
@@ -177,7 +194,8 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
     raw_response = response.content
     narrative, state_changes = parse_state_block(raw_response, return_narrative=True)
 
-    return {
+    # Build result
+    result = {
         "gm_response": narrative.strip(),
         "time_advance_minutes": state_changes.get("time_advance_minutes", 5),
         "location_changed": state_changes.get("location_changed", False),
@@ -185,6 +203,14 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
         "combat_active": state_changes.get("combat_active", False),
         "skill_checks": skill_checks,  # For interactive dice display
     }
+
+    # Add error info if response was empty
+    if not narrative.strip():
+        result["errors"] = result.get("errors", []) + [
+            f"LLM returned empty response. finish_reason={response.finish_reason}"
+        ]
+
+    return result
 
 
 def _load_template() -> str:

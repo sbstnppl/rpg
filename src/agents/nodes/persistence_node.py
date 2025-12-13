@@ -262,8 +262,11 @@ def _create_turn_record(
     db: Session,
     game_session: GameSession,
     state: GameState,
-) -> Turn:
-    """Create a turn record for this interaction.
+) -> Turn | None:
+    """Create or update a turn record for this interaction.
+
+    If the turn was already saved by game.py (for immediate persistence),
+    this updates it with extraction data. Otherwise creates a new record.
 
     Args:
         db: Database session.
@@ -271,11 +274,32 @@ def _create_turn_record(
         state: Current game state.
 
     Returns:
-        Created Turn record.
+        Turn record (created or updated), or None if update only.
     """
+    turn_number = state.get("turn_number", game_session.total_turns + 1)
+
+    # Check if turn already saved by game.py
+    existing = (
+        db.query(Turn)
+        .filter(
+            Turn.session_id == game_session.id,
+            Turn.turn_number == turn_number,
+        )
+        .first()
+    )
+
+    if existing:
+        # Update with extraction data (turn already has player_input and gm_response)
+        if state.get("extracted_entities"):
+            existing.entities_extracted = state.get("extracted_entities")
+        if state.get("player_location"):
+            existing.location_at_turn = state.get("player_location")
+        return existing
+
+    # Create new turn (fallback for non-game.py callers like tests)
     turn = Turn(
         session_id=game_session.id,
-        turn_number=state.get("turn_number", game_session.total_turns + 1),
+        turn_number=turn_number,
         player_input=state.get("player_input", ""),
         gm_response=state.get("gm_response", ""),
     )

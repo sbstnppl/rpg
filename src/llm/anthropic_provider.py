@@ -135,6 +135,13 @@ class AnthropicProvider:
                                     "url": block.image_url,
                                 },
                             })
+                    elif block.type == "tool_use":
+                        content_blocks.append({
+                            "type": "tool_use",
+                            "id": block.tool_use_id,
+                            "name": block.tool_name,
+                            "input": block.tool_input or {},
+                        })
                 api_messages.append({
                     "role": role,
                     "content": content_blocks,
