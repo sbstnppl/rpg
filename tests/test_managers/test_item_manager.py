@@ -558,3 +558,483 @@ class TestItemManagerLocation:
 
         assert len(result) == 1
         assert result[0].item_key == "tavern_item"
+
+
+class TestItemManagerSlotValidation:
+    """Tests for slot availability validation methods."""
+
+    def test_check_slot_available_returns_true_when_empty(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify check_slot_available returns True when slot is empty."""
+        entity = create_entity(db_session, game_session)
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.check_slot_available(entity.id, "main_hand")
+
+        assert result is True
+
+    def test_check_slot_available_returns_false_when_occupied(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify check_slot_available returns False when slot has item."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="sword",
+            holder_id=entity.id,
+            body_slot="main_hand"
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.check_slot_available(entity.id, "main_hand")
+
+        assert result is False
+
+    def test_check_slot_available_different_slot_unaffected(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify check_slot_available is slot-specific."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="sword",
+            holder_id=entity.id,
+            body_slot="main_hand"
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.check_slot_available(entity.id, "off_hand")
+
+        assert result is True
+
+    def test_get_item_in_slot_returns_item(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_item_in_slot returns the item in specified slot."""
+        entity = create_entity(db_session, game_session)
+        item = create_item(
+            db_session, game_session,
+            item_key="torch",
+            holder_id=entity.id,
+            body_slot="off_hand"
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_item_in_slot(entity.id, "off_hand")
+
+        assert result is not None
+        assert result.item_key == "torch"
+
+    def test_get_item_in_slot_returns_none_when_empty(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_item_in_slot returns None when slot is empty."""
+        entity = create_entity(db_session, game_session)
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_item_in_slot(entity.id, "main_hand")
+
+        assert result is None
+
+
+class TestItemManagerWeightValidation:
+    """Tests for weight limit validation methods."""
+
+    def test_get_total_carried_weight_empty_inventory(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_total_carried_weight returns 0 for empty inventory."""
+        entity = create_entity(db_session, game_session)
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_total_carried_weight(entity.id)
+
+        assert result == 0.0
+
+    def test_get_total_carried_weight_sums_items(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_total_carried_weight sums all item weights."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="sword",
+            holder_id=entity.id,
+            weight=5.0
+        )
+        create_item(
+            db_session, game_session,
+            item_key="shield",
+            holder_id=entity.id,
+            weight=8.0
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_total_carried_weight(entity.id)
+
+        assert result == 13.0
+
+    def test_get_total_carried_weight_multiplies_by_quantity(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_total_carried_weight multiplies weight by quantity."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="arrows",
+            holder_id=entity.id,
+            weight=0.1,
+            quantity=20
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_total_carried_weight(entity.id)
+
+        assert result == pytest.approx(2.0, rel=0.01)
+
+    def test_get_total_carried_weight_ignores_none_weight(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_total_carried_weight ignores items with None weight."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="sword",
+            holder_id=entity.id,
+            weight=5.0
+        )
+        create_item(
+            db_session, game_session,
+            item_key="ring",
+            holder_id=entity.id,
+            weight=None
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_total_carried_weight(entity.id)
+
+        assert result == 5.0
+
+    def test_can_carry_weight_allows_under_limit(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify can_carry_weight returns True when under limit."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="sword",
+            holder_id=entity.id,
+            weight=10.0
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.can_carry_weight(entity.id, 5.0, max_weight=50.0)
+
+        assert result is True
+
+    def test_can_carry_weight_rejects_over_limit(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify can_carry_weight returns False when would exceed limit."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="armor",
+            holder_id=entity.id,
+            weight=45.0
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.can_carry_weight(entity.id, 10.0, max_weight=50.0)
+
+        assert result is False
+
+    def test_can_carry_weight_allows_exact_limit(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify can_carry_weight allows reaching exactly the limit."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="pack",
+            holder_id=entity.id,
+            weight=40.0
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.can_carry_weight(entity.id, 10.0, max_weight=50.0)
+
+        assert result is True
+
+
+class TestItemManagerFindAvailableSlot:
+    """Tests for find_available_slot auto-assignment."""
+
+    def test_find_available_slot_weapon_prefers_main_hand(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify find_available_slot assigns weapons to main_hand first."""
+        entity = create_entity(db_session, game_session)
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.find_available_slot(entity.id, "weapon")
+
+        assert result == "main_hand"
+
+    def test_find_available_slot_weapon_falls_back_to_off_hand(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify find_available_slot uses off_hand when main_hand occupied."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="sword",
+            holder_id=entity.id,
+            body_slot="main_hand"
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.find_available_slot(entity.id, "weapon")
+
+        assert result == "off_hand"
+
+    def test_find_available_slot_small_misc_prefers_pouch_when_available(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify find_available_slot assigns small misc to belt pouch when belt provides it."""
+        entity = create_entity(db_session, game_session)
+        # Belt that provides pouch slots
+        create_item(
+            db_session, game_session,
+            item_key="leather_belt",
+            holder_id=entity.id,
+            body_slot="waist",
+            provides_slots=["belt_pouch_1", "belt_pouch_2"]
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.find_available_slot(entity.id, "misc", item_size="small")
+
+        assert result == "belt_pouch_1"
+
+    def test_find_available_slot_small_misc_uses_hands_without_pouches(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify find_available_slot falls back to hands when no storage available."""
+        entity = create_entity(db_session, game_session)
+        manager = ItemManager(db_session, game_session)
+
+        # Without any equipment providing bonus slots, falls back to hands
+        result = manager.find_available_slot(entity.id, "misc", item_size="small")
+
+        assert result == "main_hand"
+
+    def test_find_available_slot_small_misc_falls_back_to_pocket(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify find_available_slot uses pocket when pouches full."""
+        entity = create_entity(db_session, game_session)
+        # Pants with pockets, belt with pouches
+        create_item(
+            db_session, game_session,
+            item_key="trousers",
+            holder_id=entity.id,
+            body_slot="legs",
+            provides_slots=["pocket_left", "pocket_right"]
+        )
+        create_item(
+            db_session, game_session,
+            item_key="belt",
+            holder_id=entity.id,
+            body_slot="waist",
+            provides_slots=["belt_pouch_1", "belt_pouch_2"]
+        )
+        # Fill pouches
+        create_item(
+            db_session, game_session,
+            item_key="coins",
+            holder_id=entity.id,
+            body_slot="belt_pouch_1"
+        )
+        create_item(
+            db_session, game_session,
+            item_key="gems",
+            holder_id=entity.id,
+            body_slot="belt_pouch_2"
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.find_available_slot(entity.id, "misc", item_size="small")
+
+        assert result == "pocket_left"
+
+    def test_find_available_slot_large_misc_uses_hands_or_back(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify find_available_slot assigns large items to hands/back."""
+        entity = create_entity(db_session, game_session)
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.find_available_slot(entity.id, "misc", item_size="large")
+
+        assert result in ["main_hand", "off_hand", "back", "backpack_main"]
+
+    def test_find_available_slot_returns_none_when_all_full(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify find_available_slot returns None when no slots available."""
+        entity = create_entity(db_session, game_session)
+        # Fill all relevant slots for weapons
+        create_item(
+            db_session, game_session,
+            item_key="sword",
+            holder_id=entity.id,
+            body_slot="main_hand"
+        )
+        create_item(
+            db_session, game_session,
+            item_key="shield",
+            holder_id=entity.id,
+            body_slot="off_hand"
+        )
+        create_item(
+            db_session, game_session,
+            item_key="bow",
+            holder_id=entity.id,
+            body_slot="back"
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.find_available_slot(entity.id, "weapon")
+
+        assert result is None
+
+    def test_find_available_slot_consumable_prefers_pouch_when_available(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify find_available_slot assigns consumables to belt pouch when available."""
+        entity = create_entity(db_session, game_session)
+        # Belt with pouch slots
+        create_item(
+            db_session, game_session,
+            item_key="belt",
+            holder_id=entity.id,
+            body_slot="waist",
+            provides_slots=["belt_pouch_1"]
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.find_available_slot(entity.id, "consumable")
+
+        assert result == "belt_pouch_1"
+
+    def test_find_available_slot_consumable_returns_none_without_storage(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify find_available_slot returns None for consumable without storage slots."""
+        entity = create_entity(db_session, game_session)
+        manager = ItemManager(db_session, game_session)
+
+        # Without equipment providing bonus slots, consumables have no place
+        result = manager.find_available_slot(entity.id, "consumable")
+
+        assert result is None
+
+
+class TestItemManagerInventorySummary:
+    """Tests for get_inventory_summary method."""
+
+    def test_get_inventory_summary_empty_inventory(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_inventory_summary returns correct structure for empty inventory."""
+        entity = create_entity(db_session, game_session)
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_inventory_summary(entity.id)
+
+        assert "total_weight" in result
+        assert "occupied_slots" in result
+        assert "free_hand_slots" in result
+        assert "can_hold_more" in result
+        assert result["total_weight"] == 0.0
+        # Includes hand_left, hand_right, main_hand, off_hand
+        assert "main_hand" in result["free_hand_slots"]
+        assert "off_hand" in result["free_hand_slots"]
+
+    def test_get_inventory_summary_includes_weight(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_inventory_summary includes total weight."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="sword",
+            holder_id=entity.id,
+            weight=5.0
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_inventory_summary(entity.id)
+
+        assert result["total_weight"] == 5.0
+
+    def test_get_inventory_summary_tracks_occupied_slots(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_inventory_summary lists occupied slots."""
+        entity = create_entity(db_session, game_session)
+        create_item(
+            db_session, game_session,
+            item_key="sword",
+            holder_id=entity.id,
+            body_slot="main_hand"
+        )
+        create_item(
+            db_session, game_session,
+            item_key="torch",
+            holder_id=entity.id,
+            body_slot="off_hand"
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_inventory_summary(entity.id)
+
+        assert "main_hand" in result["occupied_slots"]
+        assert "off_hand" in result["occupied_slots"]
+        # main_hand and off_hand occupied, but hand_left/hand_right still free
+        assert "main_hand" not in result["free_hand_slots"]
+        assert "off_hand" not in result["free_hand_slots"]
+
+    def test_get_inventory_summary_can_hold_more_true_with_free_slots(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify can_hold_more is True when slots available."""
+        entity = create_entity(db_session, game_session)
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_inventory_summary(entity.id)
+
+        assert result["can_hold_more"] is True
+
+    def test_get_inventory_summary_tracks_storage_slots(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_inventory_summary includes free storage slots from equipped items."""
+        entity = create_entity(db_session, game_session)
+        # Belt providing pouch slots
+        create_item(
+            db_session, game_session,
+            item_key="belt",
+            holder_id=entity.id,
+            body_slot="waist",
+            provides_slots=["belt_pouch_1", "belt_pouch_2"]
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_inventory_summary(entity.id)
+
+        assert "free_storage_slots" in result
+        assert "belt_pouch_1" in result["free_storage_slots"]
+        assert "belt_pouch_2" in result["free_storage_slots"]

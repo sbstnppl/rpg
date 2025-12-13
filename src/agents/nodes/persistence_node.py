@@ -10,11 +10,12 @@ from typing import Any, Callable, Coroutine
 from sqlalchemy.orm import Session
 
 from src.agents.state import GameState
-from src.database.models.enums import EntityType, GoalPriority, GoalStatus, GoalType
+from src.database.models.enums import EntityType, GoalPriority, GoalStatus, GoalType, ItemType
 from src.database.models.session import GameSession, Turn
 from src.managers.entity_manager import EntityManager
 from src.managers.fact_manager import FactManager
 from src.managers.goal_manager import GoalManager
+from src.managers.item_manager import ItemManager
 from src.managers.relationship_manager import RelationshipManager
 
 
@@ -95,6 +96,7 @@ async def _persist_state(
     fact_manager = FactManager(db, game_session)
     relationship_manager = RelationshipManager(db, game_session)
     goal_manager = GoalManager(db, game_session)
+    item_manager = ItemManager(db, game_session)
 
     # Check if we have manifest-based data (from GMResponse structured output)
     manifest = state.get("gm_manifest")
@@ -141,6 +143,15 @@ async def _persist_state(
                 )
             except Exception as e:
                 errors.append(f"Failed to persist relationship change: {e}")
+
+        # Persist extracted items
+        for item_data in state.get("extracted_items", []):
+            try:
+                _persist_item(
+                    entity_manager, item_manager, item_data, state.get("player_id")
+                )
+            except Exception as e:
+                errors.append(f"Failed to persist item: {e}")
 
     # Create turn record
     try:
@@ -214,7 +225,8 @@ def _persist_fact(
         return
 
     fact_manager.record_fact(
-        subject=subject,
+        subject_type="entity",  # Default to entity type
+        subject_key=subject,
         predicate=predicate,
         value=value,
         is_secret=fact_data.get("is_secret", False),
@@ -256,6 +268,71 @@ def _persist_relationship_change(
         delta=change,
         reason=reason,
     )
+
+
+def _persist_item(
+    entity_manager: EntityManager,
+    item_manager: ItemManager,
+    item_data: dict[str, Any],
+    player_id: int | None,
+) -> None:
+    """Persist a single extracted item.
+
+    Args:
+        entity_manager: EntityManager for looking up owner entities.
+        item_manager: ItemManager instance.
+        item_data: Extracted item data.
+        player_id: Player entity ID.
+    """
+    item_key = item_data.get("item_key")
+    action = item_data.get("action", "mentioned")
+
+    if not item_key:
+        return
+
+    # Skip "mentioned" items - only persist actual state changes
+    if action == "mentioned":
+        return
+
+    # Check if item already exists
+    existing = item_manager.get_item(item_key)
+
+    if action == "acquired" and existing is None:
+        # Determine owner - use owner_key if provided, else player
+        owner_id = player_id
+        owner_key = item_data.get("owner_key")
+        if owner_key:
+            owner_entity = entity_manager.get_entity(owner_key)
+            if owner_entity:
+                owner_id = owner_entity.id
+
+        # Map string item_type to enum
+        item_type_str = item_data.get("item_type", "misc")
+        try:
+            item_type = ItemType(item_type_str)
+        except ValueError:
+            item_type = ItemType.MISC
+
+        item_manager.create_item(
+            item_key=item_key,
+            display_name=item_data.get("display_name", item_key),
+            item_type=item_type,
+            owner_id=owner_id,
+            holder_id=owner_id,  # Initially holder = owner
+            description=item_data.get("description"),
+        )
+
+    elif action == "dropped" and existing:
+        # Item dropped - clear holder
+        existing.holder_id = None
+
+    elif action == "transferred" and existing:
+        # Transfer to new owner
+        new_owner_key = item_data.get("owner_key")
+        if new_owner_key:
+            new_owner = entity_manager.get_entity(new_owner_key)
+            if new_owner:
+                existing.holder_id = new_owner.id
 
 
 def _create_turn_record(

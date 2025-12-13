@@ -28,6 +28,7 @@ from src.dice.combat import make_attack_roll, roll_damage
 from src.dice.skills import get_attribute_for_skill
 from src.dice.types import AdvantageType
 from src.managers.discovery_manager import DiscoveryManager
+from src.managers.item_manager import ItemManager
 from src.managers.pathfinding_manager import PathfindingManager
 from src.managers.relationship_manager import RelationshipManager
 from src.managers.zone_manager import ZoneManager
@@ -129,6 +130,9 @@ class GMToolExecutor:
             "query_npc": self._execute_query_npc,
             # Item creation tools
             "create_item": self._execute_create_item,
+            # Item acquisition tools
+            "acquire_item": self._execute_acquire_item,
+            "drop_item": self._execute_drop_item,
         }
 
         handler = handlers.get(tool_name)
@@ -1215,4 +1219,215 @@ class GMToolExecutor:
             return {
                 "success": False,
                 "error": f"Failed to create item: {str(e)}",
+            }
+
+    # =========================================================================
+    # Item Acquisition Tool Handlers
+    # =========================================================================
+
+    def _execute_acquire_item(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Acquire item with slot/weight validation.
+
+        Args:
+            args: Tool arguments with entity_key, display_name, item_type,
+                  optional slot, item_size, description, weight, quantity.
+
+        Returns:
+            Result with success status, item details, or failure reason.
+        """
+        from src.database.models.enums import ItemType
+
+        entity_key = args["entity_key"]
+        display_name = args["display_name"]
+        item_type_str = args["item_type"]
+        item_key = args.get("item_key")
+        slot = args.get("slot")
+        item_size = args.get("item_size", "small")
+        description = args.get("description")
+        weight = args.get("weight", 0)
+        quantity = args.get("quantity", 1)
+
+        # Get entity
+        entity = self._get_entity_by_key(entity_key)
+        if entity is None:
+            return {"success": False, "error": f"Entity '{entity_key}' not found"}
+
+        # Initialize item manager
+        item_mgr = ItemManager(self.db, self.game_session)
+
+        # If slot not specified, auto-find one
+        if slot is None:
+            slot = item_mgr.find_available_slot(entity.id, item_type_str, item_size)
+            if slot is None:
+                # Get inventory summary for context
+                summary = item_mgr.get_inventory_summary(entity.id)
+                return {
+                    "success": False,
+                    "reason": "No available slot - inventory full",
+                    "occupied_slots": summary["occupied_slots"],
+                    "suggestion": "Put something down first or find a container",
+                }
+
+        # Check slot availability (if specific slot requested)
+        if not item_mgr.check_slot_available(entity.id, slot):
+            occupied_by = item_mgr.get_item_in_slot(entity.id, slot)
+            return {
+                "success": False,
+                "reason": f"Slot '{slot}' is occupied",
+                "occupied_by": occupied_by.display_name if occupied_by else "unknown item",
+                "suggestion": f"Drop the {occupied_by.display_name if occupied_by else 'item'} first",
+            }
+
+        # Check weight capacity
+        total_weight = weight * quantity
+        if total_weight > 0 and not item_mgr.can_carry_weight(entity.id, total_weight):
+            current = item_mgr.get_total_carried_weight(entity.id)
+            return {
+                "success": False,
+                "reason": "Too heavy - exceeds carrying capacity",
+                "current_weight": current,
+                "item_weight": total_weight,
+                "max_weight": 50.0,
+                "suggestion": "Drop something heavy first",
+            }
+
+        # Generate item key if not provided
+        if not item_key:
+            # Create key from display name
+            import re
+            base_key = re.sub(r'[^a-z0-9]+', '_', display_name.lower()).strip('_')
+            item_key = f"{entity_key}_{base_key}"
+
+        # Check if item already exists
+        existing_item = item_mgr.get_item(item_key)
+        if existing_item:
+            # Transfer existing item to entity
+            existing_item.holder_id = entity.id
+            existing_item.owner_id = entity.id
+            existing_item.body_slot = slot
+            self.db.flush()
+            return {
+                "success": True,
+                "item_key": existing_item.item_key,
+                "display_name": existing_item.display_name,
+                "assigned_slot": slot,
+                "was_existing": True,
+                "message": f"{entity.display_name} now has {existing_item.display_name} in {slot}",
+            }
+
+        # Map string item_type to enum
+        try:
+            item_type = ItemType(item_type_str)
+        except ValueError:
+            item_type = ItemType.MISC
+
+        # Create new item
+        try:
+            item = item_mgr.create_item(
+                item_key=item_key,
+                display_name=display_name,
+                item_type=item_type,
+                owner_id=entity.id,
+                holder_id=entity.id,
+                description=description,
+                weight=weight if weight > 0 else None,
+                quantity=quantity,
+                is_stackable=quantity > 1,
+            )
+
+            # Assign to slot
+            item.body_slot = slot
+            self.db.flush()
+
+            return {
+                "success": True,
+                "item_key": item.item_key,
+                "display_name": item.display_name,
+                "assigned_slot": slot,
+                "was_existing": False,
+                "message": f"{entity.display_name} acquired {item.display_name} in {slot}",
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to create item: {str(e)}",
+            }
+
+    def _execute_drop_item(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Drop or transfer an item.
+
+        Args:
+            args: Tool arguments with entity_key, item_key, optional transfer_to.
+
+        Returns:
+            Result with success status or error.
+        """
+        entity_key = args["entity_key"]
+        item_key = args["item_key"]
+        transfer_to = args.get("transfer_to")
+
+        # Get entity
+        entity = self._get_entity_by_key(entity_key)
+        if entity is None:
+            return {"success": False, "error": f"Entity '{entity_key}' not found"}
+
+        # Initialize item manager
+        item_mgr = ItemManager(self.db, self.game_session)
+
+        # Get the item
+        item = item_mgr.get_item(item_key)
+        if item is None:
+            return {"success": False, "error": f"Item '{item_key}' not found"}
+
+        # Verify entity has the item
+        if item.holder_id != entity.id:
+            return {
+                "success": False,
+                "error": f"{entity.display_name} is not holding {item.display_name}",
+            }
+
+        if transfer_to:
+            # Transfer to another entity
+            target = self._get_entity_by_key(transfer_to)
+            if target is None:
+                return {"success": False, "error": f"Target entity '{transfer_to}' not found"}
+
+            # Check if target can receive it
+            target_slot = item_mgr.find_available_slot(
+                target.id, item.item_type.value if item.item_type else "misc"
+            )
+            if target_slot is None:
+                return {
+                    "success": False,
+                    "reason": f"{target.display_name} cannot carry more items",
+                    "suggestion": "They need to free up a slot first",
+                }
+
+            item.holder_id = target.id
+            item.body_slot = target_slot
+            self.db.flush()
+
+            return {
+                "success": True,
+                "item_key": item.item_key,
+                "display_name": item.display_name,
+                "from_entity": entity_key,
+                "to_entity": transfer_to,
+                "new_slot": target_slot,
+                "message": f"{entity.display_name} gave {item.display_name} to {target.display_name}",
+            }
+        else:
+            # Drop on ground
+            item.holder_id = None
+            item.body_slot = None
+            self.db.flush()
+
+            return {
+                "success": True,
+                "item_key": item.item_key,
+                "display_name": item.display_name,
+                "from_entity": entity_key,
+                "dropped": True,
+                "message": f"{entity.display_name} dropped {item.display_name}",
             }

@@ -562,6 +562,104 @@ VIEW_MAP_TOOL = ToolDefinition(
 )
 
 
+# Acquire Item Tool
+ACQUIRE_ITEM_TOOL = ToolDefinition(
+    name="acquire_item",
+    description=(
+        "Give an item to an entity (player or NPC). Validates slot availability and "
+        "weight limits before acquisition. Use this when a character picks up, receives, "
+        "or otherwise acquires an item. The tool will return success/failure with a reason "
+        "that you should incorporate into the narrative."
+    ),
+    parameters=[
+        ToolParameter(
+            name="entity_key",
+            param_type="string",
+            description="Entity key of who acquires the item (e.g., 'player', 'npc_merchant')",
+        ),
+        ToolParameter(
+            name="display_name",
+            param_type="string",
+            description="Display name of the item (e.g., 'Iron Sword', 'Bundle of Branches')",
+        ),
+        ToolParameter(
+            name="item_type",
+            param_type="string",
+            description="Type of item",
+            enum=["weapon", "armor", "clothing", "consumable", "container", "misc"],
+        ),
+        ToolParameter(
+            name="item_key",
+            param_type="string",
+            description="Unique key for existing item, or leave empty for auto-generated key",
+            required=False,
+        ),
+        ToolParameter(
+            name="slot",
+            param_type="string",
+            description="Specific body slot to place item (auto-assigned if not specified)",
+            required=False,
+        ),
+        ToolParameter(
+            name="item_size",
+            param_type="string",
+            description="Size hint for auto-slot assignment",
+            required=False,
+            enum=["small", "medium", "large"],
+            default="small",
+        ),
+        ToolParameter(
+            name="description",
+            param_type="string",
+            description="Item description",
+            required=False,
+        ),
+        ToolParameter(
+            name="weight",
+            param_type="number",
+            description="Weight in pounds (for encumbrance checking)",
+            required=False,
+            default=0,
+        ),
+        ToolParameter(
+            name="quantity",
+            param_type="integer",
+            description="Number of items (for stackable items)",
+            required=False,
+            default=1,
+        ),
+    ],
+)
+
+
+# Drop Item Tool
+DROP_ITEM_TOOL = ToolDefinition(
+    name="drop_item",
+    description=(
+        "Have an entity drop or put down an item they are carrying. Use when a character "
+        "sets something down, discards an item, or gives something away."
+    ),
+    parameters=[
+        ToolParameter(
+            name="entity_key",
+            param_type="string",
+            description="Entity key of who is dropping the item",
+        ),
+        ToolParameter(
+            name="item_key",
+            param_type="string",
+            description="Key of the item to drop",
+        ),
+        ToolParameter(
+            name="transfer_to",
+            param_type="string",
+            description="Entity key to transfer item to (for giving items), leave empty to drop on ground",
+            required=False,
+        ),
+    ],
+)
+
+
 # All GM tools
 GM_TOOLS = [
     SKILL_CHECK_TOOL,
@@ -578,4 +676,6 @@ GM_TOOLS = [
     DISCOVER_ZONE_TOOL,
     DISCOVER_LOCATION_TOOL,
     VIEW_MAP_TOOL,
+    ACQUIRE_ITEM_TOOL,
+    DROP_ITEM_TOOL,
 ]

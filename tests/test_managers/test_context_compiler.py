@@ -6,6 +6,7 @@ from src.database.models.enums import DiscoveryMethod, TerrainType
 from src.managers.context_compiler import ContextCompiler, SceneContext
 from tests.factories import (
     create_entity,
+    create_fact,
     create_location,
     create_terrain_zone,
     create_turn,
@@ -389,3 +390,182 @@ class TestNavigationContextTravelInfo:
 
         # Should mention that special skill is needed
         assert "swimming" in result.lower() or "lake" in result.lower()
+
+
+class TestWorldFactsContext:
+    """Tests for world facts in scene context."""
+
+    def test_get_world_facts_context_returns_empty_when_no_facts(
+        self, db_session, game_session, player_entity
+    ):
+        """Should return empty string when no non-secret facts exist."""
+        compiler = ContextCompiler(db_session, game_session)
+
+        result = compiler._get_world_facts_context(location_key="village")
+
+        assert result == ""
+
+    def test_get_world_facts_context_includes_non_secret_facts(
+        self, db_session, game_session, player_entity
+    ):
+        """Should include non-secret facts in context."""
+        create_fact(
+            db_session,
+            game_session,
+            subject_key="the_weary_traveler",
+            predicate="type",
+            value="Village inn",
+            is_secret=False,
+        )
+        create_fact(
+            db_session,
+            game_session,
+            subject_key="the_weary_traveler",
+            predicate="owner",
+            value="Martha",
+            is_secret=False,
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_world_facts_context(location_key="village")
+
+        assert "Established World Facts" in result
+        assert "The Weary Traveler" in result  # Subject key converted to title
+        assert "Village inn" in result
+        assert "Martha" in result
+
+    def test_get_world_facts_context_excludes_secret_facts(
+        self, db_session, game_session, player_entity
+    ):
+        """Should NOT include secret facts in world facts context."""
+        create_fact(
+            db_session,
+            game_session,
+            subject_key="village_elder",
+            predicate="occupation",
+            value="Baker",
+            is_secret=False,
+        )
+        create_fact(
+            db_session,
+            game_session,
+            subject_key="village_elder",
+            predicate="secret_identity",
+            value="Former assassin",
+            is_secret=True,  # This is a secret!
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_world_facts_context(location_key="village")
+
+        assert "Baker" in result
+        assert "Former assassin" not in result
+        assert "secret_identity" not in result
+
+    def test_get_world_facts_context_groups_by_subject(
+        self, db_session, game_session, player_entity
+    ):
+        """Facts should be grouped by subject."""
+        create_fact(
+            db_session,
+            game_session,
+            subject_key="tavern",
+            predicate="name",
+            value="The Golden Dragon",
+            is_secret=False,
+        )
+        create_fact(
+            db_session,
+            game_session,
+            subject_key="tavern",
+            predicate="location",
+            value="Town square",
+            is_secret=False,
+        )
+        create_fact(
+            db_session,
+            game_session,
+            subject_key="blacksmith",
+            predicate="name",
+            value="Iron Magnus",
+            is_secret=False,
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_world_facts_context(location_key="village")
+
+        # Should have headers for each subject
+        assert "### Tavern" in result
+        assert "### Blacksmith" in result
+
+    def test_compile_scene_includes_world_facts(
+        self, db_session, game_session, player_entity
+    ):
+        """compile_scene should include world facts in result."""
+        create_fact(
+            db_session,
+            game_session,
+            subject_key="test_inn",
+            predicate="type",
+            value="Roadside inn",
+            is_secret=False,
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler.compile_scene(
+            player_id=player_entity.id,
+            location_key="test_location",
+            turn_number=1,
+        )
+
+        assert result.world_facts_context is not None
+        assert "Roadside inn" in result.world_facts_context
+
+    def test_to_prompt_includes_world_facts(
+        self, db_session, game_session, player_entity
+    ):
+        """to_prompt should include world facts in the output."""
+        create_fact(
+            db_session,
+            game_session,
+            subject_key="village_well",
+            predicate="location",
+            value="Center of village square",
+            is_secret=False,
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        scene = compiler.compile_scene(
+            player_id=player_entity.id,
+            location_key="test_location",
+            turn_number=1,
+        )
+        prompt = scene.to_prompt()
+
+        assert "Established World Facts" in prompt
+        assert "Center of village square" in prompt
+
+    def test_world_facts_context_includes_consistency_warning(
+        self, db_session, game_session, player_entity
+    ):
+        """Should include warning to use established names."""
+        create_fact(
+            db_session,
+            game_session,
+            subject_key="test_location",
+            predicate="name",
+            value="Test Place",
+            is_secret=False,
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_world_facts_context(location_key="village")
+
+        assert "IMPORTANT" in result
+        assert "consistency" in result.lower() or "invent" in result.lower()

@@ -177,6 +177,46 @@ When players perform actions that satisfy their needs, use the `satisfy_need` to
 Use `quality` to adjust amounts: poor (0.6x), basic (1.0x), good (1.3x), excellent (1.6x), exceptional (2.0x).
 Character preferences (greedy_eater, is_loner, is_insomniac, etc.) automatically adjust these amounts.
 
+## Item Acquisition
+
+When the player picks up, acquires, buys, or receives an item, **always use the `acquire_item` tool first**. The tool validates:
+- **Slot availability**: Checks if hands, pouches, or other slots are free
+- **Weight limits**: Ensures the character can carry the additional weight
+- **Auto-assignment**: Finds an appropriate slot if not specified
+
+### How to Use
+
+Call `acquire_item` with:
+- `entity_key`: Who gets the item (usually "player")
+- `display_name`: Name of the item ("Iron Sword", "Healing Potion")
+- `item_type`: weapon, armor, clothing, consumable, container, or misc
+- `item_size`: small (fits in pouch), medium (one hand), or large (two hands/back)
+- `slot` (optional): Specific slot, or let the system auto-assign
+- `weight` (optional): Item weight in pounds
+- `quantity` (optional): Number of items (default 1)
+
+### Narrating Results
+
+**If successful**: Describe the character taking the item naturally.
+> "You slide the dagger into your belt sheath."
+> "You stuff the coins into your belt pouch."
+
+**If failed due to slot**: Describe WHY they can't carry it and offer options.
+> "Your hands are already full with the torch and branches. You'll need to set something down first."
+> "Your belt pouches are stuffed to bursting. Perhaps your backpack?"
+
+**If failed due to weight**: Describe the physical limitation.
+> "You strain to lift the chest, but it's far too heavy to carry along with everything else."
+
+### Dropping Items
+
+Use the `drop_item` tool when players put down, drop, or give items away:
+- `entity_key`: Who is dropping the item
+- `item_key`: The item's key (from inventory context)
+- `transfer_to` (optional): Another entity_key if giving to someone
+
+**IMPORTANT**: Do NOT narrate successful item acquisition without calling `acquire_item` first. The tool ensures inventory constraints are respected.
+
 ## Turn Handling
 
 The scene context above includes a **Turn** section that indicates whether this is the first turn or a continuation.

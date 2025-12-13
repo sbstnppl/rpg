@@ -291,90 +291,183 @@ class AnthropicProvider:
         temperature: float = 0.0,
         system_prompt: str | None = None,
     ) -> LLMResponse:
-        """Generate a structured response matching a schema."""
-        # Use tool_use to force structured output
-        # Create a tool from the schema
-        tool = self._schema_to_tool(response_schema)
+        """Generate a structured response matching a schema.
 
-        response = await self.complete_with_tools(
-            messages=messages,
-            tools=[tool],
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            tool_choice={"type": "tool", "name": tool.name},
-            system_prompt=system_prompt,
-        )
+        Uses Anthropic's tool_use feature to force structured output.
+        For Pydantic models, generates proper JSON schema with nested types.
+        """
+        extracted_system, api_messages = self._convert_messages(messages)
+        final_system = system_prompt or extracted_system
 
-        # Extract structured content from tool call
-        if response.has_tool_calls:
-            parsed_content = response.tool_calls[0].arguments
-            return LLMResponse(
-                content="",
-                parsed_content=parsed_content,
-                finish_reason=response.finish_reason,
-                model=response.model,
-                usage=response.usage,
-                raw_response=response.raw_response,
+        # Create tool definition with proper JSON schema
+        tool_dict = self._schema_to_anthropic_tool(response_schema)
+        tool_name = tool_dict["name"]
+
+        try:
+            kwargs: dict[str, Any] = {
+                "model": model or self._default_model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": api_messages,
+                "tools": [tool_dict],
+                "tool_choice": {"type": "tool", "name": tool_name},
+            }
+            if final_system:
+                kwargs["system"] = final_system
+
+            response = await self._get_client().messages.create(**kwargs)
+            parsed_response = self._parse_response(response)
+
+            # Extract structured content from tool call
+            if parsed_response.has_tool_calls:
+                parsed_content = parsed_response.tool_calls[0].arguments
+                return LLMResponse(
+                    content="",
+                    parsed_content=parsed_content,
+                    finish_reason=parsed_response.finish_reason,
+                    model=parsed_response.model,
+                    usage=parsed_response.usage,
+                    raw_response=parsed_response.raw_response,
+                )
+
+            raise StructuredOutputError(
+                "Model did not return structured output",
+                raw_output=parsed_response.content,
             )
+        except StructuredOutputError:
+            raise
+        except Exception as e:
+            await self._handle_api_error(e)
+            raise
 
-        raise StructuredOutputError(
-            "Model did not return structured output",
-            raw_output=response.content,
-        )
+    def _schema_to_anthropic_tool(self, schema: type) -> dict[str, Any]:
+        """Convert a type/schema to Anthropic tool format with proper JSON schema.
 
-    def _schema_to_tool(self, schema: type) -> ToolDefinition:
-        """Convert a type/schema to a ToolDefinition for structured output."""
+        For Pydantic models, uses model_json_schema() to get full nested schema.
+        This properly handles list[Model], Optional[Model], Literal types, etc.
+
+        Args:
+            schema: The type to convert (Pydantic model, dataclass, or dict).
+
+        Returns:
+            Dict in Anthropic's tool format with proper input_schema.
+        """
+        schema_name = getattr(schema, "__name__", "Data")
+
+        # Handle Pydantic models - use built-in JSON schema generation
+        if hasattr(schema, "model_json_schema"):
+            json_schema = schema.model_json_schema()
+            # Remove $defs key and inline definitions for cleaner schema
+            # Anthropic handles $defs but inlining can be clearer
+            return {
+                "name": "extract_data",
+                "description": f"Extract {schema_name} from the input. Return valid JSON matching the schema.",
+                "input_schema": json_schema,
+            }
+
         # Handle dict type (simple case)
         if schema is dict:
-            return ToolDefinition(
-                name="extract_data",
-                description="Extract structured data from the input",
-            )
+            return {
+                "name": "extract_data",
+                "description": "Extract structured data from the input",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": True,
+                },
+            }
 
-        # Handle dataclasses and Pydantic models
-        params: list[ToolParameter] = []
-        from src.llm.tool_types import ToolParameter
-
+        # Handle dataclasses
         if hasattr(schema, "__dataclass_fields__"):
-            # Dataclass
             from dataclasses import fields
-            for field in fields(schema):
-                field_type = "string"
-                if field.type in (int, "int"):
-                    field_type = "integer"
-                elif field.type in (bool, "bool"):
-                    field_type = "boolean"
-                params.append(
-                    ToolParameter(
-                        name=field.name,
-                        type=field_type,
-                        description=f"The {field.name} field",
-                    )
-                )
-        elif hasattr(schema, "model_fields"):
-            # Pydantic model
-            for name, field_info in schema.model_fields.items():
-                field_type = "string"
-                annotation = field_info.annotation
-                if annotation in (int, "int"):
-                    field_type = "integer"
-                elif annotation in (bool, "bool"):
-                    field_type = "boolean"
-                params.append(
-                    ToolParameter(
-                        name=name,
-                        type=field_type,
-                        description=field_info.description or f"The {name} field",
-                        required=field_info.is_required(),
-                    )
-                )
+            properties: dict[str, Any] = {}
+            required: list[str] = []
 
-        return ToolDefinition(
-            name="extract_data",
-            description=f"Extract {schema.__name__} data",
-            parameters=tuple(params),
-        )
+            for field in fields(schema):
+                field_schema = self._python_type_to_json_schema(field.type)
+                field_schema["description"] = f"The {field.name} field"
+                properties[field.name] = field_schema
+                # Dataclass fields are required unless they have defaults
+                if field.default is field.default_factory:
+                    required.append(field.name)
+
+            return {
+                "name": "extract_data",
+                "description": f"Extract {schema_name} data",
+                "input_schema": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                },
+            }
+
+        # Fallback for unknown types
+        return {
+            "name": "extract_data",
+            "description": f"Extract {schema_name} data",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+
+    def _python_type_to_json_schema(self, python_type: Any) -> dict[str, Any]:
+        """Convert a Python type annotation to JSON Schema.
+
+        Args:
+            python_type: Python type annotation.
+
+        Returns:
+            JSON Schema dict for the type.
+        """
+        import typing
+        from typing import get_origin, get_args
+
+        # Handle None
+        if python_type is type(None):
+            return {"type": "null"}
+
+        # Handle basic types
+        if python_type is str or python_type == "str":
+            return {"type": "string"}
+        if python_type is int or python_type == "int":
+            return {"type": "integer"}
+        if python_type is float or python_type == "float":
+            return {"type": "number"}
+        if python_type is bool or python_type == "bool":
+            return {"type": "boolean"}
+
+        # Handle generic types (List, Optional, etc.)
+        origin = get_origin(python_type)
+        args = get_args(python_type)
+
+        # Handle Optional (Union with None)
+        if origin is typing.Union:
+            # Filter out None type
+            non_none_args = [a for a in args if a is not type(None)]
+            if len(non_none_args) == 1:
+                # This is Optional[X]
+                inner_schema = self._python_type_to_json_schema(non_none_args[0])
+                return inner_schema  # JSON Schema handles null implicitly
+            # Multiple types - use anyOf
+            return {"anyOf": [self._python_type_to_json_schema(a) for a in args]}
+
+        # Handle List/list
+        if origin is list:
+            if args:
+                return {
+                    "type": "array",
+                    "items": self._python_type_to_json_schema(args[0]),
+                }
+            return {"type": "array"}
+
+        # Handle Dict/dict
+        if origin is dict:
+            return {"type": "object"}
+
+        # Handle Literal (enum-like)
+        if origin is typing.Literal:
+            return {"type": "string", "enum": list(args)}
+
+        # Default to string for unknown types
+        return {"type": "string"}
 
     def count_tokens(
         self,

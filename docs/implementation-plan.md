@@ -50,6 +50,12 @@
   - `transfer_item(item, from, to)`
   - `equip_item(entity, item, slot, layer)`
   - `get_inventory(entity)`, `get_visible_equipment(entity)`
+  - `check_slot_available(entity, slot)` - slot validation
+  - `get_item_in_slot(entity, slot)` - get item at slot
+  - `get_total_carried_weight(entity)` - sum item weights
+  - `can_carry_weight(entity, weight)` - weight validation
+  - `find_available_slot(entity, item_type)` - auto-assign slot
+  - `get_inventory_summary(entity)` - slots/weight summary
   - `update_visibility()` - recalculate layer visibility
   - `get_items_at_location(location)` - items at world location
 
@@ -262,9 +268,13 @@
 - [x] Create `src/agents/tools/gm_tools.py`
   - [x] `skill_check` tool with `entity_key` for proficiency lookup
   - [x] `attribute_key` optional override for governing attribute
+  - [x] `acquire_item` tool for item pickup with slot/weight validation
+  - [x] `drop_item` tool for dropping/transferring items
 - [x] Create `src/agents/tools/executor.py`
   - [x] `_execute_skill_check()` queries EntitySkill and EntityAttribute
   - [x] Returns full modifier breakdown for interactive display
+  - [x] `_execute_acquire_item()` validates slots/weight before item creation
+  - [x] `_execute_drop_item()` handles item dropping and transfers
 - [x] Create `src/agents/tools/extraction_tools.py`
 
 ## Phase 5: Advanced Features

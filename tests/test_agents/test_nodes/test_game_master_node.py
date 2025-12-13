@@ -9,7 +9,7 @@ from src.agents.nodes.game_master_node import (
     create_game_master_node,
     parse_state_block,
 )
-from src.llm.response_types import LLMResponse, UsageStats
+from src.llm.response_types import LLMResponse, UsageStats, ToolCall
 
 
 @pytest.fixture
@@ -217,3 +217,78 @@ class TestGameMasterNodeWithDefaultFunction:
             result = await game_master_node(state)
 
             assert "gm_response" in result
+
+
+class TestGameMasterNodeWithToolCalls:
+    """Test GM node with multi-round tool calling."""
+
+    @pytest.mark.asyncio
+    async def test_accumulates_narrative_across_tool_rounds(
+        self, db_session, game_session, player_entity
+    ):
+        """Narrative from tool-calling round should be preserved.
+
+        When LLM returns narrative + tool call in one response, then
+        only STATE block after the tool result, the narrative should
+        still be included in the final response.
+        """
+        # First response: narrative + tool call
+        first_response = LLMResponse(
+            content='"Greetings!" you call out warmly. The villager smiles.',
+            tool_calls=(
+                ToolCall(
+                    id="tool_123",
+                    name="satisfy_need",
+                    arguments={
+                        "entity_key": "player",
+                        "need_name": "social_connection",
+                        "action_type": "chat",
+                        "quality": "good",
+                    },
+                ),
+            ),
+            finish_reason="tool_use",
+            usage=UsageStats(prompt_tokens=100, completion_tokens=50, total_tokens=150),
+        )
+
+        # Second response: only STATE block (narrative already written)
+        second_response = LLMResponse(
+            content="""---STATE---
+time_advance_minutes: 3
+location_change: none
+combat_initiated: false""",
+            tool_calls=(),
+            finish_reason="end_turn",
+            usage=UsageStats(prompt_tokens=200, completion_tokens=20, total_tokens=220),
+        )
+
+        state = {
+            "session_id": game_session.id,
+            "player_id": player_entity.id,
+            "player_location": "village",
+            "player_input": "Greet the villager",
+            "scene_context": "You are in a village square.",
+            "_db": db_session,
+            "_game_session": game_session,
+        }
+
+        with patch(
+            "src.agents.nodes.game_master_node.get_gm_provider"
+        ) as mock_get_provider:
+            mock_provider = MagicMock()
+            # Return first_response, then second_response
+            mock_provider.complete_with_tools = AsyncMock(
+                side_effect=[first_response, second_response]
+            )
+            mock_get_provider.return_value = mock_provider
+
+            result = await game_master_node(state)
+
+            # Narrative from first response should be preserved
+            assert "gm_response" in result
+            assert "Greetings" in result["gm_response"]
+            assert "villager smiles" in result["gm_response"]
+            # Should not have empty response error
+            assert "errors" not in result or not any(
+                "empty response" in err for err in result.get("errors", [])
+            )

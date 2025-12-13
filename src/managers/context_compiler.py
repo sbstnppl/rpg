@@ -40,6 +40,7 @@ class SceneContext:
     secrets_context: str  # GM-only info
     navigation_context: str = ""  # Current zone and navigation info
     entity_registry_context: str = ""  # Entity keys for manifest references
+    world_facts_context: str = ""  # Established world facts for consistency
 
     def to_prompt(self, include_secrets: bool = True) -> str:
         """Format as prompt string for GM."""
@@ -62,6 +63,9 @@ class SceneContext:
 
         if self.entity_registry_context:
             sections.append(self.entity_registry_context)
+
+        if self.world_facts_context:
+            sections.append(self.world_facts_context)
 
         if include_secrets and self.secrets_context:
             sections.append(self.secrets_context)
@@ -170,6 +174,7 @@ class ContextCompiler(BaseManager):
             secrets_context=self._get_secrets_context(location_key) if include_secrets else "",
             navigation_context=self._get_navigation_context(current_zone_key),
             entity_registry_context=self._get_entity_registry_context(location_key, player_id),
+            world_facts_context=self._get_world_facts_context(location_key),
         )
 
     def _get_turn_context(self, turn_number: int, history_limit: int = 3) -> str:
@@ -808,6 +813,52 @@ class ContextCompiler(BaseManager):
                     f"- {hint.foreshadow_target or hint.value} "
                     f"(mentioned {hint.times_mentioned}/3 times)"
                 )
+
+        return "\n".join(lines)
+
+    def _get_world_facts_context(self, location_key: str) -> str:
+        """Get established world facts relevant to current scene.
+
+        Includes non-secret facts like established location names,
+        NPC names, building names, etc. to ensure GM consistency.
+
+        Args:
+            location_key: Current location key (for potential filtering).
+
+        Returns:
+            Formatted world facts context string.
+        """
+        # Query non-secret facts
+        facts = (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.session_id,
+                Fact.is_secret == False,
+            )
+            .limit(50)
+            .all()
+        )
+
+        if not facts:
+            return ""
+
+        lines = ["## Established World Facts"]
+        lines.append("IMPORTANT: Use these established names and details for consistency.")
+        lines.append("Do NOT invent new names for things already named below.")
+
+        # Group by subject
+        by_subject: dict[str, list[str]] = {}
+        for fact in facts:
+            if fact.subject_key not in by_subject:
+                by_subject[fact.subject_key] = []
+            by_subject[fact.subject_key].append(f"{fact.predicate}: {fact.value}")
+
+        for subject, predicates in by_subject.items():
+            # Convert key to readable name
+            readable_subject = subject.replace("_", " ").title()
+            lines.append(f"\n### {readable_subject}")
+            for p in predicates[:5]:  # Limit per subject
+                lines.append(f"- {p}")
 
         return "\n".join(lines)
 

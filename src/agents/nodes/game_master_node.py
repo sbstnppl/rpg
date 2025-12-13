@@ -129,6 +129,8 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
     skill_checks: list[dict[str, Any]] = []
 
     # Tool calling loop - allow multiple rounds of tool use
+    # Accumulate text across rounds (narrative may come before tool calls)
+    accumulated_text: list[str] = []
     max_tool_rounds = 5
     for _ in range(max_tool_rounds):
         if executor is not None:
@@ -154,9 +156,10 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
         # Build assistant message with both text content and tool_use blocks
         content_blocks: list[MessageContent] = []
 
-        # Add text content if present
+        # Add text content if present (and accumulate for final response)
         if response.content:
             content_blocks.append(MessageContent(type="text", text=response.content))
+            accumulated_text.append(response.content)
 
         # Add tool_use blocks for each tool call
         for tool_call in response.tool_calls:
@@ -190,8 +193,11 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
 
             messages.append(Message.tool_result(tool_call.id, result_str))
 
-    # Parse state changes from final response
-    raw_response = response.content
+    # Parse state changes from combined response
+    # Include any text from tool-calling rounds plus the final response
+    if response.content and response.content not in accumulated_text:
+        accumulated_text.append(response.content)
+    raw_response = "\n\n".join(accumulated_text)
     narrative, state_changes = parse_state_block(raw_response, return_narrative=True)
 
     # Build result

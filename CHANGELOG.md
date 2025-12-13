@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Tool-Based Item Acquisition System** - GM now uses `acquire_item` and `drop_item` tools for inventory management
+  - Validates slot availability before item pickup (hands full, belt full, etc.)
+  - Validates weight limits before acquisition (too heavy to carry)
+  - Auto-assigns items to appropriate slots based on item type and size
+  - Returns immediate feedback to GM for narrative integration ("Your hands are full")
+  - Added `ItemManager.check_slot_available()`, `get_item_in_slot()`, `get_total_carried_weight()`, `can_carry_weight()`, `find_available_slot()`, `get_inventory_summary()` methods
+  - Added `ACQUIRE_ITEM_TOOL` and `DROP_ITEM_TOOL` definitions to `gm_tools.py`
+  - Added `_execute_acquire_item()` and `_execute_drop_item()` handlers to `executor.py`
+  - Updated GM prompt with item acquisition instructions
 - **In-Game Image Prompt Commands** - New `/scene` and `/portrait` commands generate FLUX.1-dev image prompts during gameplay
   - `/scene [pov|third] [photo|art]` - Generate scene image prompt from current location
   - `/portrait [base|current] [photo|art]` - Generate character portrait prompt

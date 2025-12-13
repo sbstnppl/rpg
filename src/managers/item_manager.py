@@ -663,3 +663,161 @@ class ItemManager(BaseManager):
         """
         visible = self.get_visible_equipment(entity_id)
         return {item.body_slot: item for item in visible if item.body_slot}
+
+    # ==================== Slot/Weight Validation ====================
+
+    def check_slot_available(self, entity_id: int, slot: str) -> bool:
+        """Check if a body slot is available for an item.
+
+        Args:
+            entity_id: Entity ID.
+            slot: Body slot to check.
+
+        Returns:
+            True if slot is available, False if occupied.
+        """
+        item = self.get_item_in_slot(entity_id, slot)
+        return item is None
+
+    def get_item_in_slot(self, entity_id: int, slot: str) -> Item | None:
+        """Get the item currently in a specific body slot.
+
+        Args:
+            entity_id: Entity ID.
+            slot: Body slot to check.
+
+        Returns:
+            Item in the slot, or None if empty.
+        """
+        return (
+            self.db.query(Item)
+            .filter(
+                Item.session_id == self.session_id,
+                Item.holder_id == entity_id,
+                Item.body_slot == slot,
+            )
+            .first()
+        )
+
+    def get_total_carried_weight(self, entity_id: int) -> float:
+        """Calculate total weight of all items carried by entity.
+
+        Args:
+            entity_id: Entity ID.
+
+        Returns:
+            Total weight in pounds.
+        """
+        items = self.get_inventory(entity_id)
+        total = 0.0
+        for item in items:
+            if item.weight:
+                total += item.weight * item.quantity
+        return total
+
+    def can_carry_weight(
+        self, entity_id: int, additional_weight: float, max_weight: float | None = None
+    ) -> bool:
+        """Check if entity can carry additional weight.
+
+        Args:
+            entity_id: Entity ID.
+            additional_weight: Weight to add.
+            max_weight: Maximum carry weight (default: 50 lbs).
+
+        Returns:
+            True if entity can carry the additional weight.
+        """
+        if max_weight is None:
+            # Default max weight - could be based on Strength later
+            max_weight = 50.0
+
+        current_weight = self.get_total_carried_weight(entity_id)
+        return (current_weight + additional_weight) <= max_weight
+
+    def find_available_slot(
+        self, entity_id: int, item_type: str, item_size: str = "small"
+    ) -> str | None:
+        """Find an available slot for an item based on type.
+
+        Args:
+            entity_id: Entity ID.
+            item_type: Item type (weapon, armor, misc, consumable, etc.)
+            item_size: Size hint (small, medium, large).
+
+        Returns:
+            Available slot key, or None if no slot available.
+        """
+        # Get all available slots (including bonus slots from worn items)
+        available_slots = self.get_available_slots(entity_id)
+
+        # Define slot priority by item type
+        slot_priorities: dict[str, list[str]] = {
+            "weapon": ["main_hand", "off_hand", "back"],
+            "armor": [],  # Armor goes to specific body parts, not auto-assigned
+            "clothing": [],  # Clothing goes to specific body parts
+            "shield": ["off_hand", "back"],
+            "consumable": ["belt_pouch_1", "belt_pouch_2", "belt_pouch_3",
+                          "pocket_left", "pocket_right", "backpack_main"],
+            "container": ["back", "waist"],
+            "misc": [],  # Will be set based on size
+        }
+
+        # Misc items depend on size
+        if item_type == "misc":
+            if item_size == "large":
+                slot_priorities["misc"] = ["main_hand", "off_hand", "back", "backpack_main"]
+            else:  # small or medium
+                slot_priorities["misc"] = [
+                    "belt_pouch_1", "belt_pouch_2", "belt_pouch_3",
+                    "pocket_left", "pocket_right",
+                    "backpack_main", "backpack_side",
+                    "main_hand", "off_hand",
+                ]
+
+        # Get priority list for this item type
+        priorities = slot_priorities.get(item_type, slot_priorities["misc"])
+
+        # Find first available slot in priority order
+        for slot in priorities:
+            if slot in available_slots and self.check_slot_available(entity_id, slot):
+                return slot
+
+        return None
+
+    def get_inventory_summary(self, entity_id: int) -> dict:
+        """Get a summary of entity's inventory state for GM context.
+
+        Args:
+            entity_id: Entity ID.
+
+        Returns:
+            Dict with slot usage, weight, and capacity info.
+        """
+        available_slots = self.get_available_slots(entity_id)
+        equipped = self.get_equipped_items(entity_id)
+
+        # Count occupied slots
+        occupied_slots = {}
+        for item in equipped:
+            if item.body_slot:
+                occupied_slots[item.body_slot] = item.display_name
+
+        # Find free slots by category
+        free_hand_slots = []
+        free_storage_slots = []
+        for slot in available_slots:
+            if slot not in occupied_slots:
+                if slot in ("main_hand", "off_hand", "hand_left", "hand_right"):
+                    free_hand_slots.append(slot)
+                elif slot in BONUS_SLOTS:
+                    free_storage_slots.append(slot)
+
+        return {
+            "total_weight": self.get_total_carried_weight(entity_id),
+            "max_weight": 50.0,  # Could be dynamic based on Strength
+            "free_hand_slots": free_hand_slots,
+            "free_storage_slots": free_storage_slots,
+            "occupied_slots": occupied_slots,
+            "can_hold_more": len(free_hand_slots) > 0 or len(free_storage_slots) > 0,
+        }
