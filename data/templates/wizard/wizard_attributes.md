@@ -37,24 +37,36 @@ Present the character's attributes in a narrative, story-driven way.
 - Do NOT change or recalculate the attributes
 - Do NOT reveal potential stats or formulas
 - The player can ask to see the numbers, which you should provide
-- When done explaining, output section_complete
 
 ## Twists to Highlight
 {twist_narratives}
 
-## Output Format
+## CRITICAL: Output JSON in EVERY Response
 
-After explaining the attributes:
+**First response:** After presenting the attributes narratively, output both field_updates AND section_complete:
 ```json
-{{
-  "section_complete": true,
-  "data": {{
-    "attributes": {attributes_json}
-  }}
-}}
+{{{{"field_updates": {{{{"attributes": {attributes_json}}}}}}}}}
+{{{{"section_complete": true, "data": {{{{"attributes": {attributes_json}}}}}}}}}
 ```
 
-The attributes have already been calculated - you're just presenting them narratively and then confirming.
+**When player accepts** (says "great", "good", "ok", "looks good", "nice", "perfect", "yes", "cool", "awesome", "sounds good", "move on", etc.):
+Output section_complete IMMEDIATELY. Do NOT ask follow-up questions. Do NOT ask what they want to do next.
+
+**WRONG** (asking questions after acceptance):
+```
+Player: great
+AI: Thank you! What would you like to do next?
+```
+This is WRONG - you should output section_complete, not ask questions!
+
+**RIGHT** (completing on acceptance):
+```
+Player: great
+AI: Excellent! Barrik's attributes capture his essence perfectly.
+{{section_complete JSON here}}
+```
+
+The attributes have already been calculated - you're just presenting them narratively and confirming.
 
 ## Conversation History (this section only)
 {section_conversation_history}

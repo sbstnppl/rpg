@@ -809,6 +809,21 @@ Here are some names:
         assert "## Character Options" in result
         assert "Finn" in result
 
+    def test_strips_combined_json_blocks(self):
+        """Should remove combined JSON with field_updates and section_complete."""
+        from src.cli.commands.character import _strip_json_blocks
+
+        # LLM sometimes outputs combined JSON
+        text = '''Excellent! A male Dwarf it is.
+
+{"field_updates": {"species": "Dwarf", "gender": "male"}, "section_complete": true, "data": {"species": "Dwarf", "gender": "male"}}'''
+
+        result = _strip_json_blocks(text)
+
+        assert "field_updates" not in result
+        assert "section_complete" not in result
+        assert "Excellent! A male Dwarf it is." in result
+
 
 class TestStripJsonComments:
     """Tests for _strip_json_comments function."""

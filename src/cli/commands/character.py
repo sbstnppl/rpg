@@ -2275,17 +2275,42 @@ def _strip_json_blocks(text: str) -> str:
     """
     # Strip markdown code blocks containing JSON (```json ... ```)
     text = re.sub(r'```json\s*\{[\s\S]*?\}\s*```', '', text)
-    # Strip inline JSON blocks with our special keys
-    text = re.sub(r'\{[^{}]*"suggested_attributes"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
-    text = re.sub(r'\{[^{}]*"character_complete"[^{}]*\}', '', text)
-    text = re.sub(r'\{[^{}]*"field_updates"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
-    text = re.sub(r'\{[^{}]*"hidden_content"[^{}]*\{[^{}]*\}[^{}]*\}', '', text)
-    text = re.sub(r'\{[^{}]*"ready_to_play"[^{}]*\}', '', text)
-    text = re.sub(r'\{[^{}]*"switch_to_point_buy"[^{}]*\}', '', text)
-    # Strip section_complete JSON (has nested data object)
-    text = re.sub(
-        r'\{"section_complete"\s*:\s*true\s*,\s*"data"\s*:\s*\{[^{}]*\}\s*\}', '', text
-    )
+
+    # Strip combined/complex JSON blocks containing our special keys
+    # This handles cases where field_updates and section_complete are in one JSON
+    # Use a function to find and remove balanced JSON containing special keys
+    def remove_special_json(text: str) -> str:
+        """Remove JSON blocks containing wizard-specific keys."""
+        special_keys = [
+            '"field_updates"', '"section_complete"', '"hidden_content"',
+            '"ready_to_play"', '"switch_to_point_buy"', '"suggested_attributes"',
+            '"character_complete"', '"data"'
+        ]
+        result = []
+        i = 0
+        while i < len(text):
+            if text[i] == '{':
+                # Find matching closing brace
+                depth = 1
+                j = i + 1
+                while j < len(text) and depth > 0:
+                    if text[j] == '{':
+                        depth += 1
+                    elif text[j] == '}':
+                        depth -= 1
+                    j += 1
+                # Extract the JSON block
+                json_block = text[i:j]
+                # Check if it contains any special keys
+                if any(key in json_block for key in special_keys):
+                    # Skip this JSON block (don't add to result)
+                    i = j
+                    continue
+            result.append(text[i])
+            i += 1
+        return ''.join(result)
+
+    text = remove_special_json(text)
 
     # Strip prompt template sections that LLM may echo back
     # These are internal prompt headers that should never appear in output
@@ -3081,12 +3106,28 @@ async def _run_section_conversation(
 
     # Conversation loop
     max_turns = 10
+    pending_confirmation = False  # Track if we're waiting for user to accept auto-filled values
     for turn in range(max_turns):
         player_input = prompt_ai_input()
 
         if player_input.lower() in ("quit", "exit", "cancel", "back", "menu"):
             display_info("Returning to menu...")
             return False
+
+        # Check if user is accepting auto-filled values
+        if pending_confirmation:
+            acceptance_patterns = (
+                "ok", "okay", "yes", "y", "sure", "accept", "good", "fine",
+                "looks good", "that's good", "that works", "perfect", "great",
+                "sounds good", "yep", "yeah", "correct", "right", "confirm",
+            )
+            if player_input.lower().strip() in acceptance_patterns:
+                # User accepted - complete the section without going to LLM
+                section.status = "complete"
+                display_section_complete(title)
+                return True
+            # User provided different input - reset flag and continue to LLM
+            pending_confirmation = False
 
         section.conversation_history.append(f"Player: {player_input}")
 
@@ -3137,6 +3178,15 @@ async def _run_section_conversation(
             # Display response (without JSON)
             display_ai_message(_strip_json_blocks(ai_response))
 
+            # Capture what fields are already saved BEFORE applying any updates
+            # This is needed to detect if this response introduces new values
+            already_saved = set()
+            requirements = WIZARD_SECTION_REQUIREMENTS.get(section_name, [])
+            for field_name in requirements:
+                value = getattr(wizard_state.character, field_name, None)
+                if value is not None and value != "":
+                    already_saved.add(field_name)
+
             # Apply field updates
             if field_updates:
                 _apply_wizard_field_updates(wizard_state, section_name, field_updates)
@@ -3145,13 +3195,6 @@ async def _run_section_conversation(
 
             # Handle section completion
             if section_complete:
-                # Check what fields are ALREADY saved before applying section_data
-                already_saved = set()
-                requirements = WIZARD_SECTION_REQUIREMENTS.get(section_name, [])
-                for field_name in requirements:
-                    value = getattr(wizard_state.character, field_name, None)
-                    if value is not None and value != "":
-                        already_saved.add(field_name)
 
                 if section_data:
                     _apply_wizard_section_data(wizard_state, section_name, section_data)
@@ -3174,6 +3217,7 @@ async def _run_section_conversation(
                         console.print(
                             "[dim]Say 'ok' to accept, or provide different values[/dim]"
                         )
+                        pending_confirmation = True  # Track that we're waiting for user acceptance
                         continue  # Don't mark complete, let user confirm
 
                     section.status = "complete"

@@ -76,6 +76,26 @@ You MUST include the suggested values in the JSON. If you suggested "midnight bl
 {{"field_updates": {{"hair_color": "midnight black", "eye_color": "silvery-blue"}}}}
 ```
 
+**When player provides a value directly** (like "hazel", "brown eyes", "short hair"):
+Extract the value and include it in field_updates JSON. Examples:
+- Player: "hazel is cool" → `{{"field_updates": {{"eye_color": "hazel"}}}}`
+- Player: "brown" → `{{"field_updates": {{"eye_color": "brown"}}}}`
+- Player: "make it black hair" → `{{"field_updates": {{"hair_color": "black"}}}}`
+
+**WRONG** (saying you'll update but no JSON):
+```
+Player: hazel is cool
+AI: Great! I'll update the eye color to hazel.
+```
+This is WRONG - you said you'd update but didn't include the JSON!
+
+**RIGHT** (always include JSON):
+```
+Player: hazel is cool
+AI: Great! Hazel eyes it is - they'll catch the light beautifully.
+{{"field_updates": {{"eye_color": "hazel"}}}}
+```
+
 **BEFORE marking section_complete:** Check "Currently Saved Fields" above. Only mark complete if ALL required fields (name, age, build, hair_color, eye_color) show [SAVED].
 
 When ALL 5 required fields are saved AND confirmed by player:
