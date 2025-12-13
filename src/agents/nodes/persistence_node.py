@@ -184,10 +184,17 @@ def _persist_entity(
     if generated_npc_keys and entity_key in generated_npc_keys:
         return  # Already created with full data
 
-    # Check if entity already exists
+    # Check if entity already exists by key
     existing = entity_manager.get_entity(entity_key)
     if existing:
         return  # Don't create duplicate
+
+    # Also check by display_name to catch duplicates with different keys
+    # (e.g., "village_woman_elara" vs "elara" for same person)
+    display_name = entity_data.get("display_name", entity_key)
+    existing_by_name = entity_manager.get_entity_by_display_name(display_name)
+    if existing_by_name:
+        return  # Entity with same display name already exists
 
     # Map string entity_type to enum
     entity_type_str = entity_data.get("entity_type", "npc")
@@ -387,8 +394,10 @@ def _create_turn_record(
 
     if existing:
         # Update with extraction data (turn already has player_input and gm_response)
-        if state.get("extracted_entities"):
-            existing.entities_extracted = state.get("extracted_entities")
+        # Always set entities_extracted to record that extraction ran
+        # (even if empty list, indicates extraction completed)
+        if "extracted_entities" in state:
+            existing.entities_extracted = state.get("extracted_entities") or []
         if state.get("player_location"):
             existing.location_at_turn = state.get("player_location")
         return existing

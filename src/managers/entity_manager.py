@@ -60,6 +60,28 @@ class EntityManager(BaseManager):
             .first()
         )
 
+    def get_entity_by_display_name(self, display_name: str) -> Entity | None:
+        """Get entity by display name (case-insensitive).
+
+        Used to detect duplicate entities with different keys but same name.
+
+        Args:
+            display_name: Entity display name to search for.
+
+        Returns:
+            Entity if found, None otherwise.
+        """
+        from sqlalchemy import func
+
+        return (
+            self.db.query(Entity)
+            .filter(
+                Entity.session_id == self.session_id,
+                func.lower(Entity.display_name) == display_name.lower(),
+            )
+            .first()
+        )
+
     def create_entity(
         self,
         entity_key: str,

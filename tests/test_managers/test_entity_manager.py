@@ -65,6 +65,44 @@ class TestEntityManagerBasics:
         assert result is not None
         assert result.id == entity.id
 
+    def test_get_entity_by_display_name_returns_none_when_missing(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_entity_by_display_name returns None when not found."""
+        manager = EntityManager(db_session, game_session)
+
+        result = manager.get_entity_by_display_name("Unknown Person")
+
+        assert result is None
+
+    def test_get_entity_by_display_name_returns_existing(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_entity_by_display_name finds entity by display name."""
+        entity = create_entity(
+            db_session, game_session, entity_key="bartender_bob", display_name="Bob"
+        )
+        manager = EntityManager(db_session, game_session)
+
+        result = manager.get_entity_by_display_name("Bob")
+
+        assert result is not None
+        assert result.id == entity.id
+
+    def test_get_entity_by_display_name_case_insensitive(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_entity_by_display_name is case-insensitive."""
+        entity = create_entity(
+            db_session, game_session, entity_key="queen_alice", display_name="Queen Alice"
+        )
+        manager = EntityManager(db_session, game_session)
+
+        # Try different cases
+        assert manager.get_entity_by_display_name("queen alice") is not None
+        assert manager.get_entity_by_display_name("QUEEN ALICE") is not None
+        assert manager.get_entity_by_display_name("Queen Alice") is not None
+
     def test_create_entity_basic(
         self, db_session: Session, game_session: GameSession
     ):

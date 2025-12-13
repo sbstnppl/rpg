@@ -69,8 +69,10 @@ class TestPersistenceNode:
             "src.agents.nodes.persistence_node.EntityManager"
         ) as MockEntityManager:
             mock_manager = MagicMock()
-            # get_entity returns None so entity doesn't exist
+            # get_entity returns None so entity doesn't exist by key
             mock_manager.get_entity.return_value = None
+            # get_entity_by_display_name returns None so entity doesn't exist by name
+            mock_manager.get_entity_by_display_name.return_value = None
             mock_manager.create_entity.return_value = MagicMock(id=100)
             MockEntityManager.return_value = mock_manager
 
