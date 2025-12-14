@@ -10,10 +10,11 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from src.database.models.entities import Entity
-from src.database.models.session import GameSession
+from src.database.models.session import GameSession, Turn
 from src.llm.factory import get_cheap_provider
 from src.llm.message_types import Message, MessageRole
 from src.managers.context_compiler import ContextCompiler
+from src.managers.entity_manager import EntityManager
 from src.managers.item_manager import ItemManager
 
 
@@ -68,6 +69,55 @@ class ImagePromptGenerator:
         self._compiler = ContextCompiler(db, game_session)
         self._item_manager = ItemManager(db, game_session)
 
+    def _get_player_location(self) -> str | None:
+        """Get the player's current location from turn history or npc_extension.
+
+        Returns:
+            Location key or None if not found.
+        """
+        # First try npc_extension (if player has one)
+        if self.player.npc_extension and self.player.npc_extension.current_location:
+            return self.player.npc_extension.current_location
+
+        # Fall back to most recent turn's location
+        last_turn = (
+            self.db.query(Turn)
+            .filter(Turn.session_id == self.game_session.id)
+            .order_by(Turn.turn_number.desc())
+            .first()
+        )
+        if last_turn and last_turn.location_at_turn:
+            return last_turn.location_at_turn
+
+        return None
+
+    def _get_npcs_visual_descriptions(self, location_key: str) -> str:
+        """Get visual descriptions of NPCs at location for image prompts.
+
+        Args:
+            location_key: Location to get NPCs from.
+
+        Returns:
+            Formatted string with NPC visual descriptions.
+        """
+        entity_manager = EntityManager(self.db, self.game_session)
+        npcs = entity_manager.get_npcs_in_scene(location_key)
+
+        if not npcs:
+            return ""
+
+        descriptions = []
+        for npc in npcs[:3]:  # Limit to 3 NPCs to stay within token budget
+            parts = [npc.get_appearance_summary()]
+            equipment = self._item_manager.format_outfit_description(npc.id)
+            if equipment:
+                parts.append(f"wearing {equipment}")
+            if npc.npc_extension and npc.npc_extension.current_activity:
+                parts.append(npc.npc_extension.current_activity)
+            descriptions.append(f"- {npc.display_name}: {', '.join(parts)}")
+
+        return "\n".join(descriptions)
+
     async def generate_scene_prompt(
         self,
         perspective: str = "pov",
@@ -83,7 +133,7 @@ class ImagePromptGenerator:
             FLUX.1-dev optimized prompt string (~60 tokens).
         """
         # Get current location
-        location_key = self.player.npc_extension.current_location if self.player.npc_extension else None
+        location_key = self._get_player_location()
         if not location_key:
             return "Fantasy scene, " + SCENE_STYLES.get(style, SCENE_STYLES["photo"])
 
@@ -95,24 +145,31 @@ class ImagePromptGenerator:
             include_secrets=False,
         )
 
-        # Build context for LLM
+        # Build player description for third-person view
         player_desc = ""
         if perspective == "third":
-            player_desc = f"\nPlayer in scene: {self.player.get_appearance_summary()}"
-            equipment = self._item_manager.format_outfit_description(self.player.id)
-            if equipment:
-                player_desc += f"\nPlayer wearing: {equipment}"
+            player_desc = f"""
+PLAYER CHARACTER (must be visible in scene):
+- {self.player.display_name}: {self.player.get_appearance_summary()}
+- Wearing: {self._item_manager.format_outfit_description(self.player.id) or 'simple clothing'}"""
+
+        # Get NPC visual descriptions (not the full GM context)
+        npcs_visual = self._get_npcs_visual_descriptions(location_key)
 
         user_prompt = f"""Generate a FLUX.1-dev scene prompt.
 
 LOCATION: {scene.location_context}
 TIME/WEATHER: {scene.time_context}
-NPCS PRESENT: {scene.npcs_context or 'None'}{player_desc}
+{player_desc}
+NPCS IN SCENE (include their visual appearance, not just names):
+{npcs_visual or 'None'}
 
 PERSPECTIVE: {perspective} ({'first-person POV, viewer is the player' if perspective == 'pov' else 'third-person, player character visible in scene'})
 STYLE SUFFIX: {SCENE_STYLES.get(style, SCENE_STYLES['photo'])}
 
-Output ONLY the prompt (max 60 tokens):"""
+IMPORTANT: Preserve character visual details (appearance, clothing colors/materials) for reproducibility. Do NOT just use names like "Marta" - describe what they look like.
+
+Output ONLY the prompt (max 80 tokens for scenes with characters, 60 for empty scenes):"""
 
         return await self._generate(user_prompt)
 
@@ -153,7 +210,9 @@ VISIBLE INJURIES: {injuries or 'None' if mode == 'current' else 'Not included (b
 MODE: {mode} ({'appearance only, neutral expression' if mode == 'base' else 'include equipment and reflect condition in expression'})
 STYLE SUFFIX: {PORTRAIT_STYLES.get(style, PORTRAIT_STYLES['photo'])}
 
-Output ONLY the prompt (max 60 tokens). Focus on face/upper body portrait framing:"""
+IMPORTANT: Preserve clothing visual details (colors, materials, details like buckles/belts) for reproducibility.
+
+Output ONLY the prompt (max 70 tokens). Focus on face/upper body portrait framing:"""
 
         return await self._generate(user_prompt)
 

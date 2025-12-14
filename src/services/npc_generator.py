@@ -41,6 +41,7 @@ from src.database.models.session import GameSession
 from src.database.models.world import TimeState
 from src.llm.factory import get_extraction_provider
 from src.llm.message_types import Message
+from src.services.clothing_visual_generator import ClothingVisualGenerator
 from src.services.preference_calculator import generate_preferences
 
 
@@ -247,6 +248,7 @@ class NPCGeneratorService:
         self.game_session = game_session
         self.session_id = game_session.id
         self._llm_client = llm_client
+        self._visual_generator = ClothingVisualGenerator(setting_name=game_session.setting)
 
     async def generate_npc(
         self,
@@ -497,7 +499,10 @@ class NPCGeneratorService:
         """
         created = []
 
-        # Add base undergarments for all NPCs
+        # Add base undergarments for all NPCs with visual properties
+        undershirt_visual = self._visual_generator.generate_visual_properties(
+            "undershirt", display_name="Undershirt"
+        )
         undershirt = Item(
             session_id=self.session_id,
             item_key=f"{entity.entity_key}_undershirt",
@@ -510,10 +515,14 @@ class NPCGeneratorService:
             body_layer=0,
             is_visible=False,
             condition=ItemCondition.GOOD,
+            properties={"visual": undershirt_visual},
         )
         self.db.add(undershirt)
         created.append(undershirt)
 
+        smallclothes_visual = self._visual_generator.generate_visual_properties(
+            "smallclothes", display_name="Smallclothes"
+        )
         smallclothes = Item(
             session_id=self.session_id,
             item_key=f"{entity.entity_key}_smallclothes",
@@ -526,6 +535,7 @@ class NPCGeneratorService:
             body_layer=0,
             is_visible=False,
             condition=ItemCondition.GOOD,
+            properties={"visual": smallclothes_visual},
         )
         self.db.add(smallclothes)
         created.append(smallclothes)
@@ -533,6 +543,16 @@ class NPCGeneratorService:
         for item_data in items:
             # Map item type string to enum
             item_type = ITEM_TYPE_MAP.get(item_data.item_type, ItemType.MISC)
+
+            # Generate visual properties for clothing/armor items
+            properties = item_data.properties.copy() if item_data.properties else {}
+            if item_type in (ItemType.CLOTHING, ItemType.ARMOR) and "visual" not in properties:
+                visual = self._visual_generator.generate_visual_properties(
+                    item_data.item_key,
+                    quality="common",
+                    display_name=item_data.display_name,
+                )
+                properties["visual"] = visual
 
             item = Item(
                 session_id=self.session_id,
@@ -546,7 +566,7 @@ class NPCGeneratorService:
                 body_layer=item_data.body_layer,
                 condition=ItemCondition.GOOD,
                 quantity=item_data.quantity,
-                properties=item_data.properties,
+                properties=properties if properties else None,
             )
             self.db.add(item)
             created.append(item)

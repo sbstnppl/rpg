@@ -1541,11 +1541,13 @@ def _create_starting_equipment(
     """
     from src.database.models.enums import ItemType, ItemCondition
     from src.managers.item_manager import ItemManager
+    from src.services.clothing_visual_generator import ClothingVisualGenerator
 
     if not schema.starting_equipment:
         return []
 
     item_manager = ItemManager(db, game_session)
+    visual_generator = ClothingVisualGenerator(setting_name=game_session.setting)
     created_items = []
 
     # Infer equipment condition from backstory
@@ -1588,6 +1590,20 @@ def _create_starting_equipment(
         # Create unique key for this player
         unique_key = f"{entity.entity_key}_{equip.item_key}"
 
+        # Build properties with visual attributes for clothing/armor
+        properties = equip.properties.copy() if equip.properties else {}
+        if item_type in (ItemType.CLOTHING, ItemType.ARMOR):
+            if equip.visual:
+                # Use predefined visual from setting
+                properties["visual"] = equip.visual
+            elif "visual" not in properties:
+                # Generate random visual
+                properties["visual"] = visual_generator.generate_visual_properties(
+                    equip.item_key,
+                    quality="common",
+                    display_name=equip.display_name,
+                )
+
         item = item_manager.create_item(
             item_key=unique_key,
             display_name=equip.display_name,
@@ -1595,7 +1611,7 @@ def _create_starting_equipment(
             owner_id=entity.id,
             holder_id=entity.id,
             description=equip.description or None,
-            properties=equip.properties,
+            properties=properties if properties else None,
             condition=equipment_condition,
         )
 

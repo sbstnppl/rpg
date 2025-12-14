@@ -43,6 +43,7 @@ class StartingItem:
     body_layer: int = 0
     description: str = ""
     properties: dict | None = None
+    visual: dict | None = None  # Visual properties for portrait generation
 
 
 @dataclass
@@ -256,6 +257,7 @@ def _parse_setting_json(data: dict[str, Any]) -> SettingSchema:
                 body_layer=item_data.get("body_layer", 0),
                 description=item_data.get("description", ""),
                 properties=item_data.get("properties"),
+                visual=item_data.get("visual"),
             )
         )
 

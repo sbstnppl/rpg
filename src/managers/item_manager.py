@@ -589,21 +589,30 @@ class ItemManager(BaseManager):
 
         return dict(by_slot)
 
-    def format_outfit_description(self, entity_id: int) -> str:
+    def format_outfit_description(self, entity_id: int, include_visuals: bool = True) -> str:
         """Generate human-readable outfit description for GM context.
 
         Only includes visible items (outermost layer, not covered).
 
         Args:
             entity_id: Entity ID.
+            include_visuals: If True, use rich visual descriptions from item properties.
 
         Returns:
             Human-readable outfit description string.
         """
+        from src.services.clothing_visual_generator import format_visual_description
+
         visible = self.get_visible_equipment(entity_id)
 
         if not visible:
             return "Not wearing anything notable."
+
+        def get_item_description(item: Item) -> str:
+            """Get description for an item, using visual props if available."""
+            if include_visuals and item.properties and item.properties.get("visual"):
+                return format_visual_description(item.properties["visual"], item.display_name)
+            return item.display_name
 
         # Group visible items by category for natural description
         categories = {
@@ -617,18 +626,19 @@ class ItemManager(BaseManager):
 
         for item in visible:
             slot = item.body_slot or ""
+            desc = get_item_description(item)
             if slot in ("head", "face"):
-                categories["head_wear"].append(item.display_name)
+                categories["head_wear"].append(desc)
             elif slot in ("torso", "full_body"):
-                categories["torso_wear"].append(item.display_name)
+                categories["torso_wear"].append(desc)
             elif slot == "legs":
-                categories["leg_wear"].append(item.display_name)
+                categories["leg_wear"].append(desc)
             elif slot in ("feet_socks", "feet_shoes"):
-                categories["foot_wear"].append(item.display_name)
+                categories["foot_wear"].append(desc)
             elif slot in ("main_hand", "off_hand", "back"):
-                categories["carried"].append(item.display_name)
+                categories["carried"].append(desc)
             else:
-                categories["accessories"].append(item.display_name)
+                categories["accessories"].append(desc)
 
         # Build description
         parts = []
