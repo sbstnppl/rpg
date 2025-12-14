@@ -198,11 +198,18 @@ class TestNPCGeneratorService:
             .all()
         )
 
-        assert len(inventory) == 3
+        assert len(inventory) == 5  # 3 occupation items + 2 underwear
 
         # Items are prefixed with entity_key
         item_map = {i.item_key.replace(f"{entity.entity_key}_", ""): i for i in inventory}
 
+        # Underwear (automatically added for all NPCs)
+        assert item_map["undershirt"].body_slot == "torso"
+        assert item_map["undershirt"].body_layer == 0
+        assert item_map["smallclothes"].body_slot == "legs"
+        assert item_map["smallclothes"].body_layer == 0
+
+        # Occupation items
         assert item_map["coin_purse"].display_name == "Leather Coin Purse"
         assert item_map["coin_purse"].item_type == ItemType.CONTAINER
         assert item_map["coin_purse"].body_slot == "waist"
@@ -506,13 +513,13 @@ class TestNPCGeneratorServiceIntegration:
         )
         assert len(skills) == 2
 
-        # Verify inventory
+        # Verify inventory (2 occupation items + 2 underwear)
         items = (
             db_session.query(Item)
             .filter(Item.owner_id == entity.id)
             .all()
         )
-        assert len(items) == 2
+        assert len(items) == 4
 
         # Verify preferences (now formula-generated, not LLM-generated)
         prefs = (

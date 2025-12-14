@@ -74,49 +74,50 @@ OCCUPATION_SKILLS: dict[str, list[str]] = {
 
 
 # Occupation-based inventory templates
+# Note: body_layer 1 for torso items (layer 0 is underwear added automatically)
 OCCUPATION_INVENTORY: dict[str, list[dict[str, Any]]] = {
     "merchant": [
         {"item_key": "coin_purse", "display_name": "Coin Purse", "item_type": "container"},
         {"item_key": "ledger", "display_name": "Account Ledger", "item_type": "misc"},
-        {"item_key": "merchant_clothes", "display_name": "Merchant's Clothes", "item_type": "clothing", "body_slot": "torso", "is_equipped": True},
+        {"item_key": "merchant_clothes", "display_name": "Merchant's Clothes", "item_type": "clothing", "body_slot": "torso", "body_layer": 1, "is_equipped": True},
     ],
     "guard": [
         {"item_key": "sword", "display_name": "Short Sword", "item_type": "weapon", "body_slot": "main_hand"},
-        {"item_key": "guard_uniform", "display_name": "Guard Uniform", "item_type": "armor", "body_slot": "torso", "is_equipped": True},
+        {"item_key": "guard_uniform", "display_name": "Guard Uniform", "item_type": "armor", "body_slot": "torso", "body_layer": 1, "is_equipped": True},
         {"item_key": "whistle", "display_name": "Guard Whistle", "item_type": "misc"},
     ],
     "innkeeper": [
-        {"item_key": "apron", "display_name": "Stained Apron", "item_type": "clothing", "body_slot": "torso", "is_equipped": True},
+        {"item_key": "apron", "display_name": "Stained Apron", "item_type": "clothing", "body_slot": "torso", "body_layer": 1, "is_equipped": True},
         {"item_key": "keys", "display_name": "Ring of Keys", "item_type": "misc"},
         {"item_key": "coin_purse", "display_name": "Coin Purse", "item_type": "container"},
     ],
     "blacksmith": [
         {"item_key": "hammer", "display_name": "Smith's Hammer", "item_type": "misc"},
-        {"item_key": "apron", "display_name": "Leather Apron", "item_type": "clothing", "body_slot": "torso", "is_equipped": True},
+        {"item_key": "apron", "display_name": "Leather Apron", "item_type": "clothing", "body_slot": "torso", "body_layer": 1, "is_equipped": True},
         {"item_key": "tongs", "display_name": "Smithing Tongs", "item_type": "misc"},
     ],
     "farmer": [
-        {"item_key": "work_clothes", "display_name": "Work Clothes", "item_type": "clothing", "body_slot": "torso", "is_equipped": True},
+        {"item_key": "work_clothes", "display_name": "Work Clothes", "item_type": "clothing", "body_slot": "torso", "body_layer": 1, "is_equipped": True},
         {"item_key": "straw_hat", "display_name": "Straw Hat", "item_type": "clothing", "body_slot": "head", "is_equipped": True},
     ],
     "hunter": [
         {"item_key": "bow", "display_name": "Hunting Bow", "item_type": "weapon", "body_slot": "main_hand"},
         {"item_key": "arrows", "display_name": "Quiver of Arrows", "item_type": "weapon", "quantity": 12},
-        {"item_key": "hunting_clothes", "display_name": "Hunting Clothes", "item_type": "clothing", "body_slot": "torso", "is_equipped": True},
+        {"item_key": "hunting_clothes", "display_name": "Hunting Clothes", "item_type": "clothing", "body_slot": "torso", "body_layer": 1, "is_equipped": True},
         {"item_key": "skinning_knife", "display_name": "Skinning Knife", "item_type": "weapon"},
     ],
     "healer": [
-        {"item_key": "healer_robes", "display_name": "Healer's Robes", "item_type": "clothing", "body_slot": "torso", "is_equipped": True},
+        {"item_key": "healer_robes", "display_name": "Healer's Robes", "item_type": "clothing", "body_slot": "torso", "body_layer": 1, "is_equipped": True},
         {"item_key": "herb_pouch", "display_name": "Herb Pouch", "item_type": "container"},
         {"item_key": "bandages", "display_name": "Clean Bandages", "item_type": "consumable", "quantity": 5},
     ],
     "scholar": [
-        {"item_key": "scholar_robes", "display_name": "Scholar's Robes", "item_type": "clothing", "body_slot": "torso", "is_equipped": True},
+        {"item_key": "scholar_robes", "display_name": "Scholar's Robes", "item_type": "clothing", "body_slot": "torso", "body_layer": 1, "is_equipped": True},
         {"item_key": "book", "display_name": "Leather-bound Book", "item_type": "misc"},
         {"item_key": "quill", "display_name": "Writing Quill", "item_type": "misc"},
     ],
     "noble": [
-        {"item_key": "fine_clothes", "display_name": "Fine Noble Attire", "item_type": "clothing", "body_slot": "torso", "is_equipped": True},
+        {"item_key": "fine_clothes", "display_name": "Fine Noble Attire", "item_type": "clothing", "body_slot": "torso", "body_layer": 1, "is_equipped": True},
         {"item_key": "signet_ring", "display_name": "Signet Ring", "item_type": "misc", "body_slot": "ring_right", "is_equipped": True},
         {"item_key": "coin_purse", "display_name": "Heavy Coin Purse", "item_type": "container"},
     ],
@@ -495,6 +496,40 @@ class NPCGeneratorService:
             List of created Item records.
         """
         created = []
+
+        # Add base undergarments for all NPCs
+        undershirt = Item(
+            session_id=self.session_id,
+            item_key=f"{entity.entity_key}_undershirt",
+            display_name="Undershirt",
+            item_type=ItemType.CLOTHING,
+            description="A simple linen undershirt",
+            owner_id=entity.id,
+            holder_id=entity.id,
+            body_slot="torso",
+            body_layer=0,
+            is_visible=False,
+            condition=ItemCondition.GOOD,
+        )
+        self.db.add(undershirt)
+        created.append(undershirt)
+
+        smallclothes = Item(
+            session_id=self.session_id,
+            item_key=f"{entity.entity_key}_smallclothes",
+            display_name="Smallclothes",
+            item_type=ItemType.CLOTHING,
+            description="Simple linen undergarments",
+            owner_id=entity.id,
+            holder_id=entity.id,
+            body_slot="legs",
+            body_layer=0,
+            is_visible=False,
+            condition=ItemCondition.GOOD,
+        )
+        self.db.add(smallclothes)
+        created.append(smallclothes)
+
         for item_data in items:
             # Map item type string to enum
             item_type = ITEM_TYPE_MAP.get(item_data.item_type, ItemType.MISC)

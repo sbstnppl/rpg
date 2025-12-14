@@ -127,19 +127,35 @@
       "description": "Simple wool socks for warmth"
     },
     {
+      "item_key": "undershirt",
+      "display_name": "Undershirt",
+      "item_type": "clothing",
+      "body_slot": "torso",
+      "body_layer": 0,
+      "description": "A simple linen undershirt"
+    },
+    {
       "item_key": "simple_tunic",
       "display_name": "Simple Tunic",
       "item_type": "clothing",
       "body_slot": "torso",
-      "body_layer": 0,
+      "body_layer": 1,
       "description": "A plain linen tunic suitable for travel"
+    },
+    {
+      "item_key": "smallclothes",
+      "display_name": "Smallclothes",
+      "item_type": "clothing",
+      "body_slot": "legs",
+      "body_layer": 0,
+      "description": "Simple linen undergarments"
     },
     {
       "item_key": "cloth_trousers",
       "display_name": "Cloth Trousers",
       "item_type": "clothing",
       "body_slot": "legs",
-      "body_layer": 0,
+      "body_layer": 1,
       "description": "Simple cloth trousers",
       "provides_slots": ["pocket_left", "pocket_right"]
     },
