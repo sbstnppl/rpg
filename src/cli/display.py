@@ -167,49 +167,139 @@ def display_character_status(
         console.print(cond_table)
 
 
-def display_inventory(items: list[dict]) -> None:
-    """Display inventory table with enhanced formatting.
+def display_inventory(inventory_data: dict) -> None:
+    """Display inventory with sections for equipped, held, and container items.
 
     Args:
-        items: List of item dicts with name, type, equipped, slot, condition.
+        inventory_data: Dict with 'equipped', 'held', and 'containers' lists.
     """
-    if not items:
+    equipped = inventory_data.get("equipped", [])
+    held = inventory_data.get("held", [])
+    containers = inventory_data.get("containers", [])
+
+    if not equipped and not held and not containers:
         console.print("[dim]Inventory is empty.[/dim]")
         return
 
-    table = Table(title="Inventory", box=box.ROUNDED)
-    table.add_column("Item", style="white", no_wrap=True)
-    table.add_column("Type", style="cyan")
-    table.add_column("Slot", style="blue")
-    table.add_column("Condition", style="yellow")
-    table.add_column("Status", style="green")
+    console.print()
 
-    for item in items:
-        status = "[green]Equipped[/green]" if item.get("equipped") else ""
-        slot = item.get("slot", "")
-        condition = item.get("condition", "good").title()
+    # Equipped section
+    if equipped:
+        console.print("[bold cyan]Equipped:[/bold cyan]")
+        for item in equipped:
+            slot = item.get("slot", "")
+            slot_display = slot.replace("_", " ").title() if slot else "Unknown"
+            condition = _format_condition(item.get("condition", "good"))
+            console.print(f"  {slot_display}: {item.get('name', 'Unknown')} ({item.get('type', 'misc')}, {condition})")
+        console.print()
 
-        # Color condition based on state
-        if condition.lower() == "pristine":
-            condition = f"[bright_green]{condition}[/bright_green]"
-        elif condition.lower() == "good":
-            condition = f"[green]{condition}[/green]"
-        elif condition.lower() == "worn":
-            condition = f"[yellow]{condition}[/yellow]"
-        elif condition.lower() == "damaged":
-            condition = f"[red]{condition}[/red]"
-        elif condition.lower() == "broken":
-            condition = f"[bright_red]{condition}[/bright_red]"
+    # Held section
+    if held:
+        console.print("[bold cyan]Held:[/bold cyan]")
+        for item in held:
+            condition = _format_condition(item.get("condition", "good"))
+            console.print(f"  {item.get('name', 'Unknown')} ({item.get('type', 'misc')}, {condition})")
+        console.print()
 
-        table.add_row(
-            item.get("name", "Unknown"),
-            item.get("type", "misc").title(),
-            slot.replace("_", " ").title() if slot else "-",
-            condition,
-            status,
-        )
+    # Container contents section
+    if containers:
+        console.print("[bold cyan]Container Contents:[/bold cyan]")
+        for container in containers:
+            capacity = container.get("capacity")
+            used = container.get("used", 0)
+            contents = container.get("contents", [])
 
-    console.print(table)
+            if capacity:
+                header = f"  [yellow]\\[{container.get('name', 'Container')}][/yellow] ({used}/{capacity} items):"
+            else:
+                header = f"  [yellow]\\[{container.get('name', 'Container')}][/yellow] ({used} items):"
+
+            console.print(header)
+
+            if contents:
+                for item in contents:
+                    console.print(f"    - {item.get('name', 'Unknown')} ({item.get('type', 'misc')})")
+            else:
+                console.print("    [dim](empty)[/dim]")
+        console.print()
+
+
+def _format_condition(condition: str) -> str:
+    """Format item condition with color.
+
+    Args:
+        condition: Condition string.
+
+    Returns:
+        Formatted condition with Rich markup.
+    """
+    condition = condition.title()
+    if condition.lower() == "pristine":
+        return f"[bright_green]{condition}[/bright_green]"
+    elif condition.lower() == "good":
+        return f"[green]{condition}[/green]"
+    elif condition.lower() == "worn":
+        return f"[yellow]{condition}[/yellow]"
+    elif condition.lower() == "damaged":
+        return f"[red]{condition}[/red]"
+    elif condition.lower() == "broken":
+        return f"[bright_red]{condition}[/bright_red]"
+    return condition
+
+
+def display_nearby_items(data: dict) -> None:
+    """Display NPCs and items at the current location.
+
+    Args:
+        data: Dict with 'location', 'npcs', 'ground', and 'surfaces' keys.
+              - location: Location name string
+              - npcs: List of NPC names at this location
+              - ground: List of item dicts on the ground
+              - surfaces: Dict of surface_name -> list of item dicts
+    """
+    location = data.get("location", "Unknown Location")
+    npcs = data.get("npcs", [])
+    ground = data.get("ground", [])
+    surfaces = data.get("surfaces", {})
+
+    if not npcs and not ground and not surfaces:
+        console.print(f"[dim]Nobody and nothing nearby at {location}.[/dim]")
+        return
+
+    console.print()
+    console.print(f"[bold cyan]Nearby[/bold cyan] - {location}")
+    console.print()
+
+    # NPCs section
+    if npcs:
+        console.print("[yellow]People here:[/yellow]")
+        for npc in npcs:
+            console.print(f"  • {npc}")
+        console.print()
+
+    # Ground items section
+    if ground:
+        console.print("[yellow]On the ground:[/yellow]")
+        for item in ground:
+            name = item.get("name", "Unknown")
+            item_type = item.get("type", "misc")
+            condition = _format_condition(item.get("condition", "good"))
+            console.print(f"  - {name} ({item_type}, {condition})")
+        console.print()
+
+    # Surface items sections
+    for surface_name, items in surfaces.items():
+        surface_display = surface_name.replace("_", " ").title()
+        console.print(f"[yellow]On the {surface_display}:[/yellow]")
+        if items:
+            for item in items:
+                name = item.get("name", "Unknown")
+                item_type = item.get("type", "misc")
+                condition = _format_condition(item.get("condition", "good"))
+                console.print(f"  - {name} ({item_type}, {condition})")
+        else:
+            console.print("  [dim](empty)[/dim]")
+        console.print()
 
 
 def display_location_info(

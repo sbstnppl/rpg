@@ -303,6 +303,11 @@ class ContextCompiler(BaseManager):
         if equipment_desc:
             lines.append(f"- Wearing: {equipment_desc}")
 
+        # Hands (what's being held)
+        hands_info = self._get_hands_info(player_id)
+        if hands_info:
+            lines.append(f"- Hands: {hands_info}")
+
         # Condition (needs + injuries)
         condition = self._get_condition_summary(player_id)
         if condition:
@@ -399,6 +404,36 @@ class ContextCompiler(BaseManager):
             descriptions.append(item.display_name.lower())
 
         return ", ".join(descriptions)
+
+    def _get_hands_info(self, entity_id: int) -> str:
+        """Get what's in player's hands for GM awareness.
+
+        Args:
+            entity_id: Entity ID.
+
+        Returns:
+            String describing hand contents (e.g., "main=Bowl, off=Branches (both full)").
+        """
+        items = self.item_manager.get_equipped_items(entity_id)
+        main = None
+        off = None
+        for item in items:
+            if item.body_slot == "main_hand":
+                main = item.display_name
+            elif item.body_slot == "off_hand":
+                off = item.display_name
+
+        if not main and not off:
+            return "both free"
+
+        parts = []
+        if main:
+            parts.append(f"main={main}")
+        if off:
+            parts.append(f"off={off}")
+
+        status = " (both full)" if (main and off) else " (one hand free)"
+        return ", ".join(parts) + status
 
     def _get_npcs_context(self, location_key: str, player_id: int) -> str:
         """Get context for all NPCs at the current location.

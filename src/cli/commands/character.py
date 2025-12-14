@@ -19,6 +19,7 @@ from src.cli.display import (
     display_character_status,
     display_character_summary,
     display_dice_roll,
+    display_equipment,
     display_error,
     display_info,
     display_inventory,
@@ -33,11 +34,12 @@ from src.cli.display import (
 from src.database.connection import get_db_session
 from src.database.models.character_preferences import CharacterPreferences
 from src.database.models.character_state import CharacterNeeds
-from src.database.models.entities import Entity, EntityAttribute
+from src.database.models.entities import Entity, EntityAttribute, NPCExtension
 from src.database.models.enums import DriveLevel, EntityType, IntimacyStyle, VitalStatus
 from src.database.models.items import Item
 from src.database.models.relationships import Relationship
-from src.database.models.session import GameSession
+from src.database.models.session import GameSession, Turn
+from src.managers.item_manager import ItemManager
 from src.database.models.vital_state import EntityVitalState
 from src.managers.entity_manager import EntityManager
 from src.managers.needs import NeedsManager
@@ -561,7 +563,7 @@ def status(
 def inventory(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
 ) -> None:
-    """Show player inventory."""
+    """Show player inventory (items currently carried)."""
     with get_db_session() as db:
         if session_id:
             game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
@@ -578,28 +580,54 @@ def inventory(
             display_error("No player character found")
             raise typer.Exit(1)
 
-        # Get items owned by player
-        items = (
-            db.query(Item)
-            .filter(
-                Item.session_id == game_session.id,
-                Item.owner_id == player.id,
-            )
-            .all()
-        )
+        # Get structured inventory using ItemManager
+        item_manager = ItemManager(db, game_session)
+        inventory_data = item_manager.get_carried_inventory(player.id)
 
-        item_dicts = [
+        # Convert to display format
+        equipped_dicts = [
             {
                 "name": item.display_name,
                 "type": item.item_type.value if item.item_type else "misc",
-                "equipped": item.body_slot is not None,
                 "slot": item.body_slot,
                 "condition": item.condition.value if item.condition else "good",
             }
-            for item in items
+            for item in inventory_data["equipped"]
         ]
 
-        display_inventory(item_dicts)
+        held_dicts = [
+            {
+                "name": item.display_name,
+                "type": item.item_type.value if item.item_type else "misc",
+                "condition": item.condition.value if item.condition else "good",
+            }
+            for item in inventory_data["held"]
+        ]
+
+        container_dicts = []
+        for container_info in inventory_data["containers"]:
+            container = container_info["container"]
+            storage = container_info["storage"]
+            contents = container_info["contents"]
+
+            container_dicts.append({
+                "name": container.display_name,
+                "capacity": storage.capacity if storage else None,
+                "used": len(contents),
+                "contents": [
+                    {
+                        "name": item.display_name,
+                        "type": item.item_type.value if item.item_type else "misc",
+                    }
+                    for item in contents
+                ],
+            })
+
+        display_inventory({
+            "equipped": equipped_dicts,
+            "held": held_dicts,
+            "containers": container_dicts,
+        })
 
 
 @app.command()
@@ -638,20 +666,20 @@ def equipment(
             display_info("No items equipped")
             return
 
-        item_dicts = [
-            {
+        # Organize items by slot for display_equipment()
+        slots: dict[str, list[dict]] = {}
+        for item in items:
+            slot_name = item.body_slot or "unknown"
+            if slot_name not in slots:
+                slots[slot_name] = []
+            slots[slot_name].append({
                 "name": item.display_name,
-                "type": item.item_type.value if item.item_type else "misc",
-                "equipped": True,
-                "slot": item.body_slot,
-                "layer": item.body_layer,
-                "visible": item.is_visible,
+                "layer": item.body_layer or 0,
+                "visible": item.is_visible if item.is_visible is not None else True,
                 "condition": item.condition.value if item.condition else "good",
-            }
-            for item in items
-        ]
+            })
 
-        display_inventory(item_dicts)
+        display_equipment(slots)
 
 
 @app.command()
@@ -746,6 +774,218 @@ def outfit(
         # Show visible summary
         if visible_items:
             console.print(f"\n[bold]Visible:[/bold] {', '.join(visible_items)}")
+
+
+@app.command()
+def nearby(
+    session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
+) -> None:
+    """Show items at current location (ground and surfaces)."""
+    from src.cli.display import display_nearby_items
+    from src.database.models.items import StorageLocation
+    from src.database.models.world import Location
+    from src.managers.location_manager import LocationManager
+
+    with get_db_session() as db:
+        if session_id:
+            game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
+        else:
+            game_session = _get_active_session(db)
+
+        if not game_session:
+            display_error("No active session found")
+            raise typer.Exit(1)
+
+        player = _get_player(db, game_session)
+
+        if not player:
+            display_error("No player character found")
+            raise typer.Exit(1)
+
+        # Get player's current location from last turn
+        last_turn = (
+            db.query(Turn)
+            .filter(Turn.session_id == game_session.id)
+            .order_by(Turn.turn_number.desc())
+            .first()
+        )
+        location_key = last_turn.location_at_turn if last_turn else None
+
+        if not location_key:
+            display_error("Player location unknown")
+            raise typer.Exit(1)
+
+        location_manager = LocationManager(db, game_session)
+        location = location_manager.get_location(location_key)
+        location_name = location.display_name if location else location_key
+
+        # Get NPCs at this location
+        npcs_at_location = (
+            db.query(Entity)
+            .join(NPCExtension)
+            .filter(
+                Entity.session_id == game_session.id,
+                NPCExtension.current_location == location_key,
+            )
+            .all()
+        )
+        npc_names = [npc.display_name for npc in npcs_at_location]
+
+        # Get storage locations at this world location
+        storage_locations = (
+            db.query(StorageLocation)
+            .join(Location, StorageLocation.world_location_id == Location.id)
+            .filter(
+                StorageLocation.session_id == game_session.id,
+                Location.location_key == location_key,
+            )
+            .all()
+        )
+
+        # Organize items by surface
+        ground_items = []
+        surfaces = {}
+
+        for storage in storage_locations:
+            # Get items in this storage
+            items_in_storage = (
+                db.query(Item)
+                .filter(
+                    Item.session_id == game_session.id,
+                    Item.storage_location_id == storage.id,
+                )
+                .all()
+            )
+
+            if not items_in_storage:
+                continue
+
+            item_list = [
+                {
+                    "name": item.display_name,
+                    "type": item.item_type.value if item.item_type else "misc",
+                }
+                for item in items_in_storage
+            ]
+
+            # Determine if ground or a surface
+            if storage.container_type in ("ground", "floor", None):
+                ground_items.extend(item_list)
+            else:
+                surface_name = storage.container_type or "Surface"
+                if surface_name not in surfaces:
+                    surfaces[surface_name] = []
+                surfaces[surface_name].extend(item_list)
+
+        display_nearby_items({
+            "location": location_name,
+            "npcs": npc_names,
+            "ground": ground_items,
+            "surfaces": surfaces,
+        })
+
+
+@app.command()
+def locate(
+    item_name: str = typer.Argument(..., help="Item name to search for"),
+    session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
+) -> None:
+    """Find where an item is located."""
+    from src.database.models.items import StorageLocation
+    from src.database.models.world import Location
+
+    with get_db_session() as db:
+        if session_id:
+            game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
+        else:
+            game_session = _get_active_session(db)
+
+        if not game_session:
+            display_error("No active session found")
+            raise typer.Exit(1)
+
+        player = _get_player(db, game_session)
+
+        if not player:
+            display_error("No player character found")
+            raise typer.Exit(1)
+
+        # Search for items by name (case insensitive, partial match)
+        items = (
+            db.query(Item)
+            .filter(
+                Item.session_id == game_session.id,
+                Item.display_name.ilike(f"%{item_name}%"),
+            )
+            .all()
+        )
+
+        if not items:
+            console.print(f"[dim]You don't remember where you left '{item_name}'[/dim]")
+            return
+
+        console.print()
+        for item in items:
+            location_desc = _describe_item_location(db, game_session, player, item)
+            console.print(f"[bold]{item.display_name}[/bold]: {location_desc}")
+        console.print()
+
+
+def _describe_item_location(db: Session, game_session: GameSession, player: Entity, item: Item) -> str:
+    """Describe where an item is located.
+
+    Args:
+        db: Database session.
+        game_session: Current game session.
+        player: Player entity.
+        item: Item to describe.
+
+    Returns:
+        Human-readable location description.
+    """
+    from src.database.models.items import StorageLocation
+    from src.database.models.world import Location
+
+    # Check if equipped on body slot
+    if item.body_slot:
+        slot_name = item.body_slot.replace("_", " ").title()
+        if item.holder_id == player.id:
+            return f"Worn on your {slot_name}"
+        else:
+            # Find who has it
+            holder = db.query(Entity).filter(Entity.id == item.holder_id).first()
+            holder_name = holder.display_name if holder else "someone"
+            return f"Worn by {holder_name} ({slot_name})"
+
+    # Check if held by someone
+    if item.holder_id:
+        if item.holder_id == player.id:
+            return "In your hands"
+        else:
+            holder = db.query(Entity).filter(Entity.id == item.holder_id).first()
+            holder_name = holder.display_name if holder else "someone"
+            return f"Held by {holder_name}"
+
+    # Check if in a storage location
+    if item.storage_location_id:
+        storage = db.query(StorageLocation).filter(StorageLocation.id == item.storage_location_id).first()
+        if storage:
+            # Check if it's a container (linked to an item)
+            if storage.container_item_id:
+                container_item = db.query(Item).filter(Item.id == storage.container_item_id).first()
+                if container_item:
+                    return f"In {container_item.display_name}"
+
+            # Check if at a world location
+            if storage.world_location_id:
+                location = db.query(Location).filter(Location.id == storage.world_location_id).first()
+                location_name = location.display_name if location else "somewhere"
+                surface = storage.display_name or storage.container_type or "ground"
+                return f"At {location_name} (on {surface})"
+
+            return f"In storage ({storage.display_name or 'unknown'})"
+
+    return "Location unknown"
 
 
 def slugify(name: str) -> str:

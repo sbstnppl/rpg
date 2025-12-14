@@ -877,13 +877,13 @@ def _show_quests(db, game_session: GameSession) -> None:
     # Get active quests
     quests = db.query(Quest).filter(
         Quest.session_id == game_session.id,
-        Quest.status.in_(["active", "in_progress"])
+        Quest.status == "active"
     ).all()
 
-    # Get active tasks
+    # Get active tasks (not completed)
     tasks = db.query(Task).filter(
         Task.session_id == game_session.id,
-        Task.status.in_(["pending", "in_progress"])
+        Task.completed == False
     ).all()
 
     if not quests and not tasks:

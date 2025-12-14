@@ -822,6 +822,108 @@ class ItemManager(BaseManager):
             "can_hold_more": len(free_hand_slots) > 0 or len(free_storage_slots) > 0,
         }
 
+    def get_carried_inventory(self, entity_id: int) -> dict:
+        """Get structured inventory of items the entity is currently carrying.
+
+        Returns items organized into three categories:
+        - equipped: Items in body slots (weapons, armor, clothing)
+        - held: Items held but not in a body slot (loose items)
+        - containers: Worn containers with their contents
+
+        Args:
+            entity_id: Entity ID.
+
+        Returns:
+            Dict with equipped, held, and containers lists.
+        """
+        # Get all items the entity is currently holding
+        held_items = (
+            self.db.query(Item)
+            .filter(
+                Item.session_id == self.session_id,
+                Item.holder_id == entity_id,
+            )
+            .all()
+        )
+
+        equipped = []
+        held = []
+        containers = []
+
+        # Separate equipped items from held items
+        for item in held_items:
+            if item.body_slot is not None:
+                equipped.append(item)
+            else:
+                held.append(item)
+
+        # Get body storage for this entity (ON_PERSON storage)
+        body_storage = self.get_or_create_body_storage(entity_id)
+
+        # Find containers that are ON the player (equipped or in body storage)
+        # A container is "on person" if:
+        # 1. It has a body_slot (worn/equipped), OR
+        # 2. It's in the body storage (ON_PERSON type)
+        worn_container_ids = set()
+
+        # Get equipped containers (like belt pouches)
+        for item in equipped:
+            if item.item_type == ItemType.CONTAINER:
+                worn_container_ids.add(item.id)
+
+        # Get containers in body storage
+        items_in_body_storage = (
+            self.db.query(Item)
+            .filter(
+                Item.session_id == self.session_id,
+                Item.storage_location_id == body_storage.id,
+            )
+            .all()
+        )
+
+        for item in items_in_body_storage:
+            if item.item_type == ItemType.CONTAINER:
+                worn_container_ids.add(item.id)
+
+        # For each worn container, get its storage and contents
+        for container_id in worn_container_ids:
+            container_item = self.db.query(Item).filter(Item.id == container_id).first()
+            if container_item is None:
+                continue
+
+            # Find the StorageLocation linked to this container
+            container_storage = (
+                self.db.query(StorageLocation)
+                .filter(
+                    StorageLocation.session_id == self.session_id,
+                    StorageLocation.container_item_id == container_id,
+                )
+                .first()
+            )
+
+            contents = []
+            if container_storage:
+                contents = (
+                    self.db.query(Item)
+                    .filter(
+                        Item.session_id == self.session_id,
+                        Item.storage_location_id == container_storage.id,
+                    )
+                    .all()
+                )
+
+            containers.append({
+                "container": container_item,
+                "storage": container_storage,
+                "contents": contents,
+            })
+
+        return {
+            "equipped": equipped,
+            "held": held,
+            "containers": containers,
+        }
+
     # ==================== Theft Operations ====================
 
     def steal_item(
