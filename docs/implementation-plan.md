@@ -58,6 +58,33 @@
   - `get_inventory_summary(entity)` - slots/weight summary
   - `update_visibility()` - recalculate layer visibility
   - `get_items_at_location(location)` - items at world location
+  - **Theft Operations**:
+    - `steal_item(item_key, thief_id, from_entity_id, from_location_id)` - mark item stolen
+    - `return_stolen_item(item_key, to_entity_id)` - return to rightful owner
+    - `legitimize_item(item_key, new_owner_id, new_owner_location_id)` - clear stolen status
+  - **Container Operations**:
+    - `create_container_item(item_key, display_name, ...)` - create Item + linked StorageLocation
+    - `put_in_container(item_key, container_key)` - move item with capacity validation
+    - `get_container_remaining_capacity(storage_key)` - (count, weight) remaining
+  - **Temporary Storage**:
+    - `create_temporary_surface(surface_key, world_location_id, ...)` - create temp PLACE storage
+    - `get_or_create_surface(surface_key, ...)` - get existing or create new
+    - `cleanup_empty_temporary_storage(location_id)` - remove empty temp storage
+
+### 2.3.1 Storage Management
+- [x] Create `src/managers/storage_manager.py`
+  - **Portability Operations**:
+    - `can_move_storage(storage_key)` - check if not fixed
+    - `get_move_difficulty(storage_key)` - weight for strength check (None=easy, float=hard, inf=fixed)
+  - **Hierarchy Operations**:
+    - `get_storage_hierarchy(storage_key)` - parent chain to root
+    - `get_child_storages(storage_key)` - direct children
+    - `get_nested_contents(storage_key)` - all items recursively
+    - `nest_storage(storage_key, parent_key)` - set parent relationship
+    - `unnest_storage(storage_key)` - clear parent relationship
+  - **Location Operations**:
+    - `get_all_storages_at_location(location_id)` - storages at world location
+    - `move_storage_to_location(storage_key, to_location_id)` - move portable storage
 
 ### 2.4 Relationship Management
 - [x] Create `src/managers/relationship_manager.py`

@@ -94,18 +94,62 @@ class StorageLocation(Base, TimestampMixin):
         nullable=True,
     )
 
+    # Container-Item link (for containers that are also items)
+    container_item_id: Mapped[int | None] = mapped_column(
+        ForeignKey("items.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+        comment="The Item this storage represents (backpack, pouch, chest)",
+    )
+
+    # Portability
+    is_fixed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Cannot be moved (built-in closet, fixed chest)",
+    )
+    weight_to_move: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="Weight for strength check to move (heavy but not fixed)",
+    )
+
+    # Weight capacity
+    weight_capacity: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        comment="Max weight this can hold (in addition to item count capacity)",
+    )
+
+    # Location ownership (alternative to entity ownership)
+    owner_location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("locations.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Location that owns this storage - mutually exclusive with owner_entity_id",
+    )
+
     # Relationships
     stored_items: Mapped[list["Item"]] = relationship(
         back_populates="storage_location",
         cascade="all, delete-orphan",
+        foreign_keys="Item.storage_location_id",
     )
     owner_entity: Mapped["Entity | None"] = relationship(
         foreign_keys=[owner_entity_id],
     )
-    world_location: Mapped["Location | None"] = relationship()
+    world_location: Mapped["Location | None"] = relationship(
+        foreign_keys=[world_location_id],
+    )
     parent_location: Mapped["StorageLocation | None"] = relationship(
         remote_side="StorageLocation.id",
         foreign_keys=[parent_location_id],
+    )
+    container_item: Mapped["Item | None"] = relationship(
+        foreign_keys=[container_item_id],
+    )
+    owner_location: Mapped["Location | None"] = relationship(
+        foreign_keys=[owner_location_id],
     )
 
     # Unique constraint
@@ -242,6 +286,42 @@ class Item(Base, TimestampMixin):
         nullable=True,
     )
 
+    # Theft tracking
+    is_stolen: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Item is currently stolen (clears on legitimate transfer)",
+    )
+    was_ever_stolen: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="Historical flag - item was stolen at some point (never clears)",
+    )
+    stolen_from_id: Mapped[int | None] = mapped_column(
+        ForeignKey("entities.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Entity this was stolen from (for returning)",
+    )
+    stolen_from_location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("locations.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Location/establishment this was stolen from",
+    )
+    original_owner_id: Mapped[int | None] = mapped_column(
+        ForeignKey("entities.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="First known owner (provenance tracking)",
+    )
+
+    # Location ownership (alternative to entity ownership)
+    owner_location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("locations.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Location that owns this item (e.g., inn's bowls) - mutually exclusive with owner_id",
+    )
+
     # Relationships
     owner: Mapped["Entity | None"] = relationship(
         foreign_keys=[owner_id],
@@ -251,6 +331,19 @@ class Item(Base, TimestampMixin):
     )
     storage_location: Mapped["StorageLocation | None"] = relationship(
         back_populates="stored_items",
+        foreign_keys=[storage_location_id],
+    )
+    stolen_from: Mapped["Entity | None"] = relationship(
+        foreign_keys=[stolen_from_id],
+    )
+    stolen_from_location: Mapped["Location | None"] = relationship(
+        foreign_keys=[stolen_from_location_id],
+    )
+    original_owner: Mapped["Entity | None"] = relationship(
+        foreign_keys=[original_owner_id],
+    )
+    owner_location: Mapped["Location | None"] = relationship(
+        foreign_keys=[owner_location_id],
     )
 
     # Unique constraint

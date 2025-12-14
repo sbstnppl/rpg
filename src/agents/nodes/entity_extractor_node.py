@@ -132,7 +132,7 @@ async def _extract_entities(state: GameState) -> dict[str, Any]:
     try:
         if isinstance(raw_extraction, dict):
             # Ensure list fields have proper defaults (LLM may return null or non-list)
-            for list_field in ["characters", "items", "facts", "relationship_changes", "appointments"]:
+            for list_field in ["characters", "items", "locations", "facts", "relationship_changes", "appointments"]:
                 val = raw_extraction.get(list_field)
                 if val is None or not isinstance(val, list):
                     raw_extraction[list_field] = []
@@ -146,6 +146,7 @@ async def _extract_entities(state: GameState) -> dict[str, Any]:
         return {
             "extracted_entities": [],
             "extracted_items": [],
+            "extracted_locations": [],
             "extracted_facts": [],
             "relationship_changes": [],
             "appointments": [],
@@ -231,6 +232,16 @@ async def _extract_entities(state: GameState) -> dict[str, Any]:
                 "action": i.action,
             }
             for i in extraction.items
+        ],
+        "extracted_locations": [
+            {
+                "location_key": loc.location_key,
+                "display_name": loc.display_name,
+                "category": loc.category,
+                "description": loc.description,
+                "parent_location_key": loc.parent_location_key,
+            }
+            for loc in extraction.locations
         ],
         "extracted_facts": [
             {

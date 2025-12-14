@@ -37,6 +37,24 @@ class LocationManager(BaseManager):
             .first()
         )
 
+    def get_location_by_display_name(self, display_name: str) -> Location | None:
+        """Get location by display name.
+
+        Args:
+            display_name: Display name to search for.
+
+        Returns:
+            Location if found, None otherwise.
+        """
+        return (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.display_name == display_name,
+            )
+            .first()
+        )
+
     def create_location(
         self,
         location_key: str,

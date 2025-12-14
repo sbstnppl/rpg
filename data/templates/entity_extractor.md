@@ -34,14 +34,32 @@ Items that appeared or were interacted with. For each:
 - owner_key: Entity key of owner
 - action: "acquired", "dropped", "transferred", "equipped", "mentioned"
 
-### 3. Facts
+### 3. New Locations
+New places introduced or described in the narrative. Extract when the GM describes:
+- A named place the player enters or discovers
+- A building, room, or area with distinct identity
+- Any location with narrative significance
+
+For each new location:
+- location_key: lowercase with underscores (e.g., "weary_traveler_inn", "market_square")
+- display_name: How the location should be named (e.g., "The Weary Traveler Inn")
+- category: "wilderness" (forests, trails), "settlement" (towns, villages), "establishment" (businesses, inns), "interior" (rooms within buildings), "public" (squares, streets)
+- description: Atmosphere and notable features
+- parent_location_key: If this is a sublocation (e.g., "inn_common_room" has parent "weary_traveler_inn")
+
+**Do NOT extract:**
+- Vague locations without names ("a clearing", "some trees")
+- Locations already established in context
+- Generic directional references ("to the north")
+
+### 4. Facts
 New information revealed about characters or world. For each:
 - subject: Entity key or topic
 - predicate: What aspect (e.g., "occupation", "lives_at", "knows_about")
 - value: The information
 - is_secret: true if GM-only information
 
-### 4. Relationship Changes
+### 5. Relationship Changes
 Track attitude shifts between characters. **Always extract when NPCs interact with the player.**
 
 **IMPORTANT**: When an NPC has a conversation with the player for the first time, create a "familiarity" change of +10 to +20 to establish the relationship exists.
@@ -62,7 +80,7 @@ For each relationship change:
 - delta: -20 to +20 (positive for improvement, negative for worsening)
 - reason: Brief explanation of why
 
-### 5. Appointments
+### 6. Appointments
 Commitments made for future. For each:
 - description: What for
 - day: Game day number
@@ -70,7 +88,7 @@ Commitments made for future. For each:
 - location_key: Where
 - participants: Entity keys
 
-### 6. State Changes
+### 7. State Changes
 - time_advance_minutes: Minutes that passed (infer from narrative)
 - location_change: New location key if player moved (or null)
 

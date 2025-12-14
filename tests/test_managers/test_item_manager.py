@@ -1038,3 +1038,544 @@ class TestItemManagerInventorySummary:
         assert "free_storage_slots" in result
         assert "belt_pouch_1" in result["free_storage_slots"]
         assert "belt_pouch_2" in result["free_storage_slots"]
+
+
+# =============================================================================
+# Theft Operations Tests (NEW)
+# =============================================================================
+
+
+class TestItemManagerTheft:
+    """Tests for theft-related operations."""
+
+    def test_steal_item_sets_stolen_flags(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify steal_item sets is_stolen and was_ever_stolen."""
+        victim = create_entity(db_session, game_session, entity_key="victim")
+        thief = create_entity(db_session, game_session, entity_key="thief")
+        item = create_item(
+            db_session, game_session,
+            item_key="gold_ring",
+            owner_id=victim.id,
+            holder_id=victim.id,
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.steal_item("gold_ring", thief.id, from_entity_id=victim.id)
+
+        assert result.is_stolen is True
+        assert result.was_ever_stolen is True
+        assert result.stolen_from_id == victim.id
+        assert result.holder_id == thief.id
+        # Owner doesn't change - still legally victim's
+        assert result.owner_id == victim.id
+
+    def test_steal_item_from_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify steal_item can track stealing from a location/establishment."""
+        inn = create_location(db_session, game_session, location_key="inn")
+        thief = create_entity(db_session, game_session, entity_key="thief")
+        item = create_item(
+            db_session, game_session,
+            item_key="inn_bowl",
+            owner_location_id=inn.id,
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.steal_item("inn_bowl", thief.id, from_location_id=inn.id)
+
+        assert result.is_stolen is True
+        assert result.was_ever_stolen is True
+        assert result.stolen_from_location_id == inn.id
+        assert result.holder_id == thief.id
+
+    def test_steal_item_raises_for_nonexistent(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify steal_item raises ValueError for nonexistent item."""
+        thief = create_entity(db_session, game_session, entity_key="thief")
+        manager = ItemManager(db_session, game_session)
+
+        with pytest.raises(ValueError, match="Item not found"):
+            manager.steal_item("nonexistent", thief.id)
+
+    def test_return_stolen_item_to_entity(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify return_stolen_item clears is_stolen and returns to victim."""
+        victim = create_entity(db_session, game_session, entity_key="victim")
+        thief = create_entity(db_session, game_session, entity_key="thief")
+        item = create_item(
+            db_session, game_session,
+            item_key="gold_ring",
+            owner_id=victim.id,
+            holder_id=thief.id,
+            is_stolen=True,
+            was_ever_stolen=True,
+            stolen_from_id=victim.id,
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.return_stolen_item("gold_ring")
+
+        assert result.is_stolen is False
+        assert result.was_ever_stolen is True  # Historical flag remains
+        assert result.holder_id == victim.id
+        assert result.stolen_from_id is None  # Cleared after return
+
+    def test_return_stolen_item_to_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify return_stolen_item can return to a location."""
+        inn = create_location(db_session, game_session, location_key="inn")
+        thief = create_entity(db_session, game_session, entity_key="thief")
+        marta = create_entity(db_session, game_session, entity_key="marta")
+        item = create_item(
+            db_session, game_session,
+            item_key="inn_bowl",
+            owner_location_id=inn.id,
+            holder_id=thief.id,
+            is_stolen=True,
+            was_ever_stolen=True,
+            stolen_from_location_id=inn.id,
+        )
+        manager = ItemManager(db_session, game_session)
+
+        # Return to a representative of the location (Marta the innkeeper)
+        result = manager.return_stolen_item("inn_bowl", to_entity_id=marta.id)
+
+        assert result.is_stolen is False
+        assert result.was_ever_stolen is True
+        assert result.holder_id == marta.id
+        assert result.stolen_from_location_id is None
+
+    def test_legitimize_item_clears_stolen_transfers_owner(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify legitimize_item clears is_stolen via sale/gift."""
+        victim = create_entity(db_session, game_session, entity_key="victim")
+        thief = create_entity(db_session, game_session, entity_key="thief")
+        fence = create_entity(db_session, game_session, entity_key="fence")
+        item = create_item(
+            db_session, game_session,
+            item_key="gold_ring",
+            owner_id=victim.id,
+            holder_id=thief.id,
+            is_stolen=True,
+            was_ever_stolen=True,
+            stolen_from_id=victim.id,
+        )
+        manager = ItemManager(db_session, game_session)
+
+        # Thief sells to fence - legitimate new owner
+        result = manager.legitimize_item("gold_ring", new_owner_id=fence.id)
+
+        assert result.is_stolen is False  # No longer stolen
+        assert result.was_ever_stolen is True  # Historical stain remains
+        assert result.owner_id == fence.id  # New legitimate owner
+        assert result.holder_id == fence.id  # Transferred possession too
+        assert result.stolen_from_id is None  # Cleared
+
+    def test_legitimize_item_to_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify legitimize_item can transfer ownership to a location."""
+        thief = create_entity(db_session, game_session, entity_key="thief")
+        new_inn = create_location(db_session, game_session, location_key="new_inn")
+        item = create_item(
+            db_session, game_session,
+            item_key="stolen_bowl",
+            holder_id=thief.id,
+            is_stolen=True,
+            was_ever_stolen=True,
+        )
+        manager = ItemManager(db_session, game_session)
+
+        # Donate to new establishment
+        result = manager.legitimize_item("stolen_bowl", new_owner_location_id=new_inn.id)
+
+        assert result.is_stolen is False
+        assert result.was_ever_stolen is True
+        assert result.owner_location_id == new_inn.id
+        assert result.owner_id is None  # Location owns, not entity
+
+    def test_legitimize_item_raises_for_nonexistent(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify legitimize_item raises ValueError for nonexistent item."""
+        manager = ItemManager(db_session, game_session)
+
+        with pytest.raises(ValueError, match="Item not found"):
+            manager.legitimize_item("nonexistent", new_owner_id=1)
+
+
+# =============================================================================
+# Container Linking Tests (NEW)
+# =============================================================================
+
+
+class TestItemManagerContainer:
+    """Tests for container-item linking operations."""
+
+    def test_create_container_item_creates_both(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify create_container_item creates item and linked storage."""
+        player = create_entity(db_session, game_session, entity_key="player")
+        manager = ItemManager(db_session, game_session)
+
+        item, storage = manager.create_container_item(
+            item_key="backpack",
+            display_name="Leather Backpack",
+            owner_id=player.id,
+            container_type="backpack",
+            capacity=20,
+            weight_capacity=40.0,
+        )
+
+        # Item created correctly
+        assert item.item_key == "backpack"
+        assert item.display_name == "Leather Backpack"
+        assert item.item_type == ItemType.CONTAINER
+        assert item.owner_id == player.id
+
+        # Storage created correctly
+        assert storage.location_key == "backpack_storage"
+        assert storage.location_type == StorageLocationType.CONTAINER
+        assert storage.container_type == "backpack"
+        assert storage.capacity == 20
+        assert storage.weight_capacity == 40.0
+
+        # Linked together
+        assert storage.container_item_id == item.id
+
+    def test_create_container_item_fixed_storage(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify create_container_item can create fixed containers."""
+        location = create_location(db_session, game_session, location_key="bedroom")
+        manager = ItemManager(db_session, game_session)
+
+        item, storage = manager.create_container_item(
+            item_key="closet",
+            display_name="Wooden Closet",
+            container_type="closet",
+            is_fixed=True,
+            world_location_id=location.id,
+        )
+
+        assert storage.is_fixed is True
+        assert storage.world_location_id == location.id
+
+    def test_put_in_container_moves_item(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify put_in_container moves item to container storage."""
+        player = create_entity(db_session, game_session, entity_key="player")
+        manager = ItemManager(db_session, game_session)
+
+        # Create backpack
+        _, backpack_storage = manager.create_container_item(
+            item_key="backpack",
+            display_name="Backpack",
+            owner_id=player.id,
+            container_type="backpack",
+            capacity=20,
+        )
+
+        # Create item to put in backpack
+        sword = manager.create_item(
+            item_key="sword",
+            display_name="Sword",
+            owner_id=player.id,
+            holder_id=player.id,
+        )
+
+        result = manager.put_in_container("sword", "backpack_storage")
+
+        assert result.storage_location_id == backpack_storage.id
+        assert result.holder_id is None  # No longer held, in storage
+
+    def test_put_in_container_checks_item_capacity(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify put_in_container respects item count capacity."""
+        player = create_entity(db_session, game_session, entity_key="player")
+        manager = ItemManager(db_session, game_session)
+
+        # Create tiny pouch with capacity 1
+        _, pouch_storage = manager.create_container_item(
+            item_key="tiny_pouch",
+            display_name="Tiny Pouch",
+            owner_id=player.id,
+            container_type="pouch",
+            capacity=1,
+        )
+
+        # Put first item in
+        manager.create_item(item_key="coin1", display_name="Coin 1")
+        manager.put_in_container("coin1", "tiny_pouch_storage")
+
+        # Second item should fail
+        manager.create_item(item_key="coin2", display_name="Coin 2")
+        with pytest.raises(ValueError, match="capacity"):
+            manager.put_in_container("coin2", "tiny_pouch_storage")
+
+    def test_put_in_container_checks_weight_capacity(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify put_in_container respects weight capacity."""
+        player = create_entity(db_session, game_session, entity_key="player")
+        manager = ItemManager(db_session, game_session)
+
+        # Create pouch with limited weight capacity
+        _, pouch_storage = manager.create_container_item(
+            item_key="pouch",
+            display_name="Small Pouch",
+            owner_id=player.id,
+            container_type="pouch",
+            weight_capacity=1.0,  # 1 pound max
+        )
+
+        # Create heavy item
+        manager.create_item(item_key="heavy_rock", display_name="Heavy Rock", weight=5.0)
+
+        with pytest.raises(ValueError, match="weight"):
+            manager.put_in_container("heavy_rock", "pouch_storage")
+
+    def test_get_container_remaining_capacity(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_container_remaining_capacity calculates correctly."""
+        player = create_entity(db_session, game_session, entity_key="player")
+        manager = ItemManager(db_session, game_session)
+
+        # Create backpack with capacity 10 items, 20 lbs
+        _, backpack_storage = manager.create_container_item(
+            item_key="backpack",
+            display_name="Backpack",
+            owner_id=player.id,
+            container_type="backpack",
+            capacity=10,
+            weight_capacity=20.0,
+        )
+
+        # Add some items
+        manager.create_item(item_key="item1", display_name="Item 1", weight=5.0)
+        manager.put_in_container("item1", "backpack_storage")
+        manager.create_item(item_key="item2", display_name="Item 2", weight=3.0)
+        manager.put_in_container("item2", "backpack_storage")
+
+        count_remaining, weight_remaining = manager.get_container_remaining_capacity(
+            "backpack_storage"
+        )
+
+        assert count_remaining == 8  # 10 - 2 items
+        assert weight_remaining == 12.0  # 20 - 8 lbs
+
+
+# =============================================================================
+# Temporary Storage Tests (NEW)
+# =============================================================================
+
+
+class TestItemManagerTemporaryStorage:
+    """Tests for temporary storage operations."""
+
+    def test_create_temporary_surface_basic(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify create_temporary_surface creates a temporary PLACE storage."""
+        location = create_location(db_session, game_session, location_key="tavern")
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.create_temporary_surface(
+            surface_key="tavern_table_1",
+            world_location_id=location.id,
+            container_type="table",
+        )
+
+        assert result.location_key == "tavern_table_1"
+        assert result.location_type == StorageLocationType.PLACE
+        assert result.is_temporary is True
+        assert result.world_location_id == location.id
+        assert result.container_type == "table"
+
+    def test_create_temporary_surface_with_capacity(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify create_temporary_surface can set capacity limits."""
+        location = create_location(db_session, game_session, location_key="shop")
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.create_temporary_surface(
+            surface_key="shop_counter",
+            world_location_id=location.id,
+            container_type="counter",
+            capacity=10,
+            weight_capacity=50.0,
+        )
+
+        assert result.capacity == 10
+        assert result.weight_capacity == 50.0
+
+    def test_create_temporary_surface_floor(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify create_temporary_surface works for floor surfaces."""
+        location = create_location(db_session, game_session, location_key="street")
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.create_temporary_surface(
+            surface_key="street_floor_01",
+            world_location_id=location.id,
+            container_type="floor",
+        )
+
+        assert result.is_temporary is True
+        assert result.container_type == "floor"
+
+    def test_cleanup_empty_temporary_storage_removes_empty(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify cleanup_empty_temporary_storage removes empty temp storage."""
+        location = create_location(db_session, game_session, location_key="tavern")
+        manager = ItemManager(db_session, game_session)
+
+        # Create temporary storage
+        temp_storage = manager.create_temporary_surface(
+            surface_key="empty_table",
+            world_location_id=location.id,
+        )
+        temp_id = temp_storage.id
+
+        # Cleanup - should remove it since it's empty
+        removed_count = manager.cleanup_empty_temporary_storage()
+
+        assert removed_count == 1
+        # Verify it's gone
+        storage = db_session.query(StorageLocation).filter(
+            StorageLocation.id == temp_id
+        ).first()
+        assert storage is None
+
+    def test_cleanup_empty_temporary_storage_keeps_non_empty(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify cleanup_empty_temporary_storage keeps temp storage with items."""
+        location = create_location(db_session, game_session, location_key="tavern")
+        manager = ItemManager(db_session, game_session)
+
+        # Create temporary storage with an item
+        temp_storage = manager.create_temporary_surface(
+            surface_key="table_with_bowl",
+            world_location_id=location.id,
+        )
+        create_item(
+            db_session, game_session,
+            item_key="bowl",
+            storage_location_id=temp_storage.id,
+        )
+
+        # Cleanup - should NOT remove it since it has items
+        removed_count = manager.cleanup_empty_temporary_storage()
+
+        assert removed_count == 0
+        # Verify it's still there
+        storage = db_session.query(StorageLocation).filter(
+            StorageLocation.location_key == "table_with_bowl"
+        ).first()
+        assert storage is not None
+
+    def test_cleanup_empty_temporary_storage_ignores_permanent(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify cleanup_empty_temporary_storage ignores non-temporary storage."""
+        location = create_location(db_session, game_session, location_key="tavern")
+        manager = ItemManager(db_session, game_session)
+
+        # Create permanent storage (is_temporary=False)
+        permanent = manager.create_storage(
+            location_key="permanent_shelf",
+            location_type=StorageLocationType.PLACE,
+            world_location_id=location.id,
+            is_temporary=False,
+        )
+
+        # Cleanup
+        removed_count = manager.cleanup_empty_temporary_storage()
+
+        assert removed_count == 0
+        # Verify permanent storage remains
+        storage = db_session.query(StorageLocation).filter(
+            StorageLocation.location_key == "permanent_shelf"
+        ).first()
+        assert storage is not None
+
+    def test_cleanup_empty_temporary_storage_at_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify cleanup_empty_temporary_storage can filter by location."""
+        tavern = create_location(db_session, game_session, location_key="tavern")
+        market = create_location(db_session, game_session, location_key="market")
+        manager = ItemManager(db_session, game_session)
+
+        # Create temp storage at both locations
+        manager.create_temporary_surface(
+            surface_key="tavern_table",
+            world_location_id=tavern.id,
+        )
+        market_table = manager.create_temporary_surface(
+            surface_key="market_stall",
+            world_location_id=market.id,
+        )
+
+        # Cleanup only tavern location
+        removed_count = manager.cleanup_empty_temporary_storage(location_id=tavern.id)
+
+        assert removed_count == 1
+        # Market stall should remain
+        storage = db_session.query(StorageLocation).filter(
+            StorageLocation.location_key == "market_stall"
+        ).first()
+        assert storage is not None
+
+    def test_get_or_create_surface_creates_new(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_or_create_surface creates surface if not exists."""
+        location = create_location(db_session, game_session, location_key="tavern")
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.get_or_create_surface(
+            surface_key="tavern_floor",
+            world_location_id=location.id,
+            container_type="floor",
+        )
+
+        assert result.location_key == "tavern_floor"
+        assert result.is_temporary is True
+
+    def test_get_or_create_surface_returns_existing(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify get_or_create_surface returns existing surface."""
+        location = create_location(db_session, game_session, location_key="tavern")
+        manager = ItemManager(db_session, game_session)
+
+        # Create first
+        first = manager.get_or_create_surface(
+            surface_key="tavern_floor",
+            world_location_id=location.id,
+        )
+        first_id = first.id
+
+        # Get again
+        second = manager.get_or_create_surface(
+            surface_key="tavern_floor",
+            world_location_id=location.id,
+        )
+
+        assert second.id == first_id

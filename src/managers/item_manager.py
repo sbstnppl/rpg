@@ -821,3 +821,413 @@ class ItemManager(BaseManager):
             "occupied_slots": occupied_slots,
             "can_hold_more": len(free_hand_slots) > 0 or len(free_storage_slots) > 0,
         }
+
+    # ==================== Theft Operations ====================
+
+    def steal_item(
+        self,
+        item_key: str,
+        thief_id: int,
+        from_entity_id: int | None = None,
+        from_location_id: int | None = None,
+    ) -> Item:
+        """Mark item as stolen and transfer to thief.
+
+        Sets is_stolen=True, was_ever_stolen=True, and tracks who/where
+        it was stolen from for potential return. Does NOT change owner_id
+        (the item still legally belongs to the victim).
+
+        Args:
+            item_key: Item key.
+            thief_id: Entity ID of the thief.
+            from_entity_id: Entity the item was stolen from.
+            from_location_id: Location/establishment the item was stolen from.
+
+        Returns:
+            Updated Item.
+
+        Raises:
+            ValueError: If item not found.
+        """
+        item = self.get_item(item_key)
+        if item is None:
+            raise ValueError(f"Item not found: {item_key}")
+
+        item.is_stolen = True
+        item.was_ever_stolen = True
+        item.holder_id = thief_id
+        item.storage_location_id = None  # Now held by thief
+
+        if from_entity_id is not None:
+            item.stolen_from_id = from_entity_id
+        if from_location_id is not None:
+            item.stolen_from_location_id = from_location_id
+
+        self.db.flush()
+        return item
+
+    def return_stolen_item(
+        self,
+        item_key: str,
+        to_entity_id: int | None = None,
+    ) -> Item:
+        """Return stolen item to original holder.
+
+        Clears is_stolen and stolen_from tracking. The was_ever_stolen
+        flag remains True (historical record).
+
+        Args:
+            item_key: Item key.
+            to_entity_id: Override entity to return to (e.g., representative
+                         of a location like an innkeeper).
+
+        Returns:
+            Updated Item.
+
+        Raises:
+            ValueError: If item not found.
+        """
+        item = self.get_item(item_key)
+        if item is None:
+            raise ValueError(f"Item not found: {item_key}")
+
+        item.is_stolen = False
+
+        # Determine who to return to
+        if to_entity_id is not None:
+            item.holder_id = to_entity_id
+        elif item.stolen_from_id is not None:
+            item.holder_id = item.stolen_from_id
+
+        # Clear theft tracking (returned)
+        item.stolen_from_id = None
+        item.stolen_from_location_id = None
+
+        self.db.flush()
+        return item
+
+    def legitimize_item(
+        self,
+        item_key: str,
+        new_owner_id: int | None = None,
+        new_owner_location_id: int | None = None,
+    ) -> Item:
+        """Clear stolen status via legitimate transfer (sale/gift).
+
+        Clears is_stolen because the new owner acquired it legitimately.
+        The was_ever_stolen flag remains True (affects value/reputation).
+
+        Args:
+            item_key: Item key.
+            new_owner_id: New entity owner (mutually exclusive with location).
+            new_owner_location_id: New location owner (mutually exclusive with entity).
+
+        Returns:
+            Updated Item.
+
+        Raises:
+            ValueError: If item not found.
+        """
+        item = self.get_item(item_key)
+        if item is None:
+            raise ValueError(f"Item not found: {item_key}")
+
+        item.is_stolen = False
+        item.stolen_from_id = None
+        item.stolen_from_location_id = None
+
+        if new_owner_id is not None:
+            item.owner_id = new_owner_id
+            item.owner_location_id = None
+            item.holder_id = new_owner_id  # Transfer possession too
+        elif new_owner_location_id is not None:
+            item.owner_location_id = new_owner_location_id
+            item.owner_id = None
+
+        self.db.flush()
+        return item
+
+    # ==================== Container Operations ====================
+
+    def create_container_item(
+        self,
+        item_key: str,
+        display_name: str,
+        owner_id: int | None = None,
+        container_type: str = "container",
+        capacity: int | None = None,
+        weight_capacity: float | None = None,
+        is_fixed: bool = False,
+        world_location_id: int | None = None,
+        **item_kwargs,
+    ) -> tuple[Item, StorageLocation]:
+        """Create an Item that is also a container.
+
+        Atomically creates both the Item (CONTAINER type) and a linked
+        StorageLocation. The storage uses the item_key + "_storage" as its key.
+
+        Args:
+            item_key: Unique key for the item.
+            display_name: Display name.
+            owner_id: Optional owner entity ID.
+            container_type: Type of container (backpack, pouch, chest, etc.).
+            capacity: Max item count.
+            weight_capacity: Max weight in pounds.
+            is_fixed: Cannot be moved (built-in closet).
+            world_location_id: World location for fixed storage.
+            **item_kwargs: Additional Item fields.
+
+        Returns:
+            Tuple of (Item, StorageLocation).
+        """
+        # Create the item
+        item = self.create_item(
+            item_key=item_key,
+            display_name=display_name,
+            item_type=ItemType.CONTAINER,
+            owner_id=owner_id,
+            **item_kwargs,
+        )
+
+        # Create the linked storage
+        storage_key = f"{item_key}_storage"
+        storage = self.create_storage(
+            location_key=storage_key,
+            location_type=StorageLocationType.CONTAINER,
+            owner_entity_id=owner_id,
+            container_type=container_type,
+            capacity=capacity,
+            weight_capacity=weight_capacity,
+            is_fixed=is_fixed,
+            world_location_id=world_location_id,
+            container_item_id=item.id,
+        )
+
+        return item, storage
+
+    def put_in_container(
+        self,
+        item_key: str,
+        container_key: str,
+    ) -> Item:
+        """Move item into a container, checking capacity.
+
+        Args:
+            item_key: Item key.
+            container_key: Storage location key of the container.
+
+        Returns:
+            Updated Item.
+
+        Raises:
+            ValueError: If item/container not found or capacity exceeded.
+        """
+        item = self.get_item(item_key)
+        if item is None:
+            raise ValueError(f"Item not found: {item_key}")
+
+        storage = (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.session_id,
+                StorageLocation.location_key == container_key,
+            )
+            .first()
+        )
+        if storage is None:
+            raise ValueError(f"Container not found: {container_key}")
+
+        # Check capacity
+        count_remaining, weight_remaining = self.get_container_remaining_capacity(
+            container_key
+        )
+
+        if count_remaining is not None and count_remaining <= 0:
+            raise ValueError(f"Container {container_key} is at item capacity")
+
+        if weight_remaining is not None and item.weight is not None:
+            if item.weight > weight_remaining:
+                raise ValueError(
+                    f"Item weight ({item.weight}) exceeds remaining container "
+                    f"weight capacity ({weight_remaining})"
+                )
+
+        # Move item to container
+        item.storage_location_id = storage.id
+        item.holder_id = None
+        item.body_slot = None
+        item.body_layer = 0
+
+        self.db.flush()
+        return item
+
+    def get_container_remaining_capacity(
+        self,
+        storage_key: str,
+    ) -> tuple[int | None, float | None]:
+        """Get remaining item count and weight capacity.
+
+        Args:
+            storage_key: Storage location key.
+
+        Returns:
+            Tuple of (remaining_count, remaining_weight).
+            None means unlimited.
+
+        Raises:
+            ValueError: If storage not found.
+        """
+        storage = (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.session_id,
+                StorageLocation.location_key == storage_key,
+            )
+            .first()
+        )
+        if storage is None:
+            raise ValueError(f"Storage not found: {storage_key}")
+
+        # Get current items in storage
+        items = self.get_items_at_storage(storage_key)
+
+        # Calculate remaining count
+        count_remaining = None
+        if storage.capacity is not None:
+            count_remaining = storage.capacity - len(items)
+
+        # Calculate remaining weight
+        weight_remaining = None
+        if storage.weight_capacity is not None:
+            current_weight = sum(
+                (i.weight or 0) * i.quantity for i in items
+            )
+            weight_remaining = storage.weight_capacity - current_weight
+
+        return count_remaining, weight_remaining
+
+    # ==================== Temporary Storage Operations ====================
+
+    def create_temporary_surface(
+        self,
+        surface_key: str,
+        world_location_id: int,
+        container_type: str = "surface",
+        capacity: int | None = None,
+        weight_capacity: float | None = None,
+    ) -> StorageLocation:
+        """Create a temporary surface for placing items.
+
+        Temporary surfaces (tables, floors, counters) are auto-cleaned
+        when empty via cleanup_empty_temporary_storage().
+
+        Args:
+            surface_key: Unique key for this surface.
+            world_location_id: World location ID where surface exists.
+            container_type: Type of surface (table, floor, counter, etc.).
+            capacity: Optional max item count.
+            weight_capacity: Optional max weight in pounds.
+
+        Returns:
+            Created StorageLocation with is_temporary=True.
+        """
+        return self.create_storage(
+            location_key=surface_key,
+            location_type=StorageLocationType.PLACE,
+            world_location_id=world_location_id,
+            container_type=container_type,
+            capacity=capacity,
+            weight_capacity=weight_capacity,
+            is_temporary=True,
+        )
+
+    def get_or_create_surface(
+        self,
+        surface_key: str,
+        world_location_id: int,
+        container_type: str = "surface",
+        capacity: int | None = None,
+        weight_capacity: float | None = None,
+    ) -> StorageLocation:
+        """Get existing surface or create new temporary one.
+
+        Use this when placing an item on a surface - if the surface
+        doesn't exist, it will be created automatically.
+
+        Args:
+            surface_key: Unique key for this surface.
+            world_location_id: World location ID where surface exists.
+            container_type: Type of surface (table, floor, counter, etc.).
+            capacity: Optional max item count (only used on creation).
+            weight_capacity: Optional max weight (only used on creation).
+
+        Returns:
+            Existing or newly created StorageLocation.
+        """
+        existing = (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.session_id,
+                StorageLocation.location_key == surface_key,
+            )
+            .first()
+        )
+
+        if existing is not None:
+            return existing
+
+        return self.create_temporary_surface(
+            surface_key=surface_key,
+            world_location_id=world_location_id,
+            container_type=container_type,
+            capacity=capacity,
+            weight_capacity=weight_capacity,
+        )
+
+    def cleanup_empty_temporary_storage(
+        self,
+        location_id: int | None = None,
+    ) -> int:
+        """Remove empty temporary storage locations.
+
+        Cleans up temporary surfaces (tables, floors) that no longer
+        have any items. Called periodically or after items are removed.
+
+        Args:
+            location_id: Optional world location ID to filter cleanup.
+                        If None, cleans all locations in session.
+
+        Returns:
+            Number of storage locations removed.
+        """
+        from sqlalchemy import func
+
+        # Find temporary storage locations
+        query = (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.session_id,
+                StorageLocation.is_temporary == True,
+            )
+        )
+
+        if location_id is not None:
+            query = query.filter(StorageLocation.world_location_id == location_id)
+
+        temp_storages = query.all()
+
+        removed_count = 0
+        for storage in temp_storages:
+            # Check if empty (no items in this storage)
+            item_count = (
+                self.db.query(func.count(Item.id))
+                .filter(Item.storage_location_id == storage.id)
+                .scalar()
+            )
+
+            if item_count == 0:
+                self.db.delete(storage)
+                removed_count += 1
+
+        self.db.flush()
+        return removed_count

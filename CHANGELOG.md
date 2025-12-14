@@ -8,6 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Enhanced Inventory & Storage System** - Comprehensive item ownership, theft tracking, and container management
+  - **Theft Tracking**: Items now track `is_stolen` (active), `was_ever_stolen` (historical), `stolen_from_id`, `stolen_from_location_id`, and `original_owner_id` for provenance
+  - **Location Ownership**: Items and storage can be owned by locations (e.g., inn's bowls) via `owner_location_id`
+  - **Container-Item Linking**: Containers (backpacks, pouches, chests) are both Items and StorageLocations linked via `container_item_id`
+  - **Portability System**: Storage has `is_fixed` (immovable) and `weight_to_move` (strength check required) for realistic movement
+  - **Weight Capacity**: Containers track both item count (`capacity`) and weight limit (`weight_capacity`)
+  - **Temporary Surfaces**: Tables, floors, and counters created dynamically and auto-cleaned when empty
+  - **ItemManager Methods**: `steal_item()`, `return_stolen_item()`, `legitimize_item()`, `create_container_item()`, `put_in_container()`, `get_container_remaining_capacity()`, `create_temporary_surface()`, `get_or_create_surface()`, `cleanup_empty_temporary_storage()`
+  - **New StorageManager**: Dedicated manager for storage hierarchy and portability
+    - `can_move_storage()`, `get_move_difficulty()` - portability checking
+    - `get_storage_hierarchy()`, `get_nested_contents()`, `get_child_storages()` - hierarchy navigation
+    - `nest_storage()`, `unnest_storage()` - container nesting operations
+    - `get_all_storages_at_location()`, `move_storage_to_location()` - location management
+  - **Integration Tests**: 10 workflow tests covering theft lifecycle, container nesting, temporary surfaces, and portability
+  - **Alembic Migration**: `25d0fb8756ad_add_theft_tracking_and_storage_enhancements.py`
+- **Session 72 Migration Script** - Data migration script to align legacy game data with new inventory system
+  - `scripts/migrate_session_72.py` - Creates Location records, StorageLocations (ON_PERSON, CONTAINER, PLACE), fixes item ownership
+  - Demonstrates full inventory system capability: location hierarchies, container-item linking, location ownership
+  - Idempotent script (can be re-run safely, checks for existing records)
 - **Tool-Based Item Acquisition System** - GM now uses `acquire_item` and `drop_item` tools for inventory management
   - Validates slot availability before item pickup (hands full, belt full, etc.)
   - Validates weight limits before acquisition (too heavy to carry)
@@ -58,6 +77,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Wizard Field Updates Not Saving** - Strengthened `wizard_name.md` template with explicit FORBIDDEN section and WRONG/RIGHT examples to ensure LLM includes all discussed fields in the JSON output, not just narrative text.
 - **Wizard Auto-Completing Without Confirmation** - Fixed bug where wizard could mark sections complete while silently filling in values the user never confirmed. Added validation in `character.py` to detect when `section_data` introduces new required values, showing "Auto-filled: field=value" and requiring explicit confirmation before proceeding.
 - **Hidden Backstory Leaking to Player** - CRITICAL fix for wizard revealing GM-only secrets in visible text (e.g., "Hidden Backstory Element: Unknown to Calum..."). Updated `wizard_background.md` with explicit FORBIDDEN section and added safety net regex in `_strip_json_blocks()` to strip any "Hidden Backstory:", "Secret:", "GM Note:", or "Unknown to X," patterns that leak into narrative.
+- **Locations Not Created During Gameplay** - Fixed bug where LocationManager was never called during gameplay, resulting in 0 Location records despite rich narrative mentioning places. Added `LocationExtraction` schema to `extraction.py`, added location extraction section to `entity_extractor.md` prompt, added `_persist_location()` to `persistence_node.py`, and added `extracted_locations` to GameState. Now new locations mentioned in GM narrative are automatically created.
+- **No Body Storage for New Entities** - Fixed bug where NPCs created during gameplay had no ON_PERSON storage, breaking inventory operations. Added auto-creation of body storage in `persistence_node._persist_entity()` by calling `ItemManager.get_or_create_body_storage()` after entity creation.
+- **Container Items Missing Storage Link** - Fixed bug where container items (backpacks, pouches) were created as regular items without linked StorageLocation. Updated `persistence_node._persist_item()` to detect `item_type == "container"` and use `ItemManager.create_container_item()` instead of `create_item()` to auto-create linked storage.
+- **Entity Description Causing Persistence Failure** - Fixed bug where passing `description` field to `EntityManager.create_entity()` raised an error because Entity model doesn't have that field. Now description is stored as a fact using `FactManager.record_fact()` instead.
+- **LocationManager.get_location_by_display_name() Missing** - Added `get_location_by_display_name()` method to LocationManager for duplicate detection, matching EntityManager's pattern.
 
 - **Comprehensive E2E Tests for CLI Commands** - 45 new tests covering all game commands
   - Tests for `rpg game` commands: start, list, delete, play, turn

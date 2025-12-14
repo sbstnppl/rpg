@@ -119,6 +119,28 @@ class AppointmentExtraction(BaseModel):
     )
 
 
+class LocationExtraction(BaseModel):
+    """Extracted location information for new places."""
+
+    location_key: str = Field(
+        description="Unique identifier (lowercase, underscores, e.g. 'weary_traveler_inn')"
+    )
+    display_name: str = Field(description="Display name for the location")
+    category: Literal[
+        "wilderness", "settlement", "establishment", "interior", "public"
+    ] = Field(
+        default="interior",
+        description="Type of location",
+    )
+    description: str = Field(
+        description="Description of the location (atmosphere, features, etc.)"
+    )
+    parent_location_key: str | None = Field(
+        default=None,
+        description="Key of parent location (e.g. inn_common_room -> weary_traveler_inn)",
+    )
+
+
 class ExtractionResult(BaseModel):
     """Complete extraction result from GM response analysis."""
 
@@ -129,6 +151,10 @@ class ExtractionResult(BaseModel):
     items: list[ItemExtraction] = Field(
         default_factory=list,
         description="Items mentioned or interacted with",
+    )
+    locations: list[LocationExtraction] = Field(
+        default_factory=list,
+        description="New locations introduced or described",
     )
     facts: list[FactExtraction] = Field(
         default_factory=list,

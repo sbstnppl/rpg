@@ -171,6 +171,148 @@ class TestStorageLocation:
         assert "backpack" in repr_str
         assert "container" in repr_str
 
+    # =========================================================================
+    # Container-Item Link Fields (NEW)
+    # =========================================================================
+
+    def test_storage_container_item_link(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify container_item_id links storage to item."""
+        # Create a backpack item
+        backpack_item = create_item(
+            db_session,
+            game_session,
+            item_key="backpack",
+            display_name="Leather Backpack",
+            item_type=ItemType.CONTAINER,
+        )
+        # Create storage linked to that item
+        backpack_storage = create_storage_location(
+            db_session,
+            game_session,
+            location_key="backpack_storage",
+            location_type=StorageLocationType.CONTAINER,
+            container_item_id=backpack_item.id,
+        )
+        db_session.refresh(backpack_storage)
+
+        assert backpack_storage.container_item_id == backpack_item.id
+        assert backpack_storage.container_item.item_key == "backpack"
+
+    def test_storage_container_item_unique(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify container_item_id is unique (one-to-one)."""
+        backpack_item = create_item(
+            db_session,
+            game_session,
+            item_key="backpack",
+            item_type=ItemType.CONTAINER,
+        )
+        create_storage_location(
+            db_session,
+            game_session,
+            location_key="backpack_storage_1",
+            container_item_id=backpack_item.id,
+        )
+
+        # Should fail - item already linked to another storage
+        with pytest.raises(IntegrityError):
+            create_storage_location(
+                db_session,
+                game_session,
+                location_key="backpack_storage_2",
+                container_item_id=backpack_item.id,
+            )
+
+    # =========================================================================
+    # Portability Fields (NEW)
+    # =========================================================================
+
+    def test_storage_is_fixed_default(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify is_fixed defaults to False."""
+        storage = create_storage_location(db_session, game_session)
+        db_session.refresh(storage)
+        assert storage.is_fixed is False
+
+    def test_storage_is_fixed_set(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify is_fixed can be set to True for immovable storage."""
+        closet = create_storage_location(
+            db_session,
+            game_session,
+            location_key="closet",
+            location_type=StorageLocationType.PLACE,
+            is_fixed=True,
+        )
+        db_session.refresh(closet)
+        assert closet.is_fixed is True
+
+    def test_storage_weight_to_move(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify weight_to_move for heavy but movable containers."""
+        heavy_chest = create_storage_location(
+            db_session,
+            game_session,
+            location_key="heavy_chest",
+            location_type=StorageLocationType.CONTAINER,
+            is_fixed=False,
+            weight_to_move=50.0,
+        )
+        db_session.refresh(heavy_chest)
+
+        assert heavy_chest.is_fixed is False
+        assert heavy_chest.weight_to_move == 50.0
+
+    # =========================================================================
+    # Weight Capacity Fields (NEW)
+    # =========================================================================
+
+    def test_storage_weight_capacity(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify weight_capacity in addition to item count capacity."""
+        backpack = create_storage_location(
+            db_session,
+            game_session,
+            location_key="backpack",
+            location_type=StorageLocationType.CONTAINER,
+            capacity=20,  # 20 items
+            weight_capacity=40.0,  # 40 pounds
+        )
+        db_session.refresh(backpack)
+
+        assert backpack.capacity == 20
+        assert backpack.weight_capacity == 40.0
+
+    # =========================================================================
+    # Location Ownership Fields (NEW)
+    # =========================================================================
+
+    def test_storage_owner_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify owner_location_id for establishment-owned storage."""
+        inn = create_location(db_session, game_session, location_key="inn")
+        storage_chest = create_storage_location(
+            db_session,
+            game_session,
+            location_key="inn_storage_chest",
+            location_type=StorageLocationType.PLACE,
+            owner_location_id=inn.id,
+        )
+        db_session.refresh(storage_chest)
+
+        assert storage_chest.owner_location_id == inn.id
+        assert storage_chest.owner_location.location_key == "inn"
+        # owner_entity_id should be None when location owns it
+        assert storage_chest.owner_entity_id is None
+
 
 class TestItem:
     """Tests for Item model."""
@@ -415,3 +557,133 @@ class TestItem:
 
         assert len(result) == 1
         assert result[0].id == item1.id
+
+    # =========================================================================
+    # Theft Tracking Fields (NEW)
+    # =========================================================================
+
+    def test_item_is_stolen_default(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify is_stolen defaults to False."""
+        item = create_item(db_session, game_session)
+        db_session.refresh(item)
+        assert item.is_stolen is False
+
+    def test_item_is_stolen_set(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify is_stolen can be set to True."""
+        item = create_item(db_session, game_session, is_stolen=True)
+        db_session.refresh(item)
+        assert item.is_stolen is True
+
+    def test_item_was_ever_stolen_default(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify was_ever_stolen defaults to False."""
+        item = create_item(db_session, game_session)
+        db_session.refresh(item)
+        assert item.was_ever_stolen is False
+
+    def test_item_was_ever_stolen_set(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify was_ever_stolen can be set to True."""
+        item = create_item(db_session, game_session, was_ever_stolen=True)
+        db_session.refresh(item)
+        assert item.was_ever_stolen is True
+
+    def test_item_stolen_from_entity(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify stolen_from_id foreign key to entity."""
+        victim = create_entity(db_session, game_session, entity_key="victim")
+        item = create_item(
+            db_session,
+            game_session,
+            is_stolen=True,
+            stolen_from_id=victim.id,
+        )
+        db_session.refresh(item)
+
+        assert item.stolen_from_id == victim.id
+        assert item.stolen_from.entity_key == "victim"
+
+    def test_item_stolen_from_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify stolen_from_location_id foreign key to location (establishment)."""
+        inn = create_location(db_session, game_session, location_key="inn")
+        item = create_item(
+            db_session,
+            game_session,
+            is_stolen=True,
+            stolen_from_location_id=inn.id,
+        )
+        db_session.refresh(item)
+
+        assert item.stolen_from_location_id == inn.id
+        assert item.stolen_from_location.location_key == "inn"
+
+    def test_item_original_owner(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify original_owner_id for provenance tracking."""
+        original = create_entity(db_session, game_session, entity_key="original")
+        current = create_entity(db_session, game_session, entity_key="current")
+        item = create_item(
+            db_session,
+            game_session,
+            owner_id=current.id,
+            original_owner_id=original.id,
+        )
+        db_session.refresh(item)
+
+        assert item.original_owner_id == original.id
+        assert item.original_owner.entity_key == "original"
+        assert item.owner_id == current.id
+
+    # =========================================================================
+    # Location Ownership Fields (NEW)
+    # =========================================================================
+
+    def test_item_owner_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify owner_location_id for establishment-owned items."""
+        inn = create_location(db_session, game_session, location_key="inn")
+        bowl = create_item(
+            db_session,
+            game_session,
+            item_key="inn_bowl",
+            display_name="Wooden Bowl",
+            owner_location_id=inn.id,
+        )
+        db_session.refresh(bowl)
+
+        assert bowl.owner_location_id == inn.id
+        assert bowl.owner_location.location_key == "inn"
+        # owner_id should be None when location owns it
+        assert bowl.owner_id is None
+
+    def test_item_owner_location_with_holder(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify item can have location owner but entity holder."""
+        inn = create_location(db_session, game_session, location_key="inn")
+        player = create_entity(db_session, game_session, entity_key="player")
+        bowl = create_item(
+            db_session,
+            game_session,
+            item_key="inn_bowl",
+            display_name="Wooden Bowl",
+            owner_location_id=inn.id,
+            holder_id=player.id,
+        )
+        db_session.refresh(bowl)
+
+        # Location owns it, player holds it (borrowing scenario)
+        assert bowl.owner_location_id == inn.id
+        assert bowl.holder_id == player.id
+        assert bowl.owner_id is None
