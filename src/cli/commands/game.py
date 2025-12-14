@@ -24,7 +24,7 @@ from src.cli.display import (
 from src.database.connection import get_db_session
 from src.database.models.entities import Entity
 from src.database.models.enums import EntityType
-from src.database.models.session import GameSession
+from src.database.models.session import GameSession, Turn
 from src.database.models.world import TimeState
 
 app = typer.Typer(help="Game commands")
@@ -49,6 +49,24 @@ def _get_player(db, game_session: GameSession) -> Entity | None:
             Entity.session_id == game_session.id,
             Entity.entity_type == EntityType.PLAYER,
         )
+        .first()
+    )
+
+
+def _get_last_turn(db, session_id: int) -> Turn | None:
+    """Get the most recent turn for a session.
+
+    Args:
+        db: Database session.
+        session_id: The game session ID.
+
+    Returns:
+        The most recent Turn record, or None if no turns exist.
+    """
+    return (
+        db.query(Turn)
+        .filter(Turn.session_id == session_id)
+        .order_by(Turn.turn_number.desc())
         .first()
     )
 
@@ -410,6 +428,105 @@ def play(
         display_info("\nGame paused. Use 'rpg game play' to continue.")
 
 
+def _display_resume_context(
+    db, player: Entity, last_turn: Turn, game_session: GameSession
+) -> None:
+    """Display rich context summary when resuming a session.
+
+    Queries current game state to show accurate context.
+
+    Args:
+        db: Database session.
+        player: The player entity.
+        last_turn: The most recent turn record.
+        game_session: The game session being resumed.
+    """
+    from rich.panel import Panel
+
+    from src.database.models.world import Location
+
+    # Get current time state
+    time_state = (
+        db.query(TimeState)
+        .filter(TimeState.session_id == game_session.id)
+        .first()
+    )
+    day = time_state.current_day if time_state else 1
+    time_str = time_state.current_time if time_state else ""
+
+    # Get location - only use if it's a real location (not "starting_location")
+    location_key = last_turn.location_at_turn
+    location_name = None
+
+    if location_key and location_key not in ("starting_location", "unknown"):
+        location = db.query(Location).filter(
+            Location.session_id == game_session.id,
+            Location.location_key == location_key
+        ).first()
+        location_name = location.display_name if location else None
+
+    # NO FALLBACK - don't show wrong location data
+
+    # Get NPCs at current location only (not all NPCs ever met)
+    from src.database.models.entities import NPCExtension
+
+    npc_names = []
+    if location_key and location_key not in ("starting_location", "unknown"):
+        npcs_at_location = (
+            db.query(Entity)
+            .join(NPCExtension, Entity.id == NPCExtension.entity_id)
+            .filter(
+                Entity.session_id == game_session.id,
+                Entity.entity_type == EntityType.NPC,
+                NPCExtension.current_location == location_key,
+            )
+            .all()
+        )
+        npc_names = [npc.display_name for npc in npcs_at_location]
+
+    # Build context lines
+    lines = [f"[bold]Welcome back, {player.display_name}![/bold]"]
+
+    # Time line
+    if time_str:
+        lines.append(f"Day {day}, {time_str}")
+    else:
+        lines.append(f"Day {day}")
+
+    # Location line
+    if location_name:
+        lines.append(f"Location: {location_name}")
+
+    # NPCs line (nearby, not all ever met)
+    if npc_names:
+        lines.append(f"Present: {', '.join(npc_names)}")
+
+    # Add a brief context excerpt from the last response (first ~150 chars)
+    if last_turn.gm_response:
+        # Get first sentence or first 150 chars
+        response = last_turn.gm_response.strip()
+        first_sentence_end = min(
+            response.find(". ") + 1 if ". " in response else len(response),
+            response.find(".\n") + 1 if ".\n" in response else len(response),
+            150
+        )
+        if first_sentence_end < 20:  # Too short, take more
+            first_sentence_end = min(150, len(response))
+        excerpt = response[:first_sentence_end].strip()
+        if len(response) > first_sentence_end:
+            excerpt += "..."
+        lines.append("")
+        lines.append(f"[dim italic]{excerpt}[/dim italic]")
+
+    # Display as a panel
+    console.print(Panel("\n".join(lines), title="Session Resumed", border_style="cyan"))
+    console.print()
+
+    # Show the last GM response so player knows where they left off
+    display_info("When we last left off...")
+    display_narrative(last_turn.gm_response)
+
+
 async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
     """Main game loop.
 
@@ -433,27 +550,36 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
     display_info("Type your actions. Use /quit to exit, /help for commands.")
     console.print()
 
-    # Initial scene description - introduce the character and scene
-    game_session.total_turns += 1  # Increment for first turn
+    # Check if this is a resume (existing turns) or new game
+    last_turn = _get_last_turn(db, game_session.id)
+    is_resume = last_turn is not None
 
-    initial_state = create_initial_state(
-        session_id=game_session.id,
-        player_id=player.id,
-        player_location=player_location,
-        player_input="[FIRST TURN: Introduce the player character - describe who they are, what they look like, what they're wearing, and how they feel. Then describe the scene they find themselves in.]",
-        turn_number=game_session.total_turns,  # Already incremented above
-    )
-    initial_state["_db"] = db
-    initial_state["_game_session"] = game_session
+    if is_resume:
+        # RESUME: Show context and last response, skip scene generation
+        _display_resume_context(db, player, last_turn, game_session)
+        player_location = last_turn.location_at_turn or "starting_location"
+    else:
+        # NEW GAME: Generate initial scene
+        game_session.total_turns += 1  # Increment for first turn
 
-    with progress_spinner("Setting the scene..."):
-        try:
-            result = await compiled.ainvoke(initial_state)
-            if result.get("gm_response"):
-                display_narrative(result["gm_response"])
-                player_location = result.get("player_location", player_location)
-        except Exception as e:
-            display_error(f"Error generating scene: {e}")
+        initial_state = create_initial_state(
+            session_id=game_session.id,
+            player_id=player.id,
+            player_location=player_location,
+            player_input="[FIRST TURN: Introduce the player character - describe who they are, what they look like, what they're wearing, and how they feel. Then describe the scene they find themselves in.]",
+            turn_number=game_session.total_turns,  # Already incremented above
+        )
+        initial_state["_db"] = db
+        initial_state["_game_session"] = game_session
+
+        with progress_spinner("Setting the scene..."):
+            try:
+                result = await compiled.ainvoke(initial_state)
+                if result.get("gm_response"):
+                    display_narrative(result["gm_response"])
+                    player_location = result.get("player_location", player_location)
+            except Exception as e:
+                display_error(f"Error generating scene: {e}")
 
     # Main loop
     while True:
@@ -501,6 +627,24 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
                 mode = args[0] if len(args) > 0 and args[0] in ("base", "current") else "current"
                 style = args[1] if len(args) > 1 and args[1] in ("photo", "art") else "photo"
                 await _handle_portrait_command(db, game_session, player, mode, style)
+                continue
+            elif cmd == "nearby":
+                from src.cli.commands.character import nearby
+                nearby(session_id=game_session.id)
+                continue
+            elif cmd in ("location", "loc", "where"):
+                _show_location(db, game_session, player_location)
+                continue
+            elif cmd in ("equipment", "equip"):
+                from src.cli.commands.character import equipment
+                equipment(session_id=game_session.id)
+                continue
+            elif cmd == "outfit":
+                from src.cli.commands.character import outfit
+                outfit(session_id=game_session.id)
+                continue
+            elif cmd in ("quests", "quest", "tasks"):
+                _show_quests(db, game_session)
                 continue
             else:
                 display_error(f"Unknown command: /{cmd}")
@@ -665,24 +809,105 @@ def _save_turn_immediately(
 def _show_help() -> None:
     """Show in-game help."""
     console.print()
-    console.print("[bold]Available Commands[/bold]")
-    console.print("  /help      - Show this help")
-    console.print("  /status    - Show character status")
-    console.print("  /inventory - Show inventory")
-    console.print("  /time      - Show current game time")
-    console.print("  /save      - Save the game")
-    console.print("  /quit      - Save and exit")
+    console.print("[bold cyan]━━━ Character ━━━[/bold cyan]")
+    console.print("  /status      Health, attributes, needs")
+    console.print("  /inventory   Items you're carrying")
+    console.print("  /equipment   Weapons, armor, accessories")
+    console.print("  /outfit      Current clothing (layers)")
     console.print()
-    console.print("[bold]Image Prompts[/bold]")
-    console.print("  /scene [pov|third] [photo|art]   - Generate scene image prompt")
-    console.print("  /portrait [base|current] [photo|art] - Generate portrait prompt")
+    console.print("[bold cyan]━━━ World ━━━[/bold cyan]")
+    console.print("  /location    Current location details")
+    console.print("  /nearby      NPCs and items here")
+    console.print("  /time        Current day and time")
+    console.print("  /quests      Active quests and tasks")
     console.print()
-    console.print("[bold]Gameplay[/bold]")
-    console.print("  Type your actions naturally, e.g.:")
-    console.print("  - Look around")
-    console.print("  - Talk to the bartender")
-    console.print("  - Go to the market")
-    console.print("  - Attack the goblin")
+    console.print("[bold cyan]━━━ System ━━━[/bold cyan]")
+    console.print("  /help        Show this help")
+    console.print("  /save        Save the game")
+    console.print("  /quit        Save and exit (or Ctrl+C)")
+    console.print()
+    console.print("[bold cyan]━━━ Image Generation ━━━[/bold cyan]")
+    console.print("  /scene [pov|third] [photo|art]")
+    console.print("  /portrait [base|current] [photo|art]")
+    console.print()
+    console.print("[bold cyan]━━━ Gameplay Tips ━━━[/bold cyan]")
+    console.print("  Type your actions naturally:")
+    console.print("    [dim]> Look around the tavern[/dim]")
+    console.print("    [dim]> Ask Marta about the blacksmith[/dim]")
+    console.print("    [dim]> Pick up the sword[/dim]")
+    console.print("    [dim]> Go to the market square[/dim]")
+    console.print()
+    console.print("  Speak out of character to the GM:")
+    console.print("    [dim]> ooc: What skills would help me here?[/dim]")
+    console.print("    [dim]> ooc: Can I roll to persuade him?[/dim]")
+    console.print("    [dim]> ooc: Skip ahead to evening[/dim]")
+    console.print()
+
+
+def _show_location(db, game_session: GameSession, player_location: str) -> None:
+    """Show current location details."""
+    from rich.panel import Panel
+
+    from src.database.models.world import Location
+
+    location = db.query(Location).filter(
+        Location.session_id == game_session.id,
+        Location.location_key == player_location
+    ).first()
+
+    if location:
+        lines = [f"[bold]{location.display_name}[/bold]"]
+        if location.description:
+            lines.append(f"[dim]{location.description}[/dim]")
+        if location.category:
+            lines.append(f"Type: {location.category}")
+        console.print(Panel("\n".join(lines), title="Current Location", border_style="green"))
+    else:
+        console.print(f"[dim]Location: {player_location}[/dim]")
+
+
+def _show_quests(db, game_session: GameSession) -> None:
+    """Show active quests and tasks."""
+    from rich.table import Table
+
+    from src.database.models.tasks import Quest, Task
+
+    console.print()
+
+    # Get active quests
+    quests = db.query(Quest).filter(
+        Quest.session_id == game_session.id,
+        Quest.status.in_(["active", "in_progress"])
+    ).all()
+
+    # Get active tasks
+    tasks = db.query(Task).filter(
+        Task.session_id == game_session.id,
+        Task.status.in_(["pending", "in_progress"])
+    ).all()
+
+    if not quests and not tasks:
+        console.print("[dim]No active quests or tasks.[/dim]")
+        return
+
+    if quests:
+        table = Table(title="Active Quests", show_header=True)
+        table.add_column("Quest", style="cyan")
+        table.add_column("Stage", style="yellow")
+        table.add_column("Status", style="green")
+        for q in quests:
+            table.add_row(q.name, f"Stage {q.current_stage}", q.status.value if hasattr(q.status, 'value') else str(q.status))
+        console.print(table)
+
+    if tasks:
+        table = Table(title="Tasks", show_header=True)
+        table.add_column("Task", style="cyan")
+        table.add_column("Category", style="yellow")
+        table.add_column("Priority", style="magenta")
+        for t in tasks:
+            cat = t.category.value if hasattr(t.category, 'value') else str(t.category)
+            table.add_row(t.description[:50], cat, str(t.priority))
+        console.print(table)
     console.print()
 
 

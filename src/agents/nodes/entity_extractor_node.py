@@ -273,6 +273,9 @@ async def _extract_entities(state: GameState) -> dict[str, Any]:
             for a in extraction.appointments
         ],
         "validation_warnings": validation_warnings,
+        # Propagate location from state or extraction result
+        "player_location": extraction.location_change or state.get("player_location"),
+        "location_changed": state.get("location_changed", False) or bool(extraction.location_change),
         "next_agent": "persistence",
     }
 
