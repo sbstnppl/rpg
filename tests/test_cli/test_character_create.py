@@ -353,3 +353,88 @@ class TestSlugify:
         from src.cli.commands.character import slugify
 
         assert slugify("José García") == "jose_garcia"
+
+
+class TestExtractMissingAppearanceFields:
+    """Tests for the fallback appearance field extraction from narrative."""
+
+    def test_extracts_eye_color_from_simple_pattern(self):
+        """Should extract 'hazel eyes' pattern."""
+        from src.cli.commands.character import _extract_missing_appearance_fields
+
+        updates = {"hair_color": "brown"}
+        result = _extract_missing_appearance_fields(
+            "A slim figure with hazel eyes and a warm smile.",
+            updates
+        )
+        assert result["eye_color"] == "hazel"
+        assert result["hair_color"] == "brown"  # Preserved
+
+    def test_extracts_eye_color_with_modifier(self):
+        """Should extract 'bright green eyes' pattern."""
+        from src.cli.commands.character import _extract_missing_appearance_fields
+
+        updates = {}
+        result = _extract_missing_appearance_fields(
+            "She has bright green eyes that seem to notice everything.",
+            updates
+        )
+        assert "green" in result["eye_color"].lower()
+
+    def test_does_not_overwrite_existing_eye_color(self):
+        """Should not overwrite if eye_color already in updates."""
+        from src.cli.commands.character import _extract_missing_appearance_fields
+
+        updates = {"eye_color": "blue"}
+        result = _extract_missing_appearance_fields(
+            "hazel eyes with green flecks",
+            updates
+        )
+        assert result["eye_color"] == "blue"  # Not overwritten
+
+    def test_extracts_hair_color_from_simple_pattern(self):
+        """Should extract 'brown hair' pattern."""
+        from src.cli.commands.character import _extract_missing_appearance_fields
+
+        updates = {"eye_color": "green"}
+        result = _extract_missing_appearance_fields(
+            "A young man with brown hair and green eyes.",
+            updates
+        )
+        assert result["hair_color"] == "brown"
+        assert result["eye_color"] == "green"  # Preserved
+
+    def test_extracts_compound_eye_color(self):
+        """Should handle compound colors like 'hazel-green'."""
+        from src.cli.commands.character import _extract_missing_appearance_fields
+
+        updates = {}
+        result = _extract_missing_appearance_fields(
+            "warm hazel-green eyes",
+            updates
+        )
+        assert "hazel" in result.get("eye_color", "").lower()
+
+    def test_handles_none_updates(self):
+        """Should handle None updates dict."""
+        from src.cli.commands.character import _extract_missing_appearance_fields
+
+        result = _extract_missing_appearance_fields(
+            "blue eyes and black hair",
+            None
+        )
+        assert result["eye_color"] == "blue"
+        assert result["hair_color"] == "black"
+
+    def test_no_match_returns_unchanged(self):
+        """Should return unchanged if no patterns match."""
+        from src.cli.commands.character import _extract_missing_appearance_fields
+
+        updates = {"build": "slim"}
+        result = _extract_missing_appearance_fields(
+            "A slim figure standing in the doorway.",
+            updates
+        )
+        assert result == {"build": "slim"}
+        assert "eye_color" not in result
+        assert "hair_color" not in result

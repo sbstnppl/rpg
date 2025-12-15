@@ -624,3 +624,17 @@ class NPCConstraints(BaseModel):
         default=None,
         description="Force positive attraction check"
     )
+
+    # Backstory NPC constraints (for family/friends from character creation)
+    relationship_role: str | None = Field(
+        default=None,
+        description="Specific relationship role (e.g., 'younger brother', 'mother', 'mentor')"
+    )
+    relationship_context: str | None = Field(
+        default=None,
+        description="Emotional context of relationship (e.g., 'idolizes player', 'protective of player')"
+    )
+    brief_appearance: str | None = Field(
+        default=None,
+        description="Physical appearance description for backstory NPCs"
+    )

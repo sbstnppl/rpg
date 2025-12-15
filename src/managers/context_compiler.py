@@ -1,12 +1,14 @@
 """Context compiler for assembling GM prompt context."""
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
 from src.database.models.character_state import CharacterNeeds
 from src.database.models.entities import Entity, EntityAttribute, EntitySkill, NPCExtension
-from src.database.models.enums import EntityType, GoalStatus
+from src.database.models.enums import EntityType, GoalStatus, StorageLocationType
+from src.database.models.items import Item, StorageLocation
 from src.database.models.goals import NPCGoal
 from src.dice.checks import get_proficiency_tier_name
 from src.database.models.injuries import BodyInjury
@@ -22,6 +24,7 @@ from src.managers.injuries import InjuryManager
 from src.managers.item_manager import ItemManager
 from src.managers.map_manager import MapManager
 from src.managers.needs import NeedsManager
+from src.managers.needs_communication_manager import NeedsCommunicationManager
 from src.managers.relationship_manager import RelationshipManager
 from src.managers.zone_manager import ZoneManager
 
@@ -41,6 +44,8 @@ class SceneContext:
     navigation_context: str = ""  # Current zone and navigation info
     entity_registry_context: str = ""  # Entity keys for manifest references
     world_facts_context: str = ""  # Established world facts for consistency
+    location_inventory_context: str = ""  # Storage and items at location
+    needs_alerts_context: str = ""  # Signal-based needs alerts for player
 
     def to_prompt(self, include_secrets: bool = True) -> str:
         """Format as prompt string for GM."""
@@ -51,6 +56,10 @@ class SceneContext:
             self.player_context,
             self.npcs_context,
         ]
+
+        # Add needs alerts right after player context for proximity
+        if self.needs_alerts_context:
+            sections.append(self.needs_alerts_context)
 
         if self.navigation_context:
             sections.append(self.navigation_context)
@@ -66,6 +75,9 @@ class SceneContext:
 
         if self.world_facts_context:
             sections.append(self.world_facts_context)
+
+        if self.location_inventory_context:
+            sections.append(self.location_inventory_context)
 
         if include_secrets and self.secrets_context:
             sections.append(self.secrets_context)
@@ -100,6 +112,7 @@ class ContextCompiler(BaseManager):
         self._zone_manager = zone_manager
         self._discovery_manager = discovery_manager
         self._goal_manager = goal_manager
+        self._needs_communication_manager: NeedsCommunicationManager | None = None
 
     @property
     def needs_manager(self) -> NeedsManager:
@@ -143,6 +156,14 @@ class ContextCompiler(BaseManager):
             self._goal_manager = GoalManager(self.db, self.game_session)
         return self._goal_manager
 
+    @property
+    def needs_communication_manager(self) -> NeedsCommunicationManager:
+        if self._needs_communication_manager is None:
+            self._needs_communication_manager = NeedsCommunicationManager(
+                self.db, self.game_session
+            )
+        return self._needs_communication_manager
+
     def compile_scene(
         self,
         player_id: int,
@@ -175,6 +196,8 @@ class ContextCompiler(BaseManager):
             navigation_context=self._get_navigation_context(current_zone_key),
             entity_registry_context=self._get_entity_registry_context(location_key, player_id),
             world_facts_context=self._get_world_facts_context(location_key),
+            location_inventory_context=self._get_location_inventory_context(location_key),
+            needs_alerts_context=self._get_needs_alerts(player_id, turn_number),
         )
 
     def _get_turn_context(self, turn_number: int, history_limit: int = 3) -> str:
@@ -277,6 +300,103 @@ class ContextCompiler(BaseManager):
 
         return "\n".join(lines)
 
+    def _get_location_inventory_context(self, location_key: str) -> str:
+        """Get storage surfaces and items at the current location.
+
+        Shows the GM what furniture/containers exist and what items are
+        on/in them. This enables the GM to describe existing items and
+        avoid duplicating them.
+
+        Args:
+            location_key: Current location key.
+
+        Returns:
+            Formatted inventory context string.
+        """
+        # Get the location
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+
+        if not location:
+            return ""
+
+        # Get all storage surfaces at this location (PLACE type)
+        storages = (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.session_id,
+                StorageLocation.world_location_id == location.id,
+                StorageLocation.location_type == StorageLocationType.PLACE,
+                StorageLocation.destroyed_at.is_(None),
+            )
+            .all()
+        )
+
+        if not storages:
+            return ""
+
+        lines = ["## Location Inventory"]
+        lines.append("IMPORTANT: Reference existing items before creating new ones.")
+        lines.append("Use spawn_item only for new interactable objects.")
+
+        lines.append("\n### Storage Surfaces")
+
+        for storage in storages:
+            # Get items at this storage
+            items = (
+                self.db.query(Item)
+                .filter(
+                    Item.session_id == self.session_id,
+                    Item.storage_location_id == storage.id,
+                )
+                .all()
+            )
+
+            # Format storage name
+            container_name = storage.container_type or "surface"
+            storage_id = storage.location_key
+
+            if items:
+                item_names = [item.display_name for item in items[:5]]
+                if len(items) > 5:
+                    item_names.append(f"...and {len(items) - 5} more")
+                lines.append(f"- {container_name.title()} ({storage_id}): {', '.join(item_names)}")
+            else:
+                lines.append(f"- {container_name.title()} ({storage_id}): empty")
+
+        # List all items with details
+        all_items = (
+            self.db.query(Item)
+            .join(StorageLocation, Item.storage_location_id == StorageLocation.id)
+            .filter(
+                Item.session_id == self.session_id,
+                StorageLocation.world_location_id == location.id,
+                StorageLocation.location_type == StorageLocationType.PLACE,
+            )
+            .limit(20)
+            .all()
+        )
+
+        if all_items:
+            lines.append("\n### Items at Location")
+            for item in all_items:
+                storage = (
+                    self.db.query(StorageLocation)
+                    .filter(StorageLocation.id == item.storage_location_id)
+                    .first()
+                )
+                surface_name = storage.container_type if storage else "unknown"
+                desc_preview = item.description[:50] + "..." if item.description and len(item.description) > 50 else (item.description or "")
+                lines.append(f"- {item.item_key}: \"{item.display_name}\" (on {surface_name}) - {desc_preview}")
+
+        return "\n".join(lines)
+
     def _get_player_context(self, player_id: int) -> str:
         """Get player character context including needs, injuries, equipment, and abilities."""
         player = (
@@ -297,6 +417,13 @@ class ContextCompiler(BaseManager):
             appearance_desc = self._format_appearance(player.appearance)
             if appearance_desc:
                 lines.append(f"- Appearance: {appearance_desc}")
+
+        # Occupation
+        if player.occupation:
+            if player.occupation_years:
+                lines.append(f"- Occupation: {player.occupation} ({player.occupation_years} years)")
+            else:
+                lines.append(f"- Occupation: {player.occupation}")
 
         # Equipment/clothing
         equipment_desc = self._get_equipment_description(player_id)
@@ -595,25 +722,39 @@ class ContextCompiler(BaseManager):
 
         # Visible conditions (someone else could observe)
         # All needs: 0 = bad, 100 = good
+        # Include both negative AND positive states so GM has full awareness
         if needs.energy < 20:
             descriptions.append("exhausted")
         elif needs.energy < 40:
             descriptions.append("tired")
+        elif needs.energy > 80:
+            descriptions.append("well-rested")
 
         if needs.hunger < 15:
             descriptions.append("starving")
         elif needs.hunger < 30:
             descriptions.append("hungry")
+        elif needs.hunger > 85:
+            descriptions.append("well-fed")
 
         if needs.hygiene < 20:
             descriptions.append("filthy")
         elif needs.hygiene < 40:
             descriptions.append("disheveled")
+        elif needs.hygiene > 80:
+            descriptions.append("clean")
 
         if needs.wellness < 40:
             descriptions.append("in obvious pain")
         elif needs.wellness < 60:
             descriptions.append("uncomfortable")
+        elif needs.wellness > 90:
+            descriptions.append("healthy")
+
+        if needs.comfort < 30:
+            descriptions.append("uncomfortable")
+        elif needs.comfort > 80:
+            descriptions.append("comfortable")
 
         # Less visible (only for player/self)
         if not visible_only:
@@ -621,14 +762,88 @@ class ContextCompiler(BaseManager):
                 descriptions.append("depressed")
             elif needs.morale < 40:
                 descriptions.append("low spirits")
+            elif needs.morale > 80:
+                descriptions.append("in good spirits")
 
             if needs.social_connection < 20:
                 descriptions.append("lonely")
+            elif needs.social_connection > 80:
+                descriptions.append("socially fulfilled")
 
             if needs.intimacy < 20:
                 descriptions.append("restless")
+            elif needs.intimacy > 80:
+                descriptions.append("content")
 
         return ", ".join(descriptions)
+
+    def _get_game_datetime(self) -> datetime:
+        """Construct a datetime object from TimeState day and time.
+
+        Returns:
+            datetime object representing current game time
+        """
+        from src.database.models.world import TimeState
+
+        time_state = (
+            self.db.query(TimeState)
+            .filter(TimeState.session_id == self.session_id)
+            .first()
+        )
+
+        if not time_state:
+            return datetime(2000, 1, 1, 8, 0)  # Default fallback
+
+        # Parse time string (HH:MM)
+        hour, minute = 8, 0
+        if time_state.current_time:
+            parts = time_state.current_time.split(":")
+            if len(parts) >= 2:
+                hour = int(parts[0])
+                minute = int(parts[1])
+
+        # Use day number as day-of-month (arbitrary base year)
+        return datetime(2000, 1, time_state.current_day, hour, minute)
+
+    def _get_needs_alerts(self, player_id: int, turn_number: int) -> str:
+        """Get signal-based needs alerts for GM.
+
+        Instead of showing static needs state every turn, this method:
+        1. Generates alerts for state changes (crossed thresholds)
+        2. Generates reminders for ongoing negative states not mentioned in a while
+        3. Provides reference-only status for everything else
+
+        Args:
+            player_id: Player entity ID
+            turn_number: Current turn number
+
+        Returns:
+            Formatted alerts string for GM context
+        """
+        needs = self.needs_manager.get_needs(player_id)
+        if not needs:
+            return ""
+
+        game_time = self._get_game_datetime()
+        alerts = self.needs_communication_manager.get_needs_alerts(
+            entity_id=player_id,
+            needs=needs,
+            current_game_time=game_time,
+            current_turn=turn_number,
+        )
+
+        if not alerts:
+            return ""
+
+        # Get player name for display
+        player = (
+            self.db.query(Entity)
+            .filter(Entity.id == player_id)
+            .first()
+        )
+        player_name = player.display_name if player else "Player"
+
+        return self.needs_communication_manager.format_alerts_for_gm(alerts, player_name)
 
     def _get_injury_description(self, entity_id: int, visible_only: bool = False) -> str:
         """Get human-readable injury description."""

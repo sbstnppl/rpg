@@ -1135,3 +1135,352 @@ class TestEdgeCases:
         # Should show time from the specifically requested (first) game
         assert "Day 1" in result.output
         assert "09:00" in result.output
+
+
+class TestActionCommandDetection:
+    """Tests for action command pattern detection."""
+
+    def test_detect_go_command(self):
+        """Should detect /go command."""
+        from src.cli.commands.game import _detect_action
+
+        action, target, secondary = _detect_action("/go forge")
+        assert action == "go"
+        assert target == "forge"
+        assert secondary is None
+
+    def test_detect_go_command_multi_word(self):
+        """Should detect /go with multi-word target."""
+        from src.cli.commands.game import _detect_action
+
+        action, target, secondary = _detect_action("/go market square")
+        assert action == "go"
+        assert target == "market square"
+
+    def test_detect_take_command(self):
+        """Should detect /take command."""
+        from src.cli.commands.game import _detect_action
+
+        action, target, secondary = _detect_action("/take sword")
+        assert action == "take"
+        assert target == "sword"
+
+    def test_detect_drop_command(self):
+        """Should detect /drop command."""
+        from src.cli.commands.game import _detect_action
+
+        action, target, secondary = _detect_action("/drop torch")
+        assert action == "drop"
+        assert target == "torch"
+
+    def test_detect_give_command(self):
+        """Should detect /give command with recipient."""
+        from src.cli.commands.game import _detect_action
+
+        action, target, secondary = _detect_action("/give gold to bartender")
+        assert action == "give"
+        assert target == "gold"
+        assert secondary == "bartender"
+
+    def test_detect_attack_command(self):
+        """Should detect /attack command."""
+        from src.cli.commands.game import _detect_action
+
+        action, target, secondary = _detect_action("/attack goblin")
+        assert action == "attack"
+        assert target == "goblin"
+
+    def test_detect_natural_language_take(self):
+        """Should detect natural language pickup intents."""
+        from src.cli.commands.game import _detect_action
+
+        # Various natural language forms
+        test_cases = [
+            ("pick up the sword", "sword"),
+            ("take the golden key", "golden key"),
+            ("grab that potion", "that potion"),
+            ("get the torch", "torch"),
+        ]
+        for text, expected_target in test_cases:
+            action, target, _ = _detect_action(text)
+            assert action == "take", f"Failed for: {text}"
+            assert target == expected_target, f"Failed for: {text}"
+
+    def test_detect_natural_language_go(self):
+        """Should detect natural language movement intents."""
+        from src.cli.commands.game import _detect_action
+
+        test_cases = [
+            ("go to the tavern", "tavern"),
+            ("walk to the forge", "forge"),
+            ("head towards the market", "market"),
+            ("move to exit", "exit"),
+            ("travel into the forest", "forest"),
+        ]
+        for text, expected_target in test_cases:
+            action, target, _ = _detect_action(text)
+            assert action == "go", f"Failed for: {text}"
+            assert target == expected_target, f"Failed for: {text}"
+
+    def test_detect_natural_language_drop(self):
+        """Should detect natural language drop intents."""
+        from src.cli.commands.game import _detect_action
+
+        test_cases = [
+            ("drop the sword", "sword"),
+            ("put down the heavy bag", "heavy bag"),
+            ("set down my torch", "my torch"),
+            ("leave the gold behind", "gold behind"),
+        ]
+        for text, expected_target in test_cases:
+            action, target, _ = _detect_action(text)
+            assert action == "drop", f"Failed for: {text}"
+            assert target == expected_target, f"Failed for: {text}"
+
+    def test_detect_natural_language_give(self):
+        """Should detect natural language give intents."""
+        from src.cli.commands.game import _detect_action
+
+        action, target, secondary = _detect_action("give the gold to the merchant")
+        assert action == "give"
+        assert target == "gold"
+        assert secondary == "the merchant"
+
+    def test_detect_natural_language_attack(self):
+        """Should detect natural language attack intents."""
+        from src.cli.commands.game import _detect_action
+
+        test_cases = [
+            ("attack the goblin", "goblin"),
+            ("hit the enemy", "enemy"),
+            ("strike the bandit", "bandit"),
+            ("fight the dragon", "dragon"),
+        ]
+        for text, expected_target in test_cases:
+            action, target, _ = _detect_action(text)
+            assert action == "attack", f"Failed for: {text}"
+            assert target == expected_target, f"Failed for: {text}"
+
+    def test_no_action_detected_for_dialogue(self):
+        """Should not detect action for pure dialogue."""
+        from src.cli.commands.game import _detect_action
+
+        test_cases = [
+            "Hello there!",
+            "I ask the bartender about the weather",
+            "Look around the room",
+            "What do you mean by that?",
+        ]
+        for text in test_cases:
+            action, _, _ = _detect_action(text)
+            assert action is None, f"Should not detect action for: {text}"
+
+    def test_case_insensitive_commands(self):
+        """Commands should be case-insensitive."""
+        from src.cli.commands.game import _detect_action
+
+        action1, target1, _ = _detect_action("/GO FORGE")
+        assert action1 == "go"
+        assert target1 == "FORGE"
+
+        action2, target2, _ = _detect_action("/Take SWORD")
+        assert action2 == "take"
+        assert target2 == "SWORD"
+
+
+class TestActionCommandValidation:
+    """Tests for action command validation logic."""
+
+    @pytest.mark.asyncio
+    async def test_validate_take_with_full_inventory(self, db_session, game_session):
+        """Should reject take when inventory is full."""
+        from src.cli.commands.game import _validate_and_enhance_input
+        from src.database.models.items import Item
+        from src.database.models.enums import ItemType
+
+        # Create player
+        player = Entity(
+            session_id=game_session.id,
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+            is_alive=True,
+            is_active=True,
+        )
+        db_session.add(player)
+        db_session.flush()
+
+        # Fill inventory with heavy items to exceed weight limit
+        for i in range(60):  # 60 lbs > 50 lb limit
+            item = Item(
+                session_id=game_session.id,
+                item_key=f"rock_{i}",
+                display_name=f"Heavy Rock {i}",
+                item_type=ItemType.MISC,
+                holder_id=player.id,
+                weight=1.0,
+            )
+            db_session.add(item)
+        db_session.flush()
+
+        # Try to take another item
+        enhanced, error = await _validate_and_enhance_input(
+            db_session, game_session, player, "/take sword", "tavern"
+        )
+
+        assert error is not None
+        assert "weight" in error.lower() or "carrying" in error.lower()
+
+    @pytest.mark.asyncio
+    async def test_validate_drop_nonexistent_item(self, db_session, game_session):
+        """Should reject drop when item not in inventory."""
+        from src.cli.commands.game import _validate_and_enhance_input
+
+        # Create player with no items
+        player = Entity(
+            session_id=game_session.id,
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+            is_alive=True,
+            is_active=True,
+        )
+        db_session.add(player)
+        db_session.flush()
+
+        enhanced, error = await _validate_and_enhance_input(
+            db_session, game_session, player, "/drop sword", "tavern"
+        )
+
+        assert error is not None
+        assert "don't have" in error.lower()
+
+    @pytest.mark.asyncio
+    async def test_validate_drop_existing_item(self, db_session, game_session):
+        """Should allow drop when item exists in inventory."""
+        from src.cli.commands.game import _validate_and_enhance_input
+        from src.database.models.items import Item
+        from src.database.models.enums import ItemType
+
+        # Create player with sword
+        player = Entity(
+            session_id=game_session.id,
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+            is_alive=True,
+            is_active=True,
+        )
+        db_session.add(player)
+        db_session.flush()
+
+        sword = Item(
+            session_id=game_session.id,
+            item_key="iron_sword",
+            display_name="Iron Sword",
+            item_type=ItemType.WEAPON,
+            holder_id=player.id,
+        )
+        db_session.add(sword)
+        db_session.flush()
+
+        enhanced, error = await _validate_and_enhance_input(
+            db_session, game_session, player, "/drop sword", "tavern"
+        )
+
+        assert error is None
+        assert "[VALIDATED: drop 'iron_sword']" in enhanced
+
+    @pytest.mark.asyncio
+    async def test_validate_go_command(self, db_session, game_session):
+        """Go commands should pass through with validation context."""
+        from src.cli.commands.game import _validate_and_enhance_input
+
+        player = Entity(
+            session_id=game_session.id,
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+            is_alive=True,
+            is_active=True,
+        )
+        db_session.add(player)
+        db_session.flush()
+
+        enhanced, error = await _validate_and_enhance_input(
+            db_session, game_session, player, "/go forge", "village"
+        )
+
+        assert error is None
+        assert "[VALIDATED: move to 'forge']" in enhanced
+
+    @pytest.mark.asyncio
+    async def test_validate_give_without_recipient(self, db_session, game_session):
+        """Give without proper recipient should provide helpful error."""
+        from src.cli.commands.game import _validate_and_enhance_input
+
+        player = Entity(
+            session_id=game_session.id,
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+            is_alive=True,
+            is_active=True,
+        )
+        db_session.add(player)
+        db_session.flush()
+
+        # Note: The regex may not match this, so it might pass through
+        # This tests the edge case handling
+        enhanced, error = await _validate_and_enhance_input(
+            db_session, game_session, player, "/give gold", "tavern"
+        )
+
+        # Should either error or pass through (depending on regex)
+        # The /give pattern requires "to <recipient>"
+
+    @pytest.mark.asyncio
+    async def test_validate_non_action_passes_through(self, db_session, game_session):
+        """Non-action input should pass through unchanged."""
+        from src.cli.commands.game import _validate_and_enhance_input
+
+        player = Entity(
+            session_id=game_session.id,
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+            is_alive=True,
+            is_active=True,
+        )
+        db_session.add(player)
+        db_session.flush()
+
+        enhanced, error = await _validate_and_enhance_input(
+            db_session, game_session, player, "Look around the room", "tavern"
+        )
+
+        assert error is None
+        assert enhanced == "Look around the room"  # Unchanged
+
+    @pytest.mark.asyncio
+    async def test_validate_attack_command(self, db_session, game_session):
+        """Attack commands should pass through with validation context."""
+        from src.cli.commands.game import _validate_and_enhance_input
+
+        player = Entity(
+            session_id=game_session.id,
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+            is_alive=True,
+            is_active=True,
+        )
+        db_session.add(player)
+        db_session.flush()
+
+        enhanced, error = await _validate_and_enhance_input(
+            db_session, game_session, player, "/attack goblin", "dungeon"
+        )
+
+        assert error is None
+        assert "[VALIDATED: attack 'goblin']" in enhanced

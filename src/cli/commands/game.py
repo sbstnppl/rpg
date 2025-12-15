@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -29,6 +30,161 @@ from src.database.models.world import TimeState
 
 app = typer.Typer(help="Game commands")
 console = Console()
+
+# Action command patterns - explicit slash commands that trigger validation
+ACTION_COMMANDS: dict[str, str] = {
+    "go": r"^/go\s+(.+)$",
+    "take": r"^/take\s+(.+)$",
+    "drop": r"^/drop\s+(.+)$",
+    "give": r"^/give\s+(.+)\s+to\s+(.+)$",
+    "attack": r"^/attack\s+(.+)$",
+}
+
+# Natural language intent patterns - same actions without slash prefix
+INTENT_PATTERNS: list[tuple[str, str]] = [
+    (r"\b(pick up|take|grab|get)\s+(?:the\s+)?(.+)", "take"),
+    (r"\b(go|walk|head|move|travel)\s+(?:to|towards?|into)\s+(?:the\s+)?(.+)", "go"),
+    (r"\b(drop|put down|set down|leave)\s+(?:the\s+)?(.+)", "drop"),
+    (r"\b(give|hand)\s+(?:the\s+)?(.+?)\s+to\s+(.+)", "give"),
+    (r"\b(attack|hit|strike|fight)\s+(?:the\s+)?(.+)", "attack"),
+]
+
+
+def _detect_action(player_input: str) -> tuple[str | None, str | None, str | None]:
+    """Detect action from command or natural language.
+
+    Args:
+        player_input: The raw player input string.
+
+    Returns:
+        Tuple of (action_type, target, secondary_target).
+        - action_type: "go", "take", "drop", "give", "attack", or None
+        - target: The primary target of the action
+        - secondary_target: For 'give', the recipient (NPC name)
+    """
+    # Check explicit slash commands first
+    for action, pattern in ACTION_COMMANDS.items():
+        if match := re.match(pattern, player_input, re.IGNORECASE):
+            if action == "give":
+                return action, match.group(1), match.group(2)
+            return action, match.group(1), None
+
+    # Try natural language patterns
+    for pattern, action in INTENT_PATTERNS:
+        if match := re.search(pattern, player_input, re.IGNORECASE):
+            if action == "give":
+                # Pattern: give <item> to <recipient>
+                return action, match.group(2), match.group(3)
+            elif action in ("take", "drop", "attack"):
+                # Pattern: verb <target>
+                return action, match.group(2), None
+            else:
+                # Pattern: verb (to|towards) <target>
+                return action, match.group(2), None
+
+    return None, None, None
+
+
+async def _validate_and_enhance_input(
+    db, game_session, player, player_input: str, player_location: str
+) -> tuple[str, str | None]:
+    """Pre-validate player action and enhance input for GM.
+
+    For mechanical actions (take, drop, go, attack), this validates constraints
+    before passing to the GM. If invalid, returns an error for immediate feedback.
+    If valid, enhances the input with validation context for the GM.
+
+    Args:
+        db: Database session.
+        game_session: Current game session.
+        player: Player entity.
+        player_input: Raw player input.
+        player_location: Current player location key.
+
+    Returns:
+        Tuple of (enhanced_input, error_message).
+        - If valid: enhanced_input has validation context, error is None
+        - If invalid: enhanced_input is original, error has feedback for player
+    """
+    from src.managers.item_manager import ItemManager
+
+    action_type, target, secondary = _detect_action(player_input)
+
+    if action_type is None:
+        # Not a mechanical action, pass through to GM unchanged
+        return player_input, None
+
+    if action_type == "take":
+        item_mgr = ItemManager(db, game_session)
+
+        # Check if player can carry more weight (estimate 1 lb for unknown items)
+        # The GM/acquire_item tool will do the real validation
+        if not item_mgr.can_carry_weight(player.id, additional_weight=1.0):
+            return player_input, "You're carrying too much weight already. Drop something first."
+
+        # Check if there's an available slot
+        available_slot = item_mgr.find_available_slot(player.id, "misc", "medium")
+        if available_slot is None:
+            return player_input, "Your hands and pockets are full. Drop or stow something first."
+
+        # Valid - add context for GM
+        return f"[VALIDATED: pickup '{target}'] {player_input}", None
+
+    elif action_type == "drop":
+        item_mgr = ItemManager(db, game_session)
+
+        # Check if player has the item
+        inventory = item_mgr.get_inventory(player.id)
+        target_lower = target.lower().strip()
+
+        matching_items = [
+            item for item in inventory
+            if target_lower in item.display_name.lower()
+            or target_lower == item.item_key
+        ]
+
+        if not matching_items:
+            return player_input, f"You don't have '{target}' to drop."
+
+        # Valid - add context with item key for GM
+        item = matching_items[0]
+        return f"[VALIDATED: drop '{item.item_key}'] {player_input}", None
+
+    elif action_type == "go":
+        # For movement, we pass through with context
+        # The GM will use entity_move tool which handles location creation
+        return f"[VALIDATED: move to '{target}'] {player_input}", None
+
+    elif action_type == "give":
+        if not secondary:
+            return player_input, "Give what to whom? Try: /give <item> to <recipient>"
+
+        item_mgr = ItemManager(db, game_session)
+
+        # Check if player has the item
+        inventory = item_mgr.get_inventory(player.id)
+        target_lower = target.lower().strip()
+
+        matching_items = [
+            item for item in inventory
+            if target_lower in item.display_name.lower()
+            or target_lower == item.item_key
+        ]
+
+        if not matching_items:
+            return player_input, f"You don't have '{target}' to give."
+
+        # Valid - add context
+        item = matching_items[0]
+        return f"[VALIDATED: give '{item.item_key}' to '{secondary}'] {player_input}", None
+
+    elif action_type == "attack":
+        # For attack, pass through with context
+        # Combat initiation happens through start_combat tool
+        return f"[VALIDATED: attack '{target}'] {player_input}", None
+
+    # Unknown action type - pass through
+    return player_input, None
 
 
 def _get_active_session(db) -> GameSession | None:
@@ -646,9 +802,21 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
             elif cmd in ("quests", "quest", "tasks"):
                 _show_quests(db, game_session)
                 continue
+            elif cmd in ACTION_COMMANDS:
+                # Action commands go through validation, not handled here
+                pass  # Fall through to validation below
             else:
                 display_error(f"Unknown command: /{cmd}")
                 continue
+
+        # Pre-validate action commands and enhance input for GM
+        enhanced_input, validation_error = await _validate_and_enhance_input(
+            db, game_session, player, player_input, player_location
+        )
+
+        if validation_error:
+            display_error(validation_error)
+            continue  # Don't invoke graph, immediate feedback
 
         # Process player input through the agent graph
         game_session.total_turns += 1
@@ -657,7 +825,7 @@ async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
             session_id=game_session.id,
             player_id=player.id,
             player_location=player_location,
-            player_input=player_input,
+            player_input=enhanced_input,  # Use validated/enhanced input
             turn_number=game_session.total_turns,  # Already incremented above
         )
         state["_db"] = db
@@ -820,6 +988,14 @@ def _show_help() -> None:
     console.print("  /nearby      NPCs and items here")
     console.print("  /time        Current day and time")
     console.print("  /quests      Active quests and tasks")
+    console.print()
+    console.print("[bold cyan]━━━ Actions (validated shortcuts) ━━━[/bold cyan]")
+    console.print("  /go <place>           Move to a location")
+    console.print("  /take <item>          Pick up an item")
+    console.print("  /drop <item>          Drop an item")
+    console.print("  /give <item> to <npc> Give item to someone")
+    console.print("  /attack <target>      Start combat")
+    console.print("    [dim]These validate constraints before the GM responds.[/dim]")
     console.print()
     console.print("[bold cyan]━━━ System ━━━[/bold cyan]")
     console.print("  /help        Show this help")

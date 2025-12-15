@@ -439,3 +439,57 @@ class AttributeCalculator:
             life.replace("_", " ").title()
             for life in LIFESTYLE_MODIFIERS.keys()
         ]
+
+
+def infer_build_from_stats(current: CurrentStats | dict[str, int]) -> str:
+    """Suggest a physical build descriptor based on calculated attributes.
+
+    This function analyzes STR, DEX, and CON to suggest an appropriate
+    physical build description that matches the character's stats.
+
+    Args:
+        current: CurrentStats object or dict with stat values.
+
+    Returns:
+        A build descriptor string (e.g., "lean and agile", "muscular").
+    """
+    if isinstance(current, dict):
+        str_val = current.get("strength", 10)
+        dex_val = current.get("dexterity", 10)
+        con_val = current.get("constitution", 10)
+    else:
+        str_val = current.strength
+        dex_val = current.dexterity
+        con_val = current.constitution
+
+    # High strength dominates
+    if str_val >= 14 and str_val > dex_val:
+        if con_val >= 14:
+            return "stocky and muscular"
+        return "muscular"
+
+    # High dexterity dominates
+    elif dex_val >= 14 and dex_val > str_val:
+        if con_val <= 10:
+            return "lean and agile"
+        return "lithe and nimble"
+
+    # High constitution without high str/dex
+    elif con_val >= 14:
+        return "sturdy"
+
+    # Low physical stats
+    elif str_val <= 8 and dex_val <= 10:
+        return "slight" if con_val <= 10 else "wiry"
+
+    # Moderate dexterity
+    elif dex_val >= 12:
+        return "nimble"
+
+    # Moderate strength
+    elif str_val >= 12:
+        return "solidly built"
+
+    # Balanced/average
+    else:
+        return "average build"

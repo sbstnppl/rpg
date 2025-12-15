@@ -62,7 +62,7 @@ from src.database.models.world import (
 )
 
 # New models for realism system
-from src.database.models.character_state import CharacterNeeds
+from src.database.models.character_state import CharacterNeeds, NeedsCommunicationLog
 from src.database.models.character_memory import CharacterMemory
 from src.database.models.character_preferences import (
     CharacterPreferences,
@@ -240,6 +240,7 @@ __all__ = [
     "QuestStage",
     # Character state (new)
     "CharacterNeeds",
+    "NeedsCommunicationLog",
     # Character memory (new)
     "CharacterMemory",
     # Character preferences (new)

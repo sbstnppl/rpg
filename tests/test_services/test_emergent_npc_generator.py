@@ -1481,3 +1481,193 @@ class TestContextAwareApprentice:
         # Verify stable has appropriate roles
         stable_keys = [k for k in LOCATION_APPRENTICE_ROLES.keys() if "stable" in k]
         assert len(stable_keys) > 0
+
+
+# =============================================================================
+# Backstory NPC Generation Tests
+# =============================================================================
+
+
+class TestBackstoryNPCGeneration:
+    """Tests for generating NPCs from backstory extraction data."""
+
+    def test_create_backstory_npc_returns_full_state(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that create_backstory_npc returns complete NPCFullState."""
+        shadow_data = {
+            "entity_key": "father_thomas",
+            "display_name": "Thomas",
+            "relationship_to_player": "family",
+            "relationship_role": "father",
+            "relationship_context": "Hardworking farmer, proud of his children",
+            "age": 42,
+            "gender": "male",
+            "occupation": "farmer",
+            "personality_traits": ["hardworking", "quiet", "protective"],
+            "brief_appearance": "weathered face, strong hands",
+            "brief_description": "Player's father, a tenant farmer",
+        }
+
+        npc_state = generator.create_backstory_npc(
+            shadow_data=shadow_data,
+            player_name="Kieran",
+        )
+
+        assert npc_state is not None
+        assert npc_state.entity_key == "father_thomas"
+        assert npc_state.display_name == "Thomas"
+        assert npc_state.appearance.age == 42
+        assert npc_state.appearance.gender == "male"
+        assert npc_state.background.occupation == "farmer"
+
+    def test_create_backstory_npc_persists_to_database(
+        self,
+        db_session: Session,
+        game_session: GameSession,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that backstory NPC is persisted to database."""
+        shadow_data = {
+            "entity_key": "mother_elena",
+            "display_name": "Elena",
+            "relationship_role": "mother",
+            "age": 38,
+            "gender": "female",
+            "occupation": "homemaker",
+            "personality_traits": ["nurturing", "wise"],
+        }
+
+        generator.create_backstory_npc(
+            shadow_data=shadow_data,
+            player_name="Test Player",
+        )
+
+        # Check entity exists
+        entity = (
+            db_session.query(Entity)
+            .filter(
+                Entity.session_id == game_session.id,
+                Entity.entity_key == "mother_elena",
+            )
+            .first()
+        )
+        assert entity is not None
+        assert entity.display_name == "Elena"
+        assert entity.occupation == "homemaker"
+
+        # Check NPC extension exists
+        npc_ext = (
+            db_session.query(NPCExtension)
+            .filter(NPCExtension.entity_id == entity.id)
+            .first()
+        )
+        assert npc_ext is not None
+
+        # Check needs exist
+        needs = (
+            db_session.query(CharacterNeeds)
+            .filter(CharacterNeeds.entity_id == entity.id)
+            .first()
+        )
+        assert needs is not None
+
+        # Check preferences exist
+        prefs = (
+            db_session.query(CharacterPreferences)
+            .filter(CharacterPreferences.entity_id == entity.id)
+            .first()
+        )
+        assert prefs is not None
+
+    def test_create_backstory_npc_includes_relationship_context_in_background(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that relationship context is included in NPC background."""
+        shadow_data = {
+            "entity_key": "brother_michael",
+            "display_name": "Michael",
+            "relationship_role": "younger brother",
+            "relationship_context": "Idolizes the player, always wants to tag along",
+            "age": 10,
+            "gender": "male",
+            "occupation": "child",
+            "brief_description": "Player's younger brother",
+        }
+
+        npc_state = generator.create_backstory_npc(
+            shadow_data=shadow_data,
+            player_name="Kieran",
+        )
+
+        # Background should mention the relationship context
+        assert "Idolizes" in npc_state.background.background_summary
+        assert "Kieran" in npc_state.background.background_summary
+
+    def test_create_backstory_npc_uses_personality_traits(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that extracted personality traits are used."""
+        traits = ["energetic", "curious", "mischievous", "loyal"]
+        shadow_data = {
+            "entity_key": "sister_sarah",
+            "display_name": "Sarah",
+            "age": 16,
+            "gender": "female",
+            "personality_traits": traits,
+        }
+
+        npc_state = generator.create_backstory_npc(
+            shadow_data=shadow_data,
+            player_name="Test Player",
+        )
+
+        # Personality should include the extracted traits
+        for trait in traits:
+            assert trait in npc_state.personality.traits
+
+    def test_create_backstory_npc_child_has_appropriate_needs(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that child NPCs have appropriate need levels."""
+        shadow_data = {
+            "entity_key": "child_npc",
+            "display_name": "Young Child",
+            "age": 8,
+            "gender": "male",
+            "occupation": "child",
+        }
+
+        npc_state = generator.create_backstory_npc(
+            shadow_data=shadow_data,
+            player_name="Test Player",
+        )
+
+        # Children should have low fatigue (high energy)
+        assert npc_state.current_needs.fatigue < 20
+
+    def test_create_backstory_npc_handles_missing_fields(
+        self,
+        generator: EmergentNPCGenerator,
+    ):
+        """Test that missing fields are handled with defaults."""
+        # Minimal shadow data
+        shadow_data = {
+            "entity_key": "minimal_npc",
+            "display_name": "Someone",
+        }
+
+        npc_state = generator.create_backstory_npc(
+            shadow_data=shadow_data,
+            player_name="Test Player",
+        )
+
+        assert npc_state is not None
+        assert npc_state.entity_key == "minimal_npc"
+        # Should have reasonable defaults
+        assert npc_state.appearance.age == 30  # Default age
+        assert npc_state.background.occupation == "commoner"  # Default occupation

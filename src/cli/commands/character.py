@@ -229,12 +229,14 @@ WIZARD_SECTION_TITLES = {
 }
 
 # Required fields per section
+# Note: "build" is intentionally NOT required in NAME section - it's auto-derived from
+# attributes in the ATTRIBUTES section using infer_build_from_stats()
 WIZARD_SECTION_REQUIREMENTS: dict[WizardSectionName, list[str]] = {
     WizardSectionName.SPECIES: ["species", "gender"],
-    WizardSectionName.NAME: ["name", "age", "build", "hair_color", "eye_color"],
+    WizardSectionName.NAME: ["name", "age", "hair_color", "eye_color"],  # build is optional
     WizardSectionName.BACKGROUND: ["background"],
     WizardSectionName.PERSONALITY: ["personality_notes"],
-    WizardSectionName.ATTRIBUTES: ["attributes"],
+    WizardSectionName.ATTRIBUTES: ["attributes"],  # Also sets build based on stats
     WizardSectionName.REVIEW: [],  # No fields, just confirmation
 }
 
@@ -755,13 +757,32 @@ def outfit(
 
             for item in items:
                 layer_str = f"  L{item.body_layer}: "
+                # Extract visual summary (color + material) if available
+                visual_summary = ""
+                if item.properties and "visual" in item.properties:
+                    visual = item.properties["visual"]
+                    parts = []
+                    if color := visual.get("primary_color"):
+                        parts.append(color)
+                    if material := visual.get("material"):
+                        parts.append(material)
+                    if parts:
+                        visual_summary = " ".join(parts)
+
                 if item.is_visible:
                     output.append(layer_str)
-                    output.append(f"{item.display_name}\n", style="white")
+                    if visual_summary:
+                        output.append(f"{item.display_name} ", style="white")
+                        output.append(f"({visual_summary})\n", style="dim cyan")
+                    else:
+                        output.append(f"{item.display_name}\n", style="white")
                     visible_items.append(item.display_name)
                 else:
                     output.append(layer_str, style="dim")
-                    output.append(f"{item.display_name} (hidden)\n", style="dim")
+                    if visual_summary:
+                        output.append(f"{item.display_name} ({visual_summary}) (hidden)\n", style="dim")
+                    else:
+                        output.append(f"{item.display_name} (hidden)\n", style="dim")
 
             # Show if this item provides slots
             for item in items:
@@ -2049,7 +2070,7 @@ def _create_world_from_extraction(
     player: Entity,
     world_data: dict,
 ) -> None:
-    """Create shadow entities and relationships from extracted world data.
+    """Create fully-generated NPCs and relationships from extracted world data.
 
     Args:
         db: Database session.
@@ -2057,8 +2078,10 @@ def _create_world_from_extraction(
         player: Player entity.
         world_data: Extracted world data dict.
     """
+    from src.services.emergent_npc_generator import EmergentNPCGenerator
+
     entity_manager = EntityManager(db, game_session)
-    relationship_manager = RelationshipManager(db, game_session)
+    npc_generator = EmergentNPCGenerator(db, game_session)
 
     # Update player appearance from extraction
     player_appearance = world_data.get("player_appearance", {})
@@ -2067,7 +2090,7 @@ def _create_world_from_extraction(
             if value is not None and field in Entity.APPEARANCE_FIELDS:
                 player.set_appearance_field(field, value)
 
-    # Create shadow entities from backstory
+    # Create entities from backstory
     shadow_entities = world_data.get("shadow_entities", [])
     created_entities = {}
 
@@ -2083,13 +2106,31 @@ def _create_world_from_extraction(
         except KeyError:
             entity_type = EntityType.NPC
 
-        # Create the shadow entity
-        entity = entity_manager.create_shadow_entity(
-            entity_key=entity_key,
-            display_name=shadow.get("display_name", entity_key.replace("_", " ").title()),
-            entity_type=entity_type,
-            background=shadow.get("brief_description"),
-        )
+        # For NPCs, use full NPC generation with all traits
+        if entity_type == EntityType.NPC:
+            # Generate full NPC with personality, preferences, needs, etc.
+            npc_state = npc_generator.create_backstory_npc(
+                shadow_data=shadow,
+                player_name=player.display_name,
+            )
+            # Get the created entity from database
+            entity = entity_manager.get_entity(entity_key)
+            if not entity:
+                # Fallback to shadow entity if generation failed
+                entity = entity_manager.create_shadow_entity(
+                    entity_key=entity_key,
+                    display_name=shadow.get("display_name", entity_key.replace("_", " ").title()),
+                    entity_type=entity_type,
+                    background=shadow.get("brief_description"),
+                )
+        else:
+            # For non-NPC entities (monsters, animals, orgs), use shadow entities
+            entity = entity_manager.create_shadow_entity(
+                entity_key=entity_key,
+                display_name=shadow.get("display_name", entity_key.replace("_", " ").title()),
+                entity_type=entity_type,
+                background=shadow.get("brief_description"),
+            )
 
         # Mark as alive or dead
         if not shadow.get("is_alive", True):
@@ -2103,7 +2144,7 @@ def _create_world_from_extraction(
         liking = shadow.get("liking", 50)
         respect = shadow.get("respect", 50)
 
-        # Player's relationship TO the shadow entity
+        # Player's relationship TO the entity
         player_rel = Relationship(
             session_id=game_session.id,
             from_entity_id=player.id,
@@ -2117,8 +2158,8 @@ def _create_world_from_extraction(
         )
         db.add(player_rel)
 
-        # Shadow entity's relationship TO player
-        shadow_rel = Relationship(
+        # Entity's relationship TO player
+        entity_rel = Relationship(
             session_id=game_session.id,
             from_entity_id=entity.id,
             to_entity_id=player.id,
@@ -2129,7 +2170,7 @@ def _create_world_from_extraction(
             familiarity=80 if rel_type == "family" else 60 if rel_type == "friend" else 30,
             relationship_type=rel_type,
         )
-        db.add(shadow_rel)
+        db.add(entity_rel)
 
     db.flush()
 
@@ -3217,6 +3258,59 @@ def _parse_wizard_response(response: str) -> tuple[dict | None, dict | None, boo
     return field_updates, section_data, section_complete
 
 
+def _extract_missing_appearance_fields(response: str, updates: dict) -> dict:
+    """Fallback: extract appearance fields from narrative if missing from JSON.
+
+    The LLM sometimes mentions appearance details in narrative but forgets to
+    include them in the field_updates JSON. This function extracts common
+    fields like eye_color and hair_color from the narrative text.
+
+    Args:
+        response: AI response text (narrative).
+        updates: The field_updates dict from JSON parsing.
+
+    Returns:
+        Updated dict with any extracted fields added.
+    """
+    if updates is None:
+        updates = {}
+
+    # Words that shouldn't be captured as colors
+    skip_words = {'the', 'his', 'her', 'their', 'your', 'my', 'with', 'and', 'a', 'an'}
+
+    # Extract eye_color if missing
+    if "eye_color" not in updates:
+        # Patterns for eye color in narrative
+        eye_patterns = [
+            r'\b([\w-]+)\s+eyes\b',  # "hazel eyes", "green eyes"
+            r'\beyes\s+(?:are|were|of)\s+([\w-]+)',  # "eyes are green"
+            r'\b([\w-]+)-eyed\b',  # "green-eyed"
+        ]
+        for pattern in eye_patterns:
+            match = re.search(pattern, response, re.IGNORECASE)
+            if match:
+                color = match.group(1).strip()
+                if color.lower() not in skip_words:
+                    updates["eye_color"] = color
+                    break
+
+    # Extract hair_color if missing
+    if "hair_color" not in updates:
+        hair_patterns = [
+            r'\b([\w-]+)\s+hair\b',  # "brown hair", "black hair"
+            r'\bhair\s+(?:is|was|of)\s+([\w-]+)',  # "hair is brown"
+        ]
+        for pattern in hair_patterns:
+            match = re.search(pattern, response, re.IGNORECASE)
+            if match:
+                color = match.group(1).strip()
+                if color.lower() not in skip_words:
+                    updates["hair_color"] = color
+                    break
+
+    return updates
+
+
 async def _run_section_conversation(
     wizard_state: CharacterWizardState,
     section_name: WizardSectionName,
@@ -3300,6 +3394,7 @@ async def _run_section_conversation(
             roll_potential_stats,
             calculate_current_stats,
             AttributeCalculator,
+            infer_build_from_stats,
         )
 
         # Roll potential if not already done
@@ -3318,6 +3413,10 @@ async def _run_section_conversation(
 
         # Store calculated attributes
         wizard_state.character.attributes = current.to_dict()
+
+        # Auto-derive build from physical stats if not already set
+        if not wizard_state.character.build:
+            wizard_state.character.build = infer_build_from_stats(current)
 
         # Get twist narratives
         twists = AttributeCalculator.get_twist_narrative(
@@ -3434,6 +3533,16 @@ async def _run_section_conversation(
             # Display response (without JSON)
             display_ai_message(_strip_json_blocks(ai_response))
 
+            # Check for reroll_attributes request (ATTRIBUTES section only)
+            if section_name == WizardSectionName.ATTRIBUTES:
+                if re.search(r'["\']?reroll_attributes["\']?\s*:\s*true', ai_response, re.IGNORECASE):
+                    # Clear potential stats to trigger fresh roll on next iteration
+                    wizard_state.potential_stats = None
+                    wizard_state.character.attributes = None
+                    wizard_state.character.build = None
+                    console.print("[dim cyan]Rolling new attributes...[/dim cyan]")
+                    continue  # Re-enter section to trigger fresh calculation
+
             # Capture what fields are already saved BEFORE applying any updates
             # This is needed to detect if this response introduces new values
             already_saved = set()
@@ -3445,6 +3554,10 @@ async def _run_section_conversation(
 
             # Apply field updates
             if field_updates:
+                # For NAME section, extract appearance fields from narrative as fallback
+                # (LLM sometimes mentions eye/hair color but forgets to include in JSON)
+                if section_name == WizardSectionName.NAME:
+                    field_updates = _extract_missing_appearance_fields(ai_response, field_updates)
                 _apply_wizard_field_updates(wizard_state, section_name, field_updates)
                 captured = ", ".join(field_updates.keys())
                 console.print(f"[dim green]Saved: {captured}[/dim green]")

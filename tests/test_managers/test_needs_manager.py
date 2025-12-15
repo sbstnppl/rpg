@@ -836,6 +836,65 @@ class TestEstimateBaseSatisfaction:
         result = estimate_base_satisfaction("hunger", "unknown_action", "basic")
         assert result == 20  # Default
 
+    def test_negative_hygiene_actions(self):
+        """Verify negative hygiene actions return negative values."""
+        from src.managers.needs import estimate_base_satisfaction
+
+        # Test various negative hygiene actions
+        result = estimate_base_satisfaction("hygiene", "get_dirty", "basic")
+        assert result == -15
+
+        result = estimate_base_satisfaction("hygiene", "mud", "basic")
+        assert result == -25
+
+        result = estimate_base_satisfaction("hygiene", "filth", "basic")
+        assert result == -35
+
+    def test_negative_comfort_actions(self):
+        """Verify negative comfort actions return negative values."""
+        from src.managers.needs import estimate_base_satisfaction
+
+        result = estimate_base_satisfaction("comfort", "get_cold", "basic")
+        assert result == -20
+
+        result = estimate_base_satisfaction("comfort", "get_wet", "basic")
+        assert result == -20
+
+        result = estimate_base_satisfaction("comfort", "freezing", "basic")
+        assert result == -30
+
+    def test_negative_social_actions(self):
+        """Verify negative social actions return negative values."""
+        from src.managers.needs import estimate_base_satisfaction
+
+        result = estimate_base_satisfaction("social_connection", "rejection", "basic")
+        assert result == -25
+
+        result = estimate_base_satisfaction("social_connection", "betrayal", "basic")
+        assert result == -40
+
+    def test_negative_intimacy_actions(self):
+        """Verify negative intimacy actions return negative values."""
+        from src.managers.needs import estimate_base_satisfaction
+
+        result = estimate_base_satisfaction("intimacy", "romantic_rejection", "basic")
+        assert result == -20
+
+        result = estimate_base_satisfaction("intimacy", "heartbreak", "basic")
+        assert result == -40
+
+    def test_quality_affects_negative_actions(self):
+        """Verify quality multiplier applies to negative actions."""
+        from src.managers.needs import estimate_base_satisfaction
+
+        # Poor quality should reduce the negative impact (0.6x)
+        poor = estimate_base_satisfaction("hygiene", "mud", "poor")
+        assert poor == -15  # -25 * 0.6 = -15
+
+        # Excellent quality should increase negative impact (1.6x)
+        excellent = estimate_base_satisfaction("hygiene", "mud", "excellent")
+        assert excellent == -40  # -25 * 1.6 = -40
+
 
 class TestGetPreferenceMultiplier:
     """Tests for get_preference_multiplier function."""

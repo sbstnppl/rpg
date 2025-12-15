@@ -102,6 +102,10 @@ ACTION_SATISFACTION_CATALOG: dict[str, dict[str, int]] = {
         "drink": 25, "water": 25, "ale": 25, "tea": 25, "juice": 25,
         "large_drink": 45, "gulp": 45, "chug": 45,
         "drink_deeply": 70, "quench": 70, "drain": 70,
+        # Negative actions (dehydration)
+        "salty_food": -10, "spicy_food": -15,
+        "vomit": -25, "diarrhea": -30,
+        "sweating": -15, "heavy_exertion": -20,
     },
     "energy": {
         "quick_nap": 15, "nap": 15, "doze": 15,
@@ -114,6 +118,12 @@ ACTION_SATISFACTION_CATALOG: dict[str, dict[str, int]] = {
         "partial_bath": 30, "wash": 30, "sponge_bath": 30,
         "full_bath": 65, "bath": 65, "shower": 65,
         "luxury_bath": 85, "spa": 85, "hot_spring": 85,
+        # Negative actions (getting dirty)
+        "sweat": -10, "exertion": -10,
+        "get_dirty": -15, "dust": -15, "grime": -15,
+        "mud": -25, "splash": -20, "fall": -25,
+        "blood": -20, "gore": -30,
+        "filth": -35, "sewer": -40, "garbage": -35,
     },
     "social_connection": {
         "chat": 10, "small_talk": 10, "greeting": 5,
@@ -121,12 +131,25 @@ ACTION_SATISFACTION_CATALOG: dict[str, dict[str, int]] = {
         "group_activity": 30, "gathering": 30, "party": 35,
         "bonding": 45, "intimate_talk": 45, "deep_conversation": 45,
         "romantic": 60,
+        # Negative actions (social setbacks)
+        "snub": -10, "ignored": -10, "dismissed": -10,
+        "argument": -15, "disagreement": -15, "conflict": -15,
+        "rejection": -25, "excluded": -25, "ostracized": -30,
+        "betrayal": -40, "abandoned": -40,
+        "isolation": -20, "alone": -15,
     },
     "comfort": {
         "change_clothes": 20, "dry_off": 15,
         "warm_up": 20, "cool_down": 20,
         "shelter": 30, "find_shelter": 30,
         "luxury": 65, "comfortable_bed": 50,
+        # Negative actions (discomfort)
+        "cramped": -10, "awkward_position": -10,
+        "uncomfortable": -15, "hard_surface": -15,
+        "get_wet": -20, "soaked": -25, "drenched": -30,
+        "get_cold": -20, "freezing": -30, "chilled": -15,
+        "overheated": -20, "sweltering": -25,
+        "pain": -25, "injury_aggravation": -30,
     },
     "wellness": {
         "minor_remedy": 10, "bandage": 10, "ice": 10,
@@ -153,6 +176,11 @@ ACTION_SATISFACTION_CATALOG: dict[str, dict[str, int]] = {
         "affection": 22, "kissing": 22, "cuddle": 20,
         "intimate_encounter": 60, "intimacy": 60,
         "emotional_intimacy": 30, "vulnerability": 30,
+        # Negative actions (romantic setbacks)
+        "rebuff": -10, "cold_shoulder": -10,
+        "romantic_rejection": -20, "turned_down": -20,
+        "heartbreak": -40, "breakup": -45,
+        "loneliness": -15, "yearning": -10,
     },
 }
 

@@ -16,12 +16,12 @@ You are helping a player choose their character's name and describe their physic
 ## Required Fields (ALL must be saved before section_complete)
 - `name` - Character's name
 - `age` - Numeric age in years
-- `build` - Body type (slim, athletic, stocky, muscular, etc.)
 - `hair_color` - Hair color
 - `eye_color` - Eye color
 
 ## Optional Fields
 - `height` - Height (e.g., "175 cm", "5'9\"", "tall", "average height")
+- `build` - Body type (slim, athletic, stocky, muscular, etc.) - NOTE: This will be auto-derived from attributes if not specified
 - `hair_style` - How the hair is styled
 - `skin_tone` - Skin tone description
 - `voice_description` - Voice characteristics (e.g., "deep and resonant", "soft and melodic")
@@ -96,9 +96,9 @@ AI: Great! Hazel eyes it is - they'll catch the light beautifully.
 {{"field_updates": {{"eye_color": "hazel"}}}}
 ```
 
-**BEFORE marking section_complete:** Check "Currently Saved Fields" above. Only mark complete if ALL required fields (name, age, build, hair_color, eye_color) show [SAVED].
+**BEFORE marking section_complete:** Check "Currently Saved Fields" above. Only mark complete if ALL required fields (name, age, hair_color, eye_color) show [SAVED].
 
-When ALL 5 required fields are saved AND confirmed by player:
+When ALL 4 required fields are saved AND confirmed by player:
 ```json
 {{"section_complete": true, "data": {{"name": "Lyra", "age": 25, "height": "170 cm", "build": "athletic", "hair_color": "red", "hair_style": "long", "eye_color": "green"}}}}
 ```

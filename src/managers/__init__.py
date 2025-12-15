@@ -35,6 +35,12 @@ from src.managers.location_manager import LocationManager
 from src.managers.memory_manager import MemoryManager
 from src.managers.mystery_manager import MysteryManager, MysteryStatus
 from src.managers.needs import ActivityType, NeedDecayRates, NeedEffect, NeedsManager
+from src.managers.needs_communication_manager import (
+    NeedAlert,
+    NeedsCommunicationManager,
+    NEED_STATE_THRESHOLDS,
+    REMINDER_INTERVAL_HOURS,
+)
 from src.managers.achievement_manager import (
     AchievementManager,
     AchievementProgress,
@@ -102,6 +108,11 @@ __all__ = [
     "NeedEffect",
     "NeedDecayRates",
     "ActivityType",
+    # Needs Communication
+    "NeedsCommunicationManager",
+    "NeedAlert",
+    "NEED_STATE_THRESHOLDS",
+    "REMINDER_INTERVAL_HOURS",
     # Memory
     "MemoryManager",
     # Injuries

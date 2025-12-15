@@ -248,10 +248,11 @@ UPDATE_NPC_ATTITUDE_TOOL = ToolDefinition(
 SATISFY_NEED_TOOL = ToolDefinition(
     name="satisfy_need",
     description=(
-        "Satisfy a character need when they perform an action that addresses it "
-        "(eating, sleeping, bathing, socializing, etc.). Use the action_type to "
-        "estimate the satisfaction amount, which will be adjusted by character "
-        "preferences and traits automatically."
+        "Update a character need when they perform an action. Use POSITIVE actions "
+        "(eating, sleeping, bathing) to satisfy needs, or NEGATIVE actions "
+        "(get_dirty, rejection, get_cold) when adverse events occur. The action_type "
+        "determines whether the need increases or decreases, and character preferences "
+        "and traits automatically adjust the amount."
     ),
     parameters=[
         ToolParameter(
@@ -280,15 +281,20 @@ SATISFY_NEED_TOOL = ToolDefinition(
             name="action_type",
             param_type="string",
             description=(
-                "Type of action: hunger (snack/light_meal/full_meal/feast), "
+                "Type of action. Positive: hunger (snack/light_meal/full_meal/feast), "
                 "energy (quick_nap/short_rest/full_sleep), "
                 "hygiene (quick_wash/partial_bath/full_bath), "
                 "social (chat/conversation/group_activity/bonding), "
                 "comfort (change_clothes/shelter/luxury), "
                 "wellness (minor_remedy/medicine/treatment), "
-                "morale (minor_victory/achievement/major_success/setback), "
+                "morale (minor_victory/achievement/major_success), "
                 "purpose (accept_quest/progress/complete_quest), "
-                "intimacy (flirtation/affection/intimate_encounter)"
+                "intimacy (flirtation/affection/intimate_encounter). "
+                "Negative: hygiene (sweat/get_dirty/mud/blood/filth), "
+                "comfort (get_wet/get_cold/freezing/pain), "
+                "social (snub/argument/rejection/betrayal/isolation), "
+                "morale (setback/failure/embarrassment/tragedy), "
+                "intimacy (rebuff/romantic_rejection/heartbreak)"
             ),
         ),
         ToolParameter(
@@ -304,6 +310,43 @@ SATISFY_NEED_TOOL = ToolDefinition(
             param_type="integer",
             description="Optional override for base satisfaction amount (if not provided, estimated from action_type)",
             required=False,
+        ),
+    ],
+)
+
+
+# Mark Need Communicated Tool - for signal-based needs narration
+MARK_NEED_COMMUNICATED_TOOL = ToolDefinition(
+    name="mark_need_communicated",
+    description=(
+        "Call this AFTER narrating a character need (hunger, tiredness, etc.) to prevent "
+        "repetitive mentions. When you describe how a character feels hungry, tired, or "
+        "otherwise affected by a need, use this tool to record that communication. The "
+        "system will then avoid alerting you about that same need until the state changes "
+        "or significant time has passed."
+    ),
+    parameters=[
+        ToolParameter(
+            name="entity_key",
+            param_type="string",
+            description="Entity key of the character whose need was narrated (e.g., 'player', 'npc_guard')",
+        ),
+        ToolParameter(
+            name="need_name",
+            param_type="string",
+            description="Which need was communicated in the narration",
+            enum=[
+                "hunger",
+                "thirst",
+                "energy",
+                "hygiene",
+                "comfort",
+                "wellness",
+                "social_connection",
+                "morale",
+                "sense_of_purpose",
+                "intimacy",
+            ],
         ),
     ],
 )
@@ -660,15 +703,461 @@ DROP_ITEM_TOOL = ToolDefinition(
 )
 
 
+# =============================================================================
+# State Management Tools (replace STATE block parsing)
+# =============================================================================
+
+ADVANCE_TIME_TOOL = ToolDefinition(
+    name="advance_time",
+    description=(
+        "Advance game time. Call this to indicate time passing during the scene. "
+        "This REPLACES putting time in the STATE block - use this tool instead."
+    ),
+    parameters=[
+        ToolParameter(
+            name="minutes",
+            param_type="integer",
+            description="Minutes to advance (1-480). Typical: 1-10 for dialogue, 15-60 for activities",
+        ),
+        ToolParameter(
+            name="reason",
+            param_type="string",
+            description="Brief reason for time passing (e.g., 'conversation', 'walking to forge')",
+            required=False,
+        ),
+    ],
+)
+
+
+ENTITY_MOVE_TOOL = ToolDefinition(
+    name="entity_move",
+    description=(
+        "Move an entity (player or NPC) to a new location. Use this when anyone physically "
+        "moves from one area to another. For the player, this also updates game state tracking. "
+        "This REPLACES putting location_change in the STATE block."
+    ),
+    parameters=[
+        ToolParameter(
+            name="entity_key",
+            param_type="string",
+            description="Who is moving (e.g., 'player', 'npc_blacksmith', 'npc_guard')",
+        ),
+        ToolParameter(
+            name="location_key",
+            param_type="string",
+            description="Destination location key (e.g., 'village_square', 'forge_interior', 'inn_common_room')",
+        ),
+        ToolParameter(
+            name="create_if_missing",
+            param_type="boolean",
+            description="Create the location if it doesn't exist yet",
+            required=False,
+            default=True,
+        ),
+    ],
+)
+
+
+START_COMBAT_TOOL = ToolDefinition(
+    name="start_combat",
+    description=(
+        "Initiate a combat encounter. Call this when combat begins between the player "
+        "and enemies. This REPLACES setting combat_initiated in the STATE block."
+    ),
+    parameters=[
+        ToolParameter(
+            name="enemy_keys",
+            param_type="array",
+            description="Entity keys of enemies entering combat (e.g., ['npc_bandit_1', 'npc_bandit_2'])",
+        ),
+        ToolParameter(
+            name="surprise",
+            param_type="string",
+            description="Who (if anyone) is surprised at combat start",
+            required=False,
+            enum=["none", "enemies", "player"],
+            default="none",
+        ),
+        ToolParameter(
+            name="reason",
+            param_type="string",
+            description="How/why combat started (e.g., 'ambush', 'provoked attack', 'caught stealing')",
+        ),
+    ],
+)
+
+
+END_COMBAT_TOOL = ToolDefinition(
+    name="end_combat",
+    description="End the current combat encounter and record the outcome.",
+    parameters=[
+        ToolParameter(
+            name="outcome",
+            param_type="string",
+            description="How combat ended",
+            enum=["victory", "defeat", "fled", "negotiated"],
+        ),
+        ToolParameter(
+            name="summary",
+            param_type="string",
+            description="Brief summary of combat resolution",
+            required=False,
+        ),
+    ],
+)
+
+
+# === Quest Management Tools ===
+
+ASSIGN_QUEST_TOOL = ToolDefinition(
+    name="assign_quest",
+    description=(
+        "Create and assign a new quest to the player. Use when an NPC gives the player "
+        "a quest or mission, or when the player discovers a quest objective."
+    ),
+    parameters=[
+        ToolParameter(
+            name="quest_key",
+            param_type="string",
+            description="Unique identifier for this quest (e.g., 'find_lost_ring', 'rescue_merchant')",
+        ),
+        ToolParameter(
+            name="title",
+            param_type="string",
+            description="Display title of the quest (e.g., 'The Lost Ring', 'Rescue the Merchant')",
+        ),
+        ToolParameter(
+            name="description",
+            param_type="string",
+            description="Full description of the quest objective and context",
+        ),
+        ToolParameter(
+            name="giver_entity_key",
+            param_type="string",
+            description="Entity key of the NPC who gave this quest (if applicable)",
+            required=False,
+        ),
+        ToolParameter(
+            name="rewards",
+            param_type="string",
+            description="Description of promised rewards (e.g., '50 gold coins', 'a family heirloom')",
+            required=False,
+        ),
+    ],
+)
+
+
+UPDATE_QUEST_TOOL = ToolDefinition(
+    name="update_quest",
+    description=(
+        "Update progress on an existing quest. Use when the player completes an objective, "
+        "discovers new information, or advances to the next stage."
+    ),
+    parameters=[
+        ToolParameter(
+            name="quest_key",
+            param_type="string",
+            description="Key of the quest to update",
+        ),
+        ToolParameter(
+            name="new_stage",
+            param_type="integer",
+            description="New stage number (0-indexed)",
+            required=False,
+        ),
+        ToolParameter(
+            name="stage_name",
+            param_type="string",
+            description="Name of the new stage (e.g., 'Find the witness', 'Return to the village')",
+            required=False,
+        ),
+        ToolParameter(
+            name="stage_description",
+            param_type="string",
+            description="Description of what to do in this stage",
+            required=False,
+        ),
+        ToolParameter(
+            name="notes",
+            param_type="string",
+            description="Additional notes about progress or discoveries",
+            required=False,
+        ),
+    ],
+)
+
+
+COMPLETE_QUEST_TOOL = ToolDefinition(
+    name="complete_quest",
+    description=(
+        "Mark a quest as completed or failed. Use when the player finishes a quest "
+        "objective successfully or when a quest becomes impossible to complete."
+    ),
+    parameters=[
+        ToolParameter(
+            name="quest_key",
+            param_type="string",
+            description="Key of the quest to complete",
+        ),
+        ToolParameter(
+            name="outcome",
+            param_type="string",
+            description="How the quest ended",
+            enum=["completed", "failed"],
+        ),
+        ToolParameter(
+            name="outcome_notes",
+            param_type="string",
+            description="Description of how the quest was resolved",
+            required=False,
+        ),
+    ],
+)
+
+
+# === World Fact Tools ===
+
+RECORD_FACT_TOOL = ToolDefinition(
+    name="record_fact",
+    description=(
+        "Record a fact about the world that the player has learned or discovered. "
+        "Use the Subject-Predicate-Value pattern. This helps track world knowledge "
+        "for narrative consistency. Examples: 'npc_marta has_job innkeeper', "
+        "'location_forge is_closed_on sundays', 'player knows_secret blacksmith_past'."
+    ),
+    parameters=[
+        ToolParameter(
+            name="subject_type",
+            param_type="string",
+            description="Type of thing the fact is about",
+            enum=["entity", "location", "world", "item", "group"],
+        ),
+        ToolParameter(
+            name="subject_key",
+            param_type="string",
+            description="Key of the subject (e.g., 'npc_marta', 'village_square', 'iron_sword')",
+        ),
+        ToolParameter(
+            name="predicate",
+            param_type="string",
+            description="What aspect this fact describes (e.g., 'has_job', 'is_allergic_to', 'was_born_in')",
+        ),
+        ToolParameter(
+            name="value",
+            param_type="string",
+            description="The value of the fact (e.g., 'innkeeper', 'shellfish', 'the capital city')",
+        ),
+        ToolParameter(
+            name="is_secret",
+            param_type="boolean",
+            description="Whether this is a secret the player should not know yet",
+            required=False,
+            default=False,
+        ),
+        ToolParameter(
+            name="confidence",
+            param_type="integer",
+            description="Confidence level 0-100 (how certain this fact is)",
+            required=False,
+            default=80,
+        ),
+    ],
+)
+
+
+# === NPC Scene Management Tools ===
+
+INTRODUCE_NPC_TOOL = ToolDefinition(
+    name="introduce_npc",
+    description=(
+        "Introduce a new NPC into the scene. Use when a new character appears for the "
+        "first time or when an existing NPC enters the current location. This creates "
+        "or updates the NPC record and marks them as present at the current location."
+    ),
+    parameters=[
+        ToolParameter(
+            name="entity_key",
+            param_type="string",
+            description="Unique key for this NPC (e.g., 'npc_blacksmith_tom', 'npc_guard_1')",
+        ),
+        ToolParameter(
+            name="display_name",
+            param_type="string",
+            description="The NPC's name as displayed (e.g., 'Tom the Blacksmith', 'Village Guard')",
+        ),
+        ToolParameter(
+            name="description",
+            param_type="string",
+            description="Physical description and notable traits",
+        ),
+        ToolParameter(
+            name="location_key",
+            param_type="string",
+            description="Location where the NPC appears",
+        ),
+        ToolParameter(
+            name="occupation",
+            param_type="string",
+            description="NPC's job or role (e.g., 'blacksmith', 'guard', 'merchant')",
+            required=False,
+        ),
+        ToolParameter(
+            name="initial_attitude",
+            param_type="string",
+            description="Starting attitude toward the player",
+            required=False,
+            enum=["hostile", "unfriendly", "neutral", "friendly", "warm"],
+            default="neutral",
+        ),
+    ],
+)
+
+
+NPC_LEAVES_TOOL = ToolDefinition(
+    name="npc_leaves",
+    description=(
+        "Have an NPC leave the current scene. Use when an NPC walks away, exits a "
+        "building, or otherwise departs from the player's location."
+    ),
+    parameters=[
+        ToolParameter(
+            name="entity_key",
+            param_type="string",
+            description="Entity key of the NPC leaving",
+        ),
+        ToolParameter(
+            name="destination",
+            param_type="string",
+            description="Where the NPC is going (location key or description)",
+            required=False,
+        ),
+        ToolParameter(
+            name="reason",
+            param_type="string",
+            description="Why the NPC is leaving (for narrative context)",
+            required=False,
+        ),
+    ],
+)
+
+
+# World Spawning Tools
+
+SPAWN_STORAGE_TOOL = ToolDefinition(
+    name="spawn_storage",
+    description=(
+        "Create a storage surface or container at the current location. "
+        "Use when entering a new interior location to establish furniture like tables, "
+        "shelves, chests, or counters. These become visible in /nearby and are required "
+        "before placing items on them with spawn_item."
+    ),
+    parameters=[
+        ToolParameter(
+            name="container_type",
+            param_type="string",
+            description="Type of storage surface",
+            enum=["table", "shelf", "chest", "counter", "barrel", "crate", "cupboard", "floor", "ground"],
+        ),
+        ToolParameter(
+            name="description",
+            param_type="string",
+            description="Description of the storage, e.g. 'A sturdy oak table'",
+            required=False,
+        ),
+        ToolParameter(
+            name="storage_key",
+            param_type="string",
+            description="Unique key for this storage (auto-generated if not provided)",
+            required=False,
+        ),
+        ToolParameter(
+            name="is_fixed",
+            param_type="boolean",
+            description="Whether the storage cannot be moved (default: true for furniture)",
+            required=False,
+            default=True,
+        ),
+        ToolParameter(
+            name="capacity",
+            param_type="integer",
+            description="Maximum number of items this can hold (default: 20)",
+            required=False,
+            default=20,
+        ),
+    ],
+)
+
+
+SPAWN_ITEM_TOOL = ToolDefinition(
+    name="spawn_item",
+    description=(
+        "Create an item at the current location. Use this when describing discoverable items "
+        "that the player could potentially interact with (pick up, use, eat, etc.). Items "
+        "spawned this way appear in /nearby. Do NOT use for ambient decorations that can't be "
+        "interacted with. The storage surface must exist first (use spawn_storage if needed)."
+    ),
+    parameters=[
+        ToolParameter(
+            name="display_name",
+            param_type="string",
+            description="Item name, e.g. 'Half-loaf of Brown Bread', 'Rusty Sword'",
+        ),
+        ToolParameter(
+            name="description",
+            param_type="string",
+            description="Brief item description for when examined",
+        ),
+        ToolParameter(
+            name="item_type",
+            param_type="string",
+            description="Type of item",
+            enum=["consumable", "container", "misc", "tool", "weapon", "armor", "clothing"],
+        ),
+        ToolParameter(
+            name="surface",
+            param_type="string",
+            description="Where to place: 'table', 'shelf', 'floor', 'counter', etc. Must be spawned first.",
+            required=False,
+            default="floor",
+        ),
+        ToolParameter(
+            name="item_key",
+            param_type="string",
+            description="Unique key for this item (auto-generated if not provided)",
+            required=False,
+        ),
+        ToolParameter(
+            name="quantity",
+            param_type="integer",
+            description="Number of items (for stackable items like coins, arrows)",
+            required=False,
+            default=1,
+        ),
+        ToolParameter(
+            name="weight",
+            param_type="number",
+            description="Weight in pounds (for encumbrance)",
+            required=False,
+            default=0.5,
+        ),
+    ],
+)
+
+
 # All GM tools
 GM_TOOLS = [
+    # Dice and checks
     SKILL_CHECK_TOOL,
     ATTACK_ROLL_TOOL,
     ROLL_DAMAGE_TOOL,
+    # Relationships
     GET_NPC_ATTITUDE_TOOL,
     UPDATE_NPC_ATTITUDE_TOOL,
+    # Needs
     SATISFY_NEED_TOOL,
     APPLY_STIMULUS_TOOL,
+    MARK_NEED_COMMUNICATED_TOOL,
+    # Navigation
     CHECK_ROUTE_TOOL,
     START_TRAVEL_TOOL,
     MOVE_TO_ZONE_TOOL,
@@ -676,6 +1165,24 @@ GM_TOOLS = [
     DISCOVER_ZONE_TOOL,
     DISCOVER_LOCATION_TOOL,
     VIEW_MAP_TOOL,
+    # Items
     ACQUIRE_ITEM_TOOL,
     DROP_ITEM_TOOL,
+    # World spawning
+    SPAWN_STORAGE_TOOL,
+    SPAWN_ITEM_TOOL,
+    # State management (replace STATE block)
+    ADVANCE_TIME_TOOL,
+    ENTITY_MOVE_TOOL,
+    START_COMBAT_TOOL,
+    END_COMBAT_TOOL,
+    # Quest management
+    ASSIGN_QUEST_TOOL,
+    UPDATE_QUEST_TOOL,
+    COMPLETE_QUEST_TOOL,
+    # World facts
+    RECORD_FACT_TOOL,
+    # NPC scene management
+    INTRODUCE_NPC_TOOL,
+    NPC_LEAVES_TOOL,
 ]

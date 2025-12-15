@@ -8,6 +8,134 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Signal-Based Needs Communication System** - Prevents repetitive need narration ("stomach growls" every turn)
+  - New `NeedsCommunicationLog` database model tracks when needs were last communicated to the player
+  - New `NeedsCommunicationManager` with state tracking, alert generation, and reminder logic
+  - Context compiler now generates categorized needs alerts:
+    - **Alerts**: State changes (e.g., hunger dropped to "hungry") - always narrate these
+    - **Reminders**: Ongoing negative states not mentioned for 2+ in-game hours - consider mentioning
+    - **Status**: Reference-only information for GM awareness
+  - New `mark_need_communicated` GM tool to record when a need was narrated
+  - GM prompt updated with "Needs Narration Guidelines" section explaining the system
+  - Added 17 unit tests for the communication manager
+  - Fixes repetitive need narration that annoyed players
+
+- **GM Needs Awareness - Positive States** - GM now receives information about positive need states
+  - Context compiler reports "well-fed" when hunger > 85, "well-rested" when energy > 80
+  - Reports "clean" when hygiene > 80, "comfortable" when comfort > 80
+  - Reports "in good spirits" when morale > 80, "socially fulfilled" when social > 80
+  - Reports "healthy" when wellness > 90, "content" when intimacy > 80
+  - Fixes issue where GM would assume hunger when player was full (hunger=85+)
+  - Added 7 unit tests for positive/negative state descriptors
+
+- **Negative Action Types for Needs** - GM can now decrease needs for adverse events
+  - Hygiene: sweat (-10), get_dirty (-15), mud (-25), blood (-20), filth (-35), sewer (-40)
+  - Comfort: cramped (-10), uncomfortable (-15), get_wet (-20), get_cold (-20), freezing (-30)
+  - Social: snub (-10), argument (-15), rejection (-25), betrayal (-40), isolation (-20)
+  - Intimacy: rebuff (-10), romantic_rejection (-20), heartbreak (-40), loneliness (-15)
+  - Thirst: salty_food (-10), vomit (-25), heavy_exertion (-20)
+  - Updated GM prompt template with negative action documentation
+  - Updated satisfy_need tool description to explain negative actions
+  - Added 6 unit tests for negative action types
+
+- **GM World Spawning Tools** - GM can now create furniture and items in the world that appear in `/nearby`
+  - `spawn_storage` tool: Creates storage surfaces (table, shelf, chest, counter, barrel, etc.) at current location
+  - `spawn_item` tool: Places interactable items on storage surfaces (requires surface to exist first)
+  - Both tools auto-generate unique keys and link to current Location via `world_location_id`
+  - Items appear correctly grouped by surface in `/nearby` command output
+  - Added 10 unit tests for spawn tool definitions and executors
+- **Location Inventory Context for GM** - GM now sees existing storage and items when describing scenes
+  - New `_get_location_inventory_context()` method in `ContextCompiler`
+  - Shows storage surfaces (tables, shelves, etc.) at current location with their contents
+  - Shows detailed item list with keys, descriptions, and placement
+  - Prevents GM from duplicating existing items or describing "phantom" items
+  - Added to `SceneContext.location_inventory_context` field
+  - Added 6 unit tests for inventory context compilation
+- **World Creation Rules in GM Prompt** - Clear instructions for the describe-then-spawn workflow
+  - "Location Inventory Awareness" section explains checking existing items first
+  - "Spawning Furniture" section with `spawn_storage` examples
+  - "Spawning Items" section with clear ✅/❌ examples of what to spawn vs skip
+  - "Describe-Then-Spawn Workflow" step-by-step guide
+  - "Don't Duplicate" section to prevent phantom items
+
+- **Full NPC Generation for Backstory Characters** - Family/friends from character creation now get full NPC data
+  - Enhanced `world_extraction.md` template with relationship_role, relationship_context, age, gender, occupation, personality_traits, brief_appearance
+  - Added `create_backstory_npc()` method in `EmergentNPCGenerator` that creates complete NPCs with:
+    - Full appearance (height, build, hair, eyes, skin, clothing)
+    - Background with relationship-aware summary (e.g., "Younger Brother of Kieran. Idolizes the player...")
+    - Personality traits from extraction plus generated flaws/quirks
+    - Starting needs (hunger, thirst, energy, social, intimacy) with age-appropriate defaults
+    - Preferences (food, drink, social, physical attraction)
+    - Attributes (STR, DEX, etc.) and skills
+  - Updated `_create_world_from_extraction()` in character.py to use full generation instead of shadow entities
+  - Added 6 unit tests for backstory NPC generation
+- **Attribute Re-roll in Character Wizard** - Players can now re-roll their attributes during character creation
+  - Added `reroll_attributes` JSON output support in `wizard_attributes.md` template
+  - Handler in character wizard clears `potential_stats` and triggers fresh dice roll
+  - Maintains age/occupation modifiers while re-rolling innate potential
+
+### Changed
+- **Stats-Derived Build** - Character physical build now auto-derived from calculated attributes
+  - Added `infer_build_from_stats()` function to `attribute_calculator.py`
+  - Removed `build` from required NAME section fields (now optional)
+  - Build auto-set when attributes are finalized: high STR → "muscular", high DEX → "lean and agile", etc.
+  - Ensures appearance consistency with actual stats (no more "lean agile" with STR 16, DEX 11)
+- **Outfit Command Visual Details** - `/outfit` now shows clothing color and material inline
+  - Format: `Simple Tunic (faded blue linen)` instead of just `Simple Tunic`
+  - Extracts visual properties from `item.properties["visual"]` if available
+
+### Fixed
+- **Character Occupation Not in Opening Scene** - Fixed bug where player occupation was ignored in game opening
+  - Root cause: `ContextCompiler._get_player_context()` omitted occupation from player context passed to GM
+  - Fix: Added occupation (with years if set) to player context after appearance section
+  - Example: "- Occupation: farmer (3 years)"
+- **Character Wizard eye_color Not Saved** - Fixed bug where eye color was displayed in narrative but not saved
+  - Root cause: LLM mentions "hazel eyes" in text but omits `eye_color` from JSON `field_updates`
+  - Fix: Added `_extract_missing_appearance_fields()` fallback extractor that parses eye/hair color from narrative when missing from JSON
+  - Applied only to NAME section where these fields are required
+  - Added 7 unit tests for the extraction logic
+- **Turn Entity Extraction Not Persisted** - Fixed bug where `Turn.entities_extracted` was NULL for turns 15+
+  - Root cause: `persistence_node.py:_create_turn_record()` only set `entities_extracted` when updating existing turns, not when creating new ones
+  - Fix: Added `entities_extracted` and `location_at_turn` fields to Turn creation (line 481-482)
+  - Also added `db.flush()` after updating existing turns to ensure visibility (line 473)
+  - Added regression test `TestTurnPersistence::test_entities_extracted_persisted_on_turn_record`
+- **Session 72 Data Corrections** - Manual SQL fixes for game state issues:
+  - Moved `porridge_bowl` from player's hand to table (storage_location_id=19)
+  - Fixed location hierarchy: `weary_traveler_inn`, `henrik_forge`, `baker_shop` now correctly parented to `village`
+  - Fixed turn 21 location: `inn_common_room` → `village_square` (player had exited inn)
+
+### Changed
+- **GM Prompt Location Guidance** - Added "Location Changes" section to `data/templates/game_master.md`
+  - Clear instructions for when to use `location_change` in STATE block
+  - Examples: exiting buildings, entering buildings, traveling between areas
+  - Emphasizes that location tracking depends on this signal
+
+### Added
+- **Phase 2 GM Tools: Quest, Fact, and NPC Management** - New tools for comprehensive game state management
+  - **Quest Tools**: `assign_quest`, `update_quest`, `complete_quest` for quest lifecycle management
+  - **World Fact Tool**: `record_fact` for SPV (Subject-Predicate-Value) world knowledge tracking
+  - **NPC Scene Tools**: `introduce_npc` (creates/updates NPC with initial relationship), `npc_leaves` (updates NPC location)
+  - All tools integrated into GMToolExecutor with proper validation
+  - Added 13 new tests (3 definition + 10 executor) for Phase 2 tools
+- **Player Action Commands with Pre-Validation** - New slash commands that validate before GM invocation
+  - **`/go <place>`** - Movement command with validation context for GM
+  - **`/take <item>`** - Pickup with weight and slot validation; rejects if inventory full
+  - **`/drop <item>`** - Drop with inventory check; rejects if item not possessed
+  - **`/give <item> to <npc>`** - Give with inventory validation
+  - **`/attack <target>`** - Combat initiation with validation context
+  - **Smart Hybrid Input**: Both slash commands AND natural language (e.g., "pick up the sword") are detected and validated
+  - **Immediate Feedback**: Invalid actions return errors instantly without waiting for GM response
+  - **Enhanced Input**: Valid actions pass `[VALIDATED: ...]` context to GM for reliable tool invocation
+  - Added 20 new tests for action detection and validation (`TestActionCommandDetection`, `TestActionCommandValidation`)
+  - Updated `/help` command to show new action commands
+- **Tool-Based State Management** - New GM tools to replace fragile STATE block parsing
+  - **`advance_time`** - Explicitly advance game time (1-480 minutes) with automatic TimeState update
+  - **`entity_move`** - Move player or NPCs to locations; player moves update game state, NPC moves update NPCExtension
+  - **`start_combat` / `end_combat`** - Combat lifecycle management with enemy validation and outcome tracking
+  - **`pending_state_updates`** mechanism in GMToolExecutor for reliable state propagation
+  - Tool-based updates take precedence over STATE block parsing (kept as fallback)
+  - Updated `game_master.md` template with tool usage instructions
+  - Comprehensive unit tests for all new tools and integration tests for state propagation
 - **Enhanced Inventory & Storage System** - Comprehensive item ownership, theft tracking, and container management
   - **Theft Tracking**: Items now track `is_stolen` (active), `was_ever_stolen` (historical), `stolen_from_id`, `stolen_from_location_id`, and `original_owner_id` for provenance
   - **Location Ownership**: Items and storage can be owned by locations (e.g., inn's bowls) via `owner_location_id`

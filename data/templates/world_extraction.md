@@ -48,13 +48,21 @@ Use null for any field not mentioned. Infer reasonable values if clearly implied
 
 Every named person, creature, or organization mentioned becomes a Shadow Entity.
 These are entities that exist in the world but haven't appeared on-screen yet.
+Extract FULL character details for each NPC - they will be fully generated characters.
 
 For each named entity:
 - entity_key: lowercase with underscores (e.g., "grandmother_elara")
 - display_name: How they should be addressed (e.g., "Grandmother Elara")
 - entity_type: "npc", "monster", "animal", or "organization"
 - relationship_to_player: "family", "friend", "colleague", "mentor", "enemy", "acquaintance"
+- relationship_role: Specific role (e.g., "grandmother", "younger brother", "mentor", "employer")
+- relationship_context: How they emotionally relate to player (e.g., "idolizes player", "protective of player", "secretly jealous")
 - brief_description: What we know from backstory
+- age: Estimated age (infer from context - parent ~25 years older, sibling within 10 years, etc.)
+- gender: "male" or "female"
+- occupation: Their job or role (e.g., "farmer", "blacksmith", "homemaker", "child")
+- personality_traits: 3-5 traits including relationship-specific ones (e.g., ["protective", "hardworking", "proud of player"])
+- brief_appearance: Physical description (hair, build, distinguishing features)
 - is_alive: true unless explicitly mentioned as deceased
 - trust: 0-100 (family=90, close friend=80, acquaintance=30)
 - liking: 0-100 (similar scaling)
@@ -69,18 +77,50 @@ Example:
       "display_name": "Grandmother Elara",
       "entity_type": "npc",
       "relationship_to_player": "family",
+      "relationship_role": "grandmother",
+      "relationship_context": "Raised the player, deeply protective, worries about their safety",
       "brief_description": "Player's grandmother, they live together",
+      "age": 68,
+      "gender": "female",
+      "occupation": "retired herbalist",
+      "personality_traits": ["nurturing", "wise", "protective", "occasionally stubborn", "proud of grandchild"],
+      "brief_appearance": "silver hair in a bun, kind wrinkled face, warm brown eyes",
       "is_alive": true,
       "trust": 95,
       "liking": 90,
       "respect": 85
     }},
     {{
+      "entity_key": "younger_brother_tom",
+      "display_name": "Tom",
+      "entity_type": "npc",
+      "relationship_to_player": "family",
+      "relationship_role": "younger brother",
+      "relationship_context": "Idolizes the player, always wants to tag along, eager to learn from them",
+      "brief_description": "Player's younger brother, always following them around",
+      "age": 10,
+      "gender": "male",
+      "occupation": "child",
+      "personality_traits": ["energetic", "curious", "looks up to player", "mischievous", "easily excited"],
+      "brief_appearance": "similar features to player, gap-toothed smile, always dirty knees",
+      "is_alive": true,
+      "trust": 95,
+      "liking": 95,
+      "respect": 70
+    }},
+    {{
       "entity_key": "boss_janet",
       "display_name": "Janet",
       "entity_type": "npc",
       "relationship_to_player": "colleague",
+      "relationship_role": "employer",
+      "relationship_context": "Stern but fair, sees potential in the player",
       "brief_description": "Player's supervisor at the smithy",
+      "age": 45,
+      "gender": "female",
+      "occupation": "master blacksmith",
+      "personality_traits": ["stern", "fair", "skilled", "demanding", "secretly proud of apprentice"],
+      "brief_appearance": "muscular arms, burn scars on hands, practical short hair",
       "is_alive": true,
       "trust": 50,
       "liking": 40,

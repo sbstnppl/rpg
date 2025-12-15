@@ -706,6 +706,348 @@ class EmergentNPCGenerator:
 
         return npc_state
 
+    def create_backstory_npc(
+        self,
+        shadow_data: dict,
+        player_name: str,
+    ) -> NPCFullState:
+        """Create full NPC from backstory extraction data.
+
+        Used during character creation to generate complete NPCs from
+        family, friends, and other relationships mentioned in the player's
+        backstory. These NPCs get full personality, preferences, needs,
+        and skills - just like gameplay-generated NPCs.
+
+        Args:
+            shadow_data: Extracted shadow entity dict with fields:
+                - entity_key: Unique identifier
+                - display_name: Display name
+                - relationship_to_player: family/friend/colleague/etc.
+                - relationship_role: Specific role (younger brother, mother, etc.)
+                - relationship_context: Emotional context (idolizes player, etc.)
+                - age: Estimated age
+                - gender: male/female
+                - occupation: Job or role
+                - personality_traits: List of traits
+                - brief_appearance: Physical description
+                - brief_description: Summary from backstory
+            player_name: The player character's name for relationship context.
+
+        Returns:
+            NPCFullState with complete character data.
+        """
+        # Extract data from shadow_data with defaults
+        entity_key = shadow_data.get("entity_key", "unknown_npc")
+        name = shadow_data.get("display_name", entity_key.replace("_", " ").title())
+        gender = shadow_data.get("gender", "male")
+        age = shadow_data.get("age", 30)
+        occupation = shadow_data.get("occupation", "commoner")
+        relationship_role = shadow_data.get("relationship_role", "acquaintance")
+        relationship_context = shadow_data.get("relationship_context", "")
+        personality_traits = shadow_data.get("personality_traits", [])
+        brief_appearance = shadow_data.get("brief_appearance", "")
+        brief_description = shadow_data.get("brief_description", "")
+
+        # Check if already exists
+        existing = self._get_existing_entity(entity_key)
+        if existing:
+            logger.info(f"Backstory NPC {entity_key} already exists")
+            # Return minimal state for existing entity
+            return self._build_minimal_state_from_entity(existing)
+
+        # Build constraints from extracted data
+        constraints = NPCConstraints(
+            name=name,
+            gender=gender,
+            age_exact=age,
+            occupation=occupation,
+            personality=personality_traits if personality_traits else None,
+            friendly_to_player=True,  # Backstory NPCs know the player
+            relationship_role=relationship_role,
+            relationship_context=relationship_context,
+            brief_appearance=brief_appearance,
+        )
+
+        # Generate appearance (using brief_appearance from extraction)
+        appearance = self._generate_backstory_appearance(
+            gender=gender,
+            age=age,
+            brief_appearance=brief_appearance,
+        )
+
+        # Generate background (incorporating relationship context)
+        background = self._generate_backstory_background(
+            occupation=occupation,
+            age=age,
+            relationship_role=relationship_role,
+            relationship_context=relationship_context,
+            brief_description=brief_description,
+            player_name=player_name,
+        )
+
+        # Generate personality (using extracted traits)
+        personality = self._generate_backstory_personality(
+            traits=personality_traits,
+            relationship_context=relationship_context,
+        )
+
+        # Generate preferences (based on age, gender, personality)
+        preferences = self._generate_preferences(gender, age, personality)
+
+        # Generate needs (reasonable defaults for backstory NPCs)
+        current_needs = self._generate_backstory_needs(occupation, age)
+
+        # Generate current state (simple defaults)
+        current_state = NPCCurrentState(
+            current_activity="going about daily routine",
+            mood="content",
+            current_location="unknown",  # Will be updated when they appear in game
+        )
+
+        # Create the full state (no environmental reactions for backstory NPCs)
+        npc_state = NPCFullState(
+            entity_key=entity_key,
+            display_name=name,
+            appearance=appearance,
+            background=background,
+            personality=personality,
+            preferences=preferences,
+            current_needs=current_needs,
+            current_state=current_state,
+            environmental_reactions=[],  # No scene yet
+            immediate_goals=[],
+            behavioral_prediction="",
+        )
+
+        # Persist to database
+        self._persist_npc(npc_state)
+
+        return npc_state
+
+    def _generate_backstory_appearance(
+        self,
+        gender: str,
+        age: int,
+        brief_appearance: str,
+    ) -> NPCAppearance:
+        """Generate appearance for backstory NPC.
+
+        Uses brief_appearance from extraction and fills in missing details.
+        """
+        # Parse age description
+        if age < 13:
+            age_description = "child"
+        elif age < 20:
+            age_description = "teenager"
+        elif age < 30:
+            age_description = "young adult"
+        elif age < 50:
+            age_description = "middle-aged"
+        else:
+            age_description = "elderly"
+
+        # Height based on age (cm and description)
+        if age < 14:
+            height_description = "short"
+            height_cm = random.randint(100, 150)
+            build = "slight"
+        elif age < 18:
+            height_description = "average"
+            height_cm = random.randint(150, 170)
+            build = "lean"
+        else:
+            height_description = random.choice(["short", "average", "average", "tall"])
+            height_cm = {
+                "short": random.randint(150, 165),
+                "average": random.randint(165, 180),
+                "tall": random.randint(180, 200),
+            }[height_description]
+            build = random.choice(["slight", "average", "average", "sturdy", "muscular"])
+
+        # Generate appearance features with some variety
+        hair_colors = ["black", "brown", "dark brown", "auburn", "sandy brown", "blonde", "red", "gray"]
+        hair_styles = ["short", "long", "braided", "tied back", "loose", "messy", "neat"]
+        eye_colors = ["brown", "dark brown", "blue", "green", "hazel", "gray"]
+        skin_tones = ["fair", "olive", "tan", "dark", "pale", "weathered"]
+
+        # Adjust for age
+        if age > 50:
+            hair_colors = ["gray", "silver", "white", "graying brown", "graying black"]
+
+        # Pick random features
+        hair = f"{random.choice(hair_colors)}, {random.choice(hair_styles)}"
+        eyes = random.choice(eye_colors)
+        skin = random.choice(skin_tones)
+
+        # Simple occupation-appropriate clothing
+        clothing = "simple peasant clothes"
+
+        # Parse notable features from brief_appearance
+        notable_features = []
+        if brief_appearance:
+            notable_features.append(brief_appearance)
+
+        return NPCAppearance(
+            age=age,
+            age_description=age_description,
+            gender=gender,
+            height_cm=height_cm,
+            height_description=height_description,
+            build=build,
+            hair=hair,
+            eyes=eyes,
+            skin=skin,
+            clothing=clothing,
+            notable_features=notable_features,
+            species="human",  # Default for fantasy setting
+        )
+
+    def _generate_backstory_background(
+        self,
+        occupation: str,
+        age: int,
+        relationship_role: str,
+        relationship_context: str,
+        brief_description: str,
+        player_name: str,
+    ) -> NPCBackground:
+        """Generate background for backstory NPC.
+
+        Incorporates relationship context into the background summary.
+        """
+        # Calculate occupation years
+        if occupation.lower() in ["child", "baby", "infant"]:
+            occupation_years = 0
+        else:
+            max_years = max(1, age - 14)
+            occupation_years = min(max_years, random.randint(1, 20))
+
+        # Build relationship-aware summary
+        if relationship_context:
+            summary = f"{relationship_role.title()} of {player_name}. {relationship_context}. {brief_description}"
+        else:
+            summary = f"{relationship_role.title()} of {player_name}. {brief_description}"
+
+        return NPCBackground(
+            occupation=occupation,
+            occupation_years=occupation_years,
+            birthplace=self._generate_birthplace(),
+            family=f"Has connection to {player_name} ({relationship_role})",
+            education=self._generate_education(occupation),
+            background_summary=summary.strip(),
+        )
+
+    def _generate_backstory_personality(
+        self,
+        traits: list[str],
+        relationship_context: str,
+    ) -> NPCPersonality:
+        """Generate personality for backstory NPC.
+
+        Uses extracted traits and relationship context.
+        """
+        # Use extracted traits or generate defaults (2-6 traits required)
+        if traits:
+            personality_traits = traits[:6]
+            # Ensure minimum of 2 traits
+            if len(personality_traits) < 2:
+                personality_traits.extend(["reserved", "practical"][:2 - len(personality_traits)])
+        else:
+            personality_traits = ["reserved", "practical"]
+
+        # Generate values based on relationship
+        values = ["loyalty", "family"]  # Backstory NPCs value their relationship
+
+        # Generate flaws (1-4 required)
+        common_flaws = ["stubborn", "impatient", "overly cautious", "too trusting", "proud", "worrier"]
+        flaws = [random.choice(common_flaws)]
+
+        # Generate optional quirks based on relationship context
+        quirks = []
+        if relationship_context:
+            quirks.append(f"Acts based on {relationship_context}")
+
+        return NPCPersonality(
+            traits=personality_traits,
+            values=values,
+            flaws=flaws,
+            quirks=quirks,
+        )
+
+    def _generate_backstory_needs(
+        self,
+        occupation: str,
+        age: int,
+    ) -> NPCNeeds:
+        """Generate starting needs for backstory NPC.
+
+        Returns reasonable defaults based on role.
+        """
+        # Children have different need patterns
+        if age < 14:
+            return NPCNeeds(
+                hunger=20,  # Low urgency = well-fed
+                thirst=15,
+                fatigue=10,  # Kids have energy
+                social=15,
+                comfort=20,
+            )
+
+        # Adults have moderate needs
+        return NPCNeeds(
+            hunger=25,
+            thirst=20,
+            fatigue=30,
+            social=25,
+            comfort=25,
+        )
+
+    def _build_minimal_state_from_entity(
+        self,
+        entity: Entity,
+    ) -> NPCFullState:
+        """Build minimal NPCFullState from existing entity.
+
+        Used when a backstory NPC already exists in database.
+        """
+        # Get NPC extension for personality
+        npc_ext = (
+            self.db.query(NPCExtension)
+            .filter(NPCExtension.entity_id == entity.id)
+            .first()
+        )
+
+        appearance = entity.appearance or {}
+        return NPCFullState(
+            entity_key=entity.entity_key,
+            display_name=entity.display_name,
+            appearance=NPCAppearance(
+                age=appearance.get("age", 30),
+                age_apparent=appearance.get("age_apparent", "adult"),
+                gender=appearance.get("gender", "unknown"),
+                height=appearance.get("height", "average"),
+                build=appearance.get("build", "average"),
+                species=appearance.get("species", "human"),
+            ),
+            background=NPCBackground(
+                occupation=entity.occupation or "unknown",
+                occupation_years=entity.occupation_years or 1,
+                background_summary=entity.background or "",
+            ),
+            personality=NPCPersonality(
+                primary_traits=npc_ext.personality_traits if npc_ext and npc_ext.personality_traits else [],
+            ),
+            preferences=NPCPreferences(),
+            current_needs=NPCNeeds(),
+            current_state=NPCCurrentState(
+                current_activity="unknown",
+                current_mood="neutral",
+            ),
+            environmental_reactions=None,
+            immediate_goals=[],
+            behavioral_prediction="",
+        )
+
     def query_npc_reactions(
         self,
         entity_key: str,

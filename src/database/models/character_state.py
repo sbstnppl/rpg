@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -172,3 +173,67 @@ class CharacterNeeds(Base, TimestampMixin):
             return max(0, need_value - craving_value)
 
         return need_value
+
+
+class NeedsCommunicationLog(Base, TimestampMixin):
+    """Tracks when character needs were last communicated to the player.
+
+    This enables signal-based needs narration:
+    - Alert GM when need state CHANGES (crossed threshold)
+    - Remind GM of ongoing issues after X hours without mention
+    - Prevent repetitive "your stomach growls" every turn
+    """
+
+    __tablename__ = "needs_communication_log"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id", "entity_id", "need_name",
+            name="uq_needs_comm_session_entity_need"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("game_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    entity_id: Mapped[int] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    need_name: Mapped[str] = mapped_column(
+        nullable=False,
+        comment="Need being tracked (hunger, energy, hygiene, etc.)",
+    )
+
+    # When was this need last communicated to the player?
+    communicated_turn: Mapped[int] = mapped_column(
+        nullable=False,
+        comment="Turn number when this need was last narrated",
+    )
+    communicated_game_time: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        comment="In-game datetime when this need was last narrated",
+    )
+
+    # What was the state when communicated?
+    communicated_value: Mapped[int] = mapped_column(
+        nullable=False,
+        comment="Need value (0-100) at time of communication",
+    )
+    communicated_state: Mapped[str] = mapped_column(
+        nullable=False,
+        comment="State label (hungry, starving, well-fed, etc.) when communicated",
+    )
+
+    # Relationships
+    entity: Mapped["Entity"] = relationship(foreign_keys=[entity_id])
+
+    def __repr__(self) -> str:
+        return (
+            f"<NeedsCommunicationLog entity={self.entity_id} "
+            f"need={self.need_name} state={self.communicated_state} turn={self.communicated_turn}>"
+        )

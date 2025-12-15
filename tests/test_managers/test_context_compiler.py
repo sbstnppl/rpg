@@ -569,3 +569,390 @@ class TestWorldFactsContext:
 
         assert "IMPORTANT" in result
         assert "consistency" in result.lower() or "invent" in result.lower()
+
+
+class TestPlayerContextOccupation:
+    """Tests for player occupation in context."""
+
+    def test_player_context_includes_occupation(
+        self, db_session, game_session, player_entity
+    ):
+        """Player context should include occupation when set."""
+        player_entity.occupation = "farmer"
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_player_context(player_entity.id)
+
+        assert "Occupation: farmer" in result
+
+    def test_player_context_includes_occupation_with_years(
+        self, db_session, game_session, player_entity
+    ):
+        """Player context should include occupation years when set."""
+        player_entity.occupation = "blacksmith"
+        player_entity.occupation_years = 5
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_player_context(player_entity.id)
+
+        assert "Occupation: blacksmith (5 years)" in result
+
+    def test_player_context_omits_occupation_when_not_set(
+        self, db_session, game_session, player_entity
+    ):
+        """Player context should not have occupation line when not set."""
+        # player_entity has no occupation by default
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_player_context(player_entity.id)
+
+        assert "Occupation:" not in result
+
+
+class TestLocationInventoryContext:
+    """Tests for location inventory context (storage surfaces and items)."""
+
+    def test_get_location_inventory_context_returns_empty_when_no_location(
+        self, db_session, game_session, player_entity
+    ):
+        """Should return empty string when location doesn't exist."""
+        compiler = ContextCompiler(db_session, game_session)
+
+        result = compiler._get_location_inventory_context(location_key="nonexistent")
+
+        assert result == ""
+
+    def test_get_location_inventory_context_returns_empty_when_no_storage(
+        self, db_session, game_session, player_entity
+    ):
+        """Should return empty string when location has no storage surfaces."""
+        from tests.factories import create_location
+
+        location = create_location(
+            db_session,
+            game_session,
+            location_key="empty_room",
+            display_name="Empty Room",
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_location_inventory_context(location_key="empty_room")
+
+        assert result == ""
+
+    def test_get_location_inventory_context_shows_storage_surfaces(
+        self, db_session, game_session, player_entity
+    ):
+        """Should list storage surfaces at the location."""
+        from src.database.models.enums import StorageLocationType
+        from src.database.models.items import StorageLocation
+        from tests.factories import create_location
+
+        location = create_location(
+            db_session,
+            game_session,
+            location_key="cottage",
+            display_name="Cozy Cottage",
+        )
+        db_session.flush()
+
+        # Create storage surfaces
+        table = StorageLocation(
+            session_id=game_session.id,
+            location_key="table_01",
+            location_type=StorageLocationType.PLACE,
+            container_type="table",
+            world_location_id=location.id,
+        )
+        shelf = StorageLocation(
+            session_id=game_session.id,
+            location_key="shelf_01",
+            location_type=StorageLocationType.PLACE,
+            container_type="shelf",
+            world_location_id=location.id,
+        )
+        db_session.add_all([table, shelf])
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_location_inventory_context(location_key="cottage")
+
+        assert "Location Inventory" in result
+        assert "Storage Surfaces" in result
+        assert "Table (table_01)" in result
+        assert "Shelf (shelf_01)" in result
+        assert "empty" in result  # No items yet
+
+    def test_get_location_inventory_context_shows_items_on_surfaces(
+        self, db_session, game_session, player_entity
+    ):
+        """Should show items placed on storage surfaces."""
+        from src.database.models.enums import ItemType, StorageLocationType
+        from src.database.models.items import Item, StorageLocation
+        from tests.factories import create_location
+
+        location = create_location(
+            db_session,
+            game_session,
+            location_key="cottage",
+            display_name="Cozy Cottage",
+        )
+        db_session.flush()
+
+        # Create storage surface
+        table = StorageLocation(
+            session_id=game_session.id,
+            location_key="table_01",
+            location_type=StorageLocationType.PLACE,
+            container_type="table",
+            world_location_id=location.id,
+        )
+        db_session.add(table)
+        db_session.flush()
+
+        # Create items on the table
+        bread = Item(
+            session_id=game_session.id,
+            item_key="bread_01",
+            display_name="Half-loaf of Bread",
+            description="A half-eaten loaf of brown bread",
+            item_type=ItemType.CONSUMABLE,
+            storage_location_id=table.id,
+        )
+        bowl = Item(
+            session_id=game_session.id,
+            item_key="bowl_01",
+            display_name="Clay Bowl",
+            description="A simple clay bowl",
+            item_type=ItemType.MISC,
+            storage_location_id=table.id,
+        )
+        db_session.add_all([bread, bowl])
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_location_inventory_context(location_key="cottage")
+
+        # Storage surfaces section
+        assert "Table (table_01): Half-loaf of Bread, Clay Bowl" in result
+
+        # Items at location section
+        assert "Items at Location" in result
+        assert "bread_01" in result
+        assert "bowl_01" in result
+        assert "on table" in result
+
+    def test_get_location_inventory_context_in_scene_context(
+        self, db_session, game_session, player_entity
+    ):
+        """Location inventory should be included in compiled scene context."""
+        from src.database.models.enums import StorageLocationType
+        from src.database.models.items import StorageLocation
+        from tests.factories import create_location
+
+        location = create_location(
+            db_session,
+            game_session,
+            location_key="tavern",
+            display_name="The Rusty Anchor",
+        )
+        db_session.flush()
+
+        # Create storage surface
+        counter = StorageLocation(
+            session_id=game_session.id,
+            location_key="counter_01",
+            location_type=StorageLocationType.PLACE,
+            container_type="counter",
+            world_location_id=location.id,
+        )
+        db_session.add(counter)
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        scene = compiler.compile_scene(
+            player_id=player_entity.id,
+            location_key="tavern",
+            turn_number=1,
+        )
+
+        assert "Location Inventory" in scene.location_inventory_context
+        assert "Counter (counter_01)" in scene.location_inventory_context
+
+    def test_location_inventory_context_in_to_prompt(
+        self, db_session, game_session, player_entity
+    ):
+        """Location inventory should appear in to_prompt() output."""
+        from src.database.models.enums import StorageLocationType
+        from src.database.models.items import StorageLocation
+        from tests.factories import create_location
+
+        location = create_location(
+            db_session,
+            game_session,
+            location_key="shop",
+            display_name="General Store",
+        )
+        db_session.flush()
+
+        shelf = StorageLocation(
+            session_id=game_session.id,
+            location_key="shelf_02",
+            location_type=StorageLocationType.PLACE,
+            container_type="shelf",
+            world_location_id=location.id,
+        )
+        db_session.add(shelf)
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        scene = compiler.compile_scene(
+            player_id=player_entity.id,
+            location_key="shop",
+            turn_number=1,
+        )
+
+        prompt = scene.to_prompt()
+
+        assert "Location Inventory" in prompt
+        assert "Shelf (shelf_02)" in prompt
+
+
+class TestNeedsDescription:
+    """Tests for _get_needs_description method with positive and negative states."""
+
+    def test_includes_positive_state_well_fed(self, db_session, game_session, player_entity):
+        """When hunger is high, should report 'well-fed'."""
+        from tests.factories import create_character_needs
+
+        create_character_needs(
+            db_session, game_session, player_entity,
+            hunger=90,  # High hunger = well-fed
+            energy=50,  # Neutral
+            hygiene=50,
+            morale=50,
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_needs_description(player_entity.id)
+
+        assert "well-fed" in result
+
+    def test_includes_positive_state_well_rested(self, db_session, game_session, player_entity):
+        """When energy is high, should report 'well-rested'."""
+        from tests.factories import create_character_needs
+
+        create_character_needs(
+            db_session, game_session, player_entity,
+            hunger=50,
+            energy=85,  # High energy = well-rested
+            hygiene=50,
+            morale=50,
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_needs_description(player_entity.id)
+
+        assert "well-rested" in result
+
+    def test_includes_positive_state_clean(self, db_session, game_session, player_entity):
+        """When hygiene is high, should report 'clean'."""
+        from tests.factories import create_character_needs
+
+        create_character_needs(
+            db_session, game_session, player_entity,
+            hunger=50,
+            energy=50,
+            hygiene=85,  # High hygiene = clean
+            morale=50,
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_needs_description(player_entity.id)
+
+        assert "clean" in result
+
+    def test_includes_positive_state_good_spirits(self, db_session, game_session, player_entity):
+        """When morale is high, should report 'in good spirits'."""
+        from tests.factories import create_character_needs
+
+        create_character_needs(
+            db_session, game_session, player_entity,
+            hunger=50,
+            energy=50,
+            hygiene=50,
+            morale=85,  # High morale = in good spirits
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_needs_description(player_entity.id)
+
+        assert "in good spirits" in result
+
+    def test_includes_negative_state_hungry(self, db_session, game_session, player_entity):
+        """When hunger is low, should report 'hungry' or 'starving'."""
+        from tests.factories import create_character_needs
+
+        create_character_needs(
+            db_session, game_session, player_entity,
+            hunger=25,  # Low hunger = hungry
+            energy=50,
+            hygiene=50,
+            morale=50,
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_needs_description(player_entity.id)
+
+        assert "hungry" in result
+
+    def test_neutral_state_shows_nothing(self, db_session, game_session, player_entity):
+        """When needs are in neutral range, should not include that descriptor."""
+        from tests.factories import create_character_needs
+
+        create_character_needs(
+            db_session, game_session, player_entity,
+            hunger=60,  # Neutral - not hungry, not full
+            energy=60,  # Neutral - not tired, not rested
+            hygiene=60,  # Neutral
+            morale=60,  # Neutral
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_needs_description(player_entity.id)
+
+        # Should not have any of these descriptors
+        assert "hungry" not in result
+        assert "well-fed" not in result
+        assert "tired" not in result
+        assert "well-rested" not in result
+
+    def test_multiple_positive_states(self, db_session, game_session, player_entity):
+        """Should include multiple positive descriptors when applicable."""
+        from tests.factories import create_character_needs
+
+        create_character_needs(
+            db_session, game_session, player_entity,
+            hunger=90,
+            energy=85,
+            hygiene=85,
+            morale=85,
+            comfort=85,
+        )
+        db_session.flush()
+
+        compiler = ContextCompiler(db_session, game_session)
+        result = compiler._get_needs_description(player_entity.id)
+
+        assert "well-fed" in result
+        assert "well-rested" in result
+        assert "clean" in result
+        assert "in good spirits" in result

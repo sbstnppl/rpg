@@ -470,6 +470,7 @@ def _create_turn_record(
             existing.entities_extracted = state.get("extracted_entities") or []
         if state.get("player_location"):
             existing.location_at_turn = state.get("player_location")
+        db.flush()  # Ensure changes visible before _save_turn_immediately queries
         return existing
 
     # Create new turn (fallback for non-game.py callers like tests)
@@ -478,6 +479,8 @@ def _create_turn_record(
         turn_number=turn_number,
         player_input=state.get("player_input", ""),
         gm_response=state.get("gm_response", ""),
+        entities_extracted=state.get("extracted_entities") or [],
+        location_at_turn=state.get("player_location"),
     )
     db.add(turn)
     db.flush()

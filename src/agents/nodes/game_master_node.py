@@ -200,7 +200,7 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
     raw_response = "\n\n".join(accumulated_text)
     narrative, state_changes = parse_state_block(raw_response, return_narrative=True)
 
-    # Build result
+    # Build result from STATE block parsing (fallback approach)
     result = {
         "gm_response": narrative.strip(),
         "time_advance_minutes": state_changes.get("time_advance_minutes", 5),
@@ -209,6 +209,12 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
         "combat_active": state_changes.get("combat_active", False),
         "skill_checks": skill_checks,  # For interactive dice display
     }
+
+    # Merge tool-based state updates (takes precedence over STATE block parsing)
+    # This is the new approach that replaces STATE block parsing
+    if executor is not None and executor.pending_state_updates:
+        for key, value in executor.pending_state_updates.items():
+            result[key] = value
 
     # Add error info if response was empty
     if not narrative.strip():

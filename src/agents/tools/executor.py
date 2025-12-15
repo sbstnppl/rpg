@@ -15,7 +15,8 @@ from src.agents.schemas.npc_state import (
     VisibleItem,
 )
 from src.database.models.entities import Entity, EntityAttribute, EntitySkill
-from src.database.models.enums import DiscoveryMethod
+from src.database.models.enums import DiscoveryMethod, ItemType, StorageLocationType
+from src.database.models.items import Item, StorageLocation
 from src.database.models.session import GameSession
 from src.dice.checks import (
     calculate_ability_modifier,
@@ -62,6 +63,10 @@ class GMToolExecutor:
         self._discovery_manager: DiscoveryManager | None = None
         self._npc_generator = None
         self._item_generator = None
+
+        # State updates to propagate to game_master_node
+        # These replace the STATE block parsing approach
+        self.pending_state_updates: dict[str, Any] = {}
 
     @property
     def zone_manager(self) -> ZoneManager:
@@ -118,6 +123,7 @@ class GMToolExecutor:
             "update_npc_attitude": self._execute_update_npc_attitude,
             "satisfy_need": self._execute_satisfy_need,
             "apply_stimulus": self._execute_apply_stimulus,
+            "mark_need_communicated": self._execute_mark_need_communicated,
             "check_route": self._execute_check_route,
             "start_travel": self._execute_start_travel,
             "move_to_zone": self._execute_move_to_zone,
@@ -133,6 +139,23 @@ class GMToolExecutor:
             # Item acquisition tools
             "acquire_item": self._execute_acquire_item,
             "drop_item": self._execute_drop_item,
+            # World spawning tools
+            "spawn_storage": self._execute_spawn_storage,
+            "spawn_item": self._execute_spawn_item,
+            # State management tools (replace STATE block)
+            "advance_time": self._execute_advance_time,
+            "entity_move": self._execute_entity_move,
+            "start_combat": self._execute_start_combat,
+            "end_combat": self._execute_end_combat,
+            # Quest management tools
+            "assign_quest": self._execute_assign_quest,
+            "update_quest": self._execute_update_quest,
+            "complete_quest": self._execute_complete_quest,
+            # World fact tools
+            "record_fact": self._execute_record_fact,
+            # NPC scene management tools
+            "introduce_npc": self._execute_introduce_npc,
+            "npc_leaves": self._execute_npc_leaves,
         }
 
         handler = handlers.get(tool_name)
@@ -630,6 +653,86 @@ class GMToolExecutor:
             result["message"] = f"Unknown stimulus type: {stimulus_type}"
 
         return result
+
+    def _execute_mark_need_communicated(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Mark that a need was communicated to the player in the narration.
+
+        This prevents repetitive mentions of the same need state. The system will
+        avoid alerting the GM about this need until the state changes or significant
+        time passes.
+
+        Args:
+            args: Tool arguments with entity_key and need_name.
+
+        Returns:
+            Confirmation of the communication record.
+        """
+        from src.database.models.world import TimeState
+        from src.managers.needs import NeedsManager
+        from src.managers.needs_communication_manager import NeedsCommunicationManager
+
+        entity_key = args["entity_key"]
+        need_name = args["need_name"]
+
+        # Get entity
+        entity = self._get_entity_by_key(entity_key)
+        if entity is None:
+            return {"error": f"Entity '{entity_key}' not found"}
+
+        # Get current needs to record the state
+        needs_mgr = NeedsManager(self.db, self.game_session)
+        needs = needs_mgr.get_needs(entity.id)
+        if needs is None:
+            return {"error": f"No needs record for entity '{entity_key}'"}
+
+        # Get current need value
+        need_value = getattr(needs, need_name, None)
+        if need_value is None:
+            return {"error": f"Unknown need: {need_name}"}
+
+        # Get game time
+        time_state = (
+            self.db.query(TimeState)
+            .filter(TimeState.session_id == self.game_session.id)
+            .first()
+        )
+
+        # Construct game datetime
+        if time_state:
+            from datetime import datetime
+            hour, minute = 8, 0
+            if time_state.current_time:
+                parts = time_state.current_time.split(":")
+                if len(parts) >= 2:
+                    hour = int(parts[0])
+                    minute = int(parts[1])
+            game_time = datetime(2000, 1, time_state.current_day, hour, minute)
+        else:
+            from datetime import datetime
+            game_time = datetime(2000, 1, 1, 8, 0)
+
+        # Get state label
+        comm_mgr = NeedsCommunicationManager(self.db, self.game_session)
+        state_label, _ = comm_mgr.get_state_label(need_name, need_value)
+
+        # Record the communication
+        comm_mgr.record_communication(
+            entity_id=entity.id,
+            need_name=need_name,
+            value=need_value,
+            state_label=state_label,
+            game_time=game_time,
+            turn=self.game_session.total_turns,
+        )
+
+        return {
+            "entity_key": entity_key,
+            "need_name": need_name,
+            "recorded_value": need_value,
+            "recorded_state": state_label,
+            "turn": self.game_session.total_turns,
+            "message": f"Recorded communication of {need_name} ({state_label}) for {entity_key}.",
+        }
 
     # =========================================================================
     # Navigation Tool Handlers
@@ -1431,3 +1534,863 @@ class GMToolExecutor:
                 "dropped": True,
                 "message": f"{entity.display_name} dropped {item.display_name}",
             }
+
+    # =========================================================================
+    # World Spawning Tool Handlers
+    # =========================================================================
+
+    def _execute_spawn_storage(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Spawn a storage surface at the current location.
+
+        Creates furniture like tables, shelves, chests that can hold items.
+
+        Args:
+            args: Tool arguments with container_type, optional description, storage_key.
+
+        Returns:
+            Result with storage_key and success status.
+        """
+        from src.managers.location_manager import LocationManager
+
+        container_type = args["container_type"]
+        description = args.get("description")
+        storage_key = args.get("storage_key")
+        is_fixed = args.get("is_fixed", True)
+        capacity = args.get("capacity", 20)
+
+        # Get current player location
+        if self.current_zone_key is None:
+            return {"success": False, "error": "Current location unknown"}
+
+        # Get or create Location record
+        location_mgr = LocationManager(self.db, self.game_session)
+        location = location_mgr.get_location(self.current_zone_key)
+
+        if location is None:
+            # Create a basic location record if it doesn't exist
+            from src.database.models.world import Location
+            location = Location(
+                session_id=self.game_session.id,
+                location_key=self.current_zone_key,
+                display_name=self.current_zone_key.replace("_", " ").title(),
+                description=description or f"A location with a {container_type}",
+            )
+            self.db.add(location)
+            self.db.flush()
+
+        # Generate storage key if not provided
+        if not storage_key:
+            # Count existing storage of this type at location
+            existing_count = (
+                self.db.query(StorageLocation)
+                .filter(
+                    StorageLocation.session_id == self.game_session.id,
+                    StorageLocation.world_location_id == location.id,
+                    StorageLocation.container_type == container_type,
+                )
+                .count()
+            )
+            storage_key = f"{self.current_zone_key}_{container_type}_{existing_count + 1}"
+
+        # Check if storage with this key already exists
+        existing = (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.game_session.id,
+                StorageLocation.location_key == storage_key,
+            )
+            .first()
+        )
+        if existing:
+            return {
+                "success": False,
+                "error": f"Storage '{storage_key}' already exists at this location",
+                "existing_key": existing.location_key,
+            }
+
+        # Create storage location
+        item_mgr = ItemManager(self.db, self.game_session)
+        storage = item_mgr.create_storage(
+            location_key=storage_key,
+            location_type=StorageLocationType.PLACE,
+            container_type=container_type,
+            world_location_id=location.id,
+            is_fixed=is_fixed,
+            capacity=capacity,
+        )
+
+        return {
+            "success": True,
+            "storage_key": storage.location_key,
+            "container_type": container_type,
+            "location": self.current_zone_key,
+            "description": description,
+            "message": f"Created {container_type} at {location.display_name}",
+        }
+
+    def _execute_spawn_item(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Spawn an item at the current location.
+
+        Creates an interactable item that appears in /nearby.
+
+        Args:
+            args: Tool arguments with display_name, description, item_type, surface.
+
+        Returns:
+            Result with item_key and success status.
+        """
+        from src.managers.location_manager import LocationManager
+
+        display_name = args["display_name"]
+        description = args["description"]
+        item_type_str = args["item_type"]
+        surface = args.get("surface", "floor")
+        item_key = args.get("item_key")
+        quantity = args.get("quantity", 1)
+        weight = args.get("weight", 0.5)
+
+        # Get current player location
+        if self.current_zone_key is None:
+            return {"success": False, "error": "Current location unknown"}
+
+        # Get location
+        location_mgr = LocationManager(self.db, self.game_session)
+        location = location_mgr.get_location(self.current_zone_key)
+
+        if location is None:
+            return {
+                "success": False,
+                "error": f"Location '{self.current_zone_key}' not found. Use entity_move to establish location first.",
+            }
+
+        # Find storage location for the specified surface
+        storage = (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.game_session.id,
+                StorageLocation.world_location_id == location.id,
+                StorageLocation.container_type == surface,
+            )
+            .first()
+        )
+
+        if storage is None:
+            # Check if any storage exists at all
+            any_storage = (
+                self.db.query(StorageLocation)
+                .filter(
+                    StorageLocation.session_id == self.game_session.id,
+                    StorageLocation.world_location_id == location.id,
+                )
+                .all()
+            )
+            available = [s.container_type for s in any_storage] if any_storage else []
+
+            return {
+                "success": False,
+                "error": f"No '{surface}' storage exists at this location. Use spawn_storage first.",
+                "available_surfaces": available,
+                "suggestion": f"Call spawn_storage(container_type='{surface}') first",
+            }
+
+        # Generate item key if not provided
+        if not item_key:
+            # Create slug from display name
+            slug = display_name.lower().replace(" ", "_").replace("'", "")[:30]
+            # Count existing items with similar prefix
+            existing_count = (
+                self.db.query(Item)
+                .filter(
+                    Item.session_id == self.game_session.id,
+                    Item.item_key.like(f"{slug}%"),
+                )
+                .count()
+            )
+            item_key = f"{slug}_{existing_count + 1}" if existing_count > 0 else slug
+
+        # Check if item with this key already exists
+        existing = (
+            self.db.query(Item)
+            .filter(
+                Item.session_id == self.game_session.id,
+                Item.item_key == item_key,
+            )
+            .first()
+        )
+        if existing:
+            return {
+                "success": False,
+                "error": f"Item '{item_key}' already exists",
+                "existing_name": existing.display_name,
+            }
+
+        # Map item type string to enum
+        try:
+            item_type = ItemType(item_type_str.upper())
+        except ValueError:
+            item_type = ItemType.MISC
+
+        # Create the item
+        item = Item(
+            session_id=self.game_session.id,
+            item_key=item_key,
+            display_name=display_name,
+            item_type=item_type,
+            storage_location_id=storage.id,
+            owner_location_id=location.id,  # Owned by the location
+            weight=weight,
+            quantity=quantity,
+            properties={"description": description},
+        )
+        self.db.add(item)
+        self.db.flush()
+
+        return {
+            "success": True,
+            "item_key": item.item_key,
+            "display_name": display_name,
+            "surface": surface,
+            "location": self.current_zone_key,
+            "message": f"Spawned {display_name} on {surface}",
+        }
+
+    # =========================================================================
+    # State Management Tool Handlers (replace STATE block parsing)
+    # =========================================================================
+
+    def _execute_advance_time(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Advance game time and update TimeState.
+
+        Sets pending_state_updates["time_advance_minutes"] for propagation
+        to game_master_node result.
+
+        Args:
+            args: Tool arguments with minutes, optional reason.
+
+        Returns:
+            Result with minutes_advanced and new time info.
+        """
+        from src.database.models.world import TimeState
+
+        minutes = args["minutes"]
+        reason = args.get("reason", "")
+
+        # Clamp to reasonable range
+        minutes = max(1, min(480, minutes))
+
+        # Update pending state (will be merged into node result)
+        self.pending_state_updates["time_advance_minutes"] = minutes
+
+        # Also update TimeState in database
+        time_state = (
+            self.db.query(TimeState)
+            .filter(TimeState.session_id == self.game_session.id)
+            .first()
+        )
+
+        result: dict[str, Any] = {
+            "success": True,
+            "minutes_advanced": minutes,
+            "reason": reason,
+        }
+
+        if time_state:
+            old_time = time_state.current_time
+            old_day = time_state.current_day
+
+            # Parse and advance time
+            try:
+                hours, mins = map(int, time_state.current_time.split(":"))
+                total_mins = hours * 60 + mins + minutes
+
+                # Handle day rollover
+                days_passed = total_mins // (24 * 60)
+                remaining_mins = total_mins % (24 * 60)
+                new_hours = remaining_mins // 60
+                new_mins = remaining_mins % 60
+
+                time_state.current_time = f"{new_hours:02d}:{new_mins:02d}"
+                time_state.current_day += days_passed
+
+                self.db.flush()
+
+                result["old_time"] = old_time
+                result["new_time"] = time_state.current_time
+                result["old_day"] = old_day
+                result["new_day"] = time_state.current_day
+                result["days_passed"] = days_passed
+            except (ValueError, AttributeError):
+                result["warning"] = "Could not parse current time state"
+
+        return result
+
+    def _execute_entity_move(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Move an entity (player or NPC) to a new location.
+
+        For player: Sets pending_state_updates for location tracking.
+        For NPCs: Updates their current_location in NPCExtension.
+
+        Args:
+            args: Tool arguments with entity_key, location_key, create_if_missing.
+
+        Returns:
+            Result with success status and location info.
+        """
+        from src.database.models.entities import NPCExtension
+        from src.database.models.world import Location
+
+        entity_key = args["entity_key"]
+        location_key = args["location_key"]
+        create_if_missing = args.get("create_if_missing", True)
+
+        # Get the entity
+        entity = self._get_entity_by_key(entity_key)
+        if entity is None:
+            return {"success": False, "error": f"Entity '{entity_key}' not found"}
+
+        # Check if location exists
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.game_session.id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+
+        if location is None and create_if_missing:
+            # Create a minimal location record
+            # Generate display name from key
+            display_name = location_key.replace("_", " ").title()
+            location = Location(
+                session_id=self.game_session.id,
+                location_key=location_key,
+                display_name=display_name,
+                description=f"A place called {display_name}.",
+            )
+            self.db.add(location)
+            self.db.flush()
+
+        if location is None:
+            return {
+                "success": False,
+                "error": f"Location '{location_key}' not found and create_if_missing=False",
+            }
+
+        # Handle based on entity type
+        if entity_key == "player":
+            # Player movement: update graph state tracking
+            self.pending_state_updates["location_changed"] = True
+            self.pending_state_updates["player_location"] = location_key
+            self.pending_state_updates["previous_location"] = self.current_zone_key
+        else:
+            # NPC movement: update their NPCExtension
+            npc_ext = (
+                self.db.query(NPCExtension)
+                .filter(NPCExtension.entity_id == entity.id)
+                .first()
+            )
+            if npc_ext:
+                npc_ext.current_location = location_key
+                self.db.flush()
+
+        return {
+            "success": True,
+            "entity_key": entity_key,
+            "entity_name": entity.display_name,
+            "new_location": location_key,
+            "location_name": location.display_name,
+            "was_created": location is not None and create_if_missing,
+        }
+
+    def _execute_start_combat(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Initiate a combat encounter.
+
+        Sets pending_state_updates for combat state tracking.
+
+        Args:
+            args: Tool arguments with enemy_keys, surprise, reason.
+
+        Returns:
+            Result with combat initialization info.
+        """
+        enemy_keys = args.get("enemy_keys", [])
+        surprise = args.get("surprise", "none")
+        reason = args.get("reason", "Combat initiated")
+
+        # Validate enemies exist
+        enemies = []
+        missing = []
+        for key in enemy_keys:
+            entity = self._get_entity_by_key(key)
+            if entity:
+                enemies.append({
+                    "entity_key": key,
+                    "display_name": entity.display_name,
+                })
+            else:
+                missing.append(key)
+
+        if missing:
+            return {
+                "success": False,
+                "error": f"Some enemies not found: {missing}",
+                "found_enemies": enemies,
+            }
+
+        # Update pending state
+        self.pending_state_updates["combat_active"] = True
+        self.pending_state_updates["combat_state"] = {
+            "enemies": enemies,
+            "surprise": surprise,
+            "reason": reason,
+            "round": 1,
+        }
+
+        return {
+            "success": True,
+            "combat_started": True,
+            "enemies": enemies,
+            "surprise": surprise,
+            "reason": reason,
+            "message": f"Combat initiated: {reason}",
+        }
+
+    def _execute_end_combat(self, args: dict[str, Any]) -> dict[str, Any]:
+        """End the current combat encounter.
+
+        Clears combat state in pending_state_updates.
+
+        Args:
+            args: Tool arguments with outcome, optional summary.
+
+        Returns:
+            Result with combat resolution info.
+        """
+        outcome = args["outcome"]
+        summary = args.get("summary", "")
+
+        # Update pending state
+        self.pending_state_updates["combat_active"] = False
+        self.pending_state_updates["combat_state"] = None
+
+        return {
+            "success": True,
+            "combat_ended": True,
+            "outcome": outcome,
+            "summary": summary,
+            "message": f"Combat ended: {outcome}",
+        }
+
+    # === Quest Management Tools ===
+
+    def _execute_assign_quest(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Assign a new quest to the player.
+
+        Args:
+            args: Tool arguments with quest_key, title, description, etc.
+
+        Returns:
+            Result with quest creation info.
+        """
+        from src.database.models.tasks import Quest
+        from src.database.models.enums import QuestStatus
+
+        quest_key = args["quest_key"]
+        title = args["title"]
+        description = args["description"]
+        giver_key = args.get("giver_entity_key")
+        rewards_text = args.get("rewards")
+
+        # Check if quest already exists
+        existing = (
+            self.db.query(Quest)
+            .filter(
+                Quest.session_id == self.game_session.id,
+                Quest.quest_key == quest_key,
+            )
+            .first()
+        )
+        if existing:
+            return {
+                "success": False,
+                "reason": f"Quest '{quest_key}' already exists",
+                "message": f"Quest already active: {existing.name}",
+            }
+
+        # Get quest giver entity if specified
+        giver_entity_id = None
+        if giver_key:
+            giver = (
+                self.db.query(Entity)
+                .filter(
+                    Entity.session_id == self.game_session.id,
+                    Entity.entity_key == giver_key,
+                )
+                .first()
+            )
+            if giver:
+                giver_entity_id = giver.id
+
+        # Create quest record
+        quest = Quest(
+            session_id=self.game_session.id,
+            quest_key=quest_key,
+            name=title,
+            description=description,
+            status=QuestStatus.ACTIVE,
+            current_stage=0,
+            giver_entity_id=giver_entity_id,
+            rewards={"description": rewards_text} if rewards_text else None,
+            started_turn=self.game_session.total_turns,
+        )
+        self.db.add(quest)
+        self.db.flush()
+
+        return {
+            "success": True,
+            "quest_key": quest_key,
+            "title": title,
+            "message": f"Quest assigned: {title}",
+        }
+
+    def _execute_update_quest(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Update progress on an existing quest.
+
+        Args:
+            args: Tool arguments with quest_key, new_stage, notes, etc.
+
+        Returns:
+            Result with update info.
+        """
+        from src.database.models.tasks import Quest, QuestStage
+
+        quest_key = args["quest_key"]
+        new_stage = args.get("new_stage")
+        stage_name = args.get("stage_name")
+        stage_description = args.get("stage_description")
+        notes = args.get("notes")
+
+        # Find quest
+        quest = (
+            self.db.query(Quest)
+            .filter(
+                Quest.session_id == self.game_session.id,
+                Quest.quest_key == quest_key,
+            )
+            .first()
+        )
+        if not quest:
+            return {
+                "success": False,
+                "reason": f"Quest '{quest_key}' not found",
+                "message": f"No active quest with key: {quest_key}",
+            }
+
+        # Update stage if provided
+        if new_stage is not None:
+            # Mark current stage as completed
+            if quest.stages:
+                current_stage_obj = next(
+                    (s for s in quest.stages if s.stage_order == quest.current_stage),
+                    None,
+                )
+                if current_stage_obj:
+                    current_stage_obj.is_completed = True
+                    current_stage_obj.completed_turn = self.game_session.total_turns
+
+            quest.current_stage = new_stage
+
+            # Create new stage record if details provided
+            if stage_name and stage_description:
+                new_stage_obj = QuestStage(
+                    quest_id=quest.id,
+                    stage_order=new_stage,
+                    name=stage_name,
+                    description=stage_description,
+                    objective=stage_description,
+                )
+                self.db.add(new_stage_obj)
+
+        self.db.flush()
+
+        return {
+            "success": True,
+            "quest_key": quest_key,
+            "current_stage": quest.current_stage,
+            "notes": notes,
+            "message": f"Quest '{quest.name}' updated to stage {quest.current_stage}",
+        }
+
+    def _execute_complete_quest(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Mark a quest as completed or failed.
+
+        Args:
+            args: Tool arguments with quest_key, outcome.
+
+        Returns:
+            Result with completion info.
+        """
+        from src.database.models.tasks import Quest
+        from src.database.models.enums import QuestStatus
+
+        quest_key = args["quest_key"]
+        outcome = args["outcome"]
+        outcome_notes = args.get("outcome_notes", "")
+
+        # Find quest
+        quest = (
+            self.db.query(Quest)
+            .filter(
+                Quest.session_id == self.game_session.id,
+                Quest.quest_key == quest_key,
+            )
+            .first()
+        )
+        if not quest:
+            return {
+                "success": False,
+                "reason": f"Quest '{quest_key}' not found",
+                "message": f"No active quest with key: {quest_key}",
+            }
+
+        # Update status
+        quest.status = QuestStatus.COMPLETED if outcome == "completed" else QuestStatus.FAILED
+        quest.completed_turn = self.game_session.total_turns
+        self.db.flush()
+
+        return {
+            "success": True,
+            "quest_key": quest_key,
+            "outcome": outcome,
+            "rewards": quest.rewards,
+            "message": f"Quest '{quest.name}' {outcome}!",
+        }
+
+    # === World Fact Tools ===
+
+    def _execute_record_fact(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Record a fact about the world.
+
+        Args:
+            args: Tool arguments with subject_type, subject_key, predicate, value, etc.
+
+        Returns:
+            Result with fact creation info.
+        """
+        from src.database.models.world import Fact
+        from src.database.models.enums import FactCategory
+
+        subject_type = args["subject_type"]
+        subject_key = args["subject_key"]
+        predicate = args["predicate"]
+        value = args["value"]
+        is_secret = args.get("is_secret", False)
+        confidence = args.get("confidence", 80)
+
+        # Check for existing fact with same subject+predicate
+        existing = (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.game_session.id,
+                Fact.subject_type == subject_type,
+                Fact.subject_key == subject_key,
+                Fact.predicate == predicate,
+            )
+            .first()
+        )
+
+        if existing:
+            # Update existing fact
+            existing.value = value
+            existing.is_secret = is_secret
+            existing.confidence = confidence
+            self.db.flush()
+            return {
+                "success": True,
+                "updated": True,
+                "fact_id": existing.id,
+                "message": f"Updated fact: {subject_key} {predicate} = {value}",
+            }
+
+        # Create new fact
+        fact = Fact(
+            session_id=self.game_session.id,
+            subject_type=subject_type,
+            subject_key=subject_key,
+            predicate=predicate,
+            value=value,
+            category=FactCategory.PERSONAL,  # Default category
+            is_secret=is_secret,
+            confidence=confidence,
+            source_turn=self.game_session.total_turns,
+        )
+        self.db.add(fact)
+        self.db.flush()
+
+        return {
+            "success": True,
+            "created": True,
+            "fact_id": fact.id,
+            "message": f"Recorded fact: {subject_key} {predicate} = {value}",
+        }
+
+    # === NPC Scene Management Tools ===
+
+    def _execute_introduce_npc(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Introduce an NPC into the scene.
+
+        Args:
+            args: Tool arguments with entity_key, display_name, description, etc.
+
+        Returns:
+            Result with NPC creation/update info.
+        """
+        from src.database.models.entities import NPCExtension
+        from src.database.models.enums import EntityType
+        from src.database.models.relationships import Relationship
+
+        entity_key = args["entity_key"]
+        display_name = args["display_name"]
+        description = args["description"]
+        location_key = args["location_key"]
+        occupation = args.get("occupation")
+        initial_attitude = args.get("initial_attitude", "neutral")
+
+        # Check if NPC already exists
+        existing = (
+            self.db.query(Entity)
+            .filter(
+                Entity.session_id == self.game_session.id,
+                Entity.entity_key == entity_key,
+            )
+            .first()
+        )
+
+        if existing:
+            # Update location for existing NPC
+            npc_ext = (
+                self.db.query(NPCExtension)
+                .filter(NPCExtension.entity_id == existing.id)
+                .first()
+            )
+            if npc_ext:
+                npc_ext.current_location = location_key
+            self.db.flush()
+
+            return {
+                "success": True,
+                "created": False,
+                "entity_key": entity_key,
+                "message": f"{display_name} enters the scene.",
+            }
+
+        # Create new NPC entity
+        npc = Entity(
+            session_id=self.game_session.id,
+            entity_key=entity_key,
+            display_name=display_name,
+            entity_type=EntityType.NPC,
+            is_alive=True,
+            is_active=True,
+            appearance={"description": description},  # Store description in appearance
+        )
+        self.db.add(npc)
+        self.db.flush()
+
+        # Create NPC extension with location
+        npc_ext = NPCExtension(
+            entity_id=npc.id,
+            current_location=location_key,
+            job=occupation,  # NPCExtension uses 'job' not 'occupation'
+        )
+        self.db.add(npc_ext)
+
+        # Create initial relationship with player if attitude specified
+        player = (
+            self.db.query(Entity)
+            .filter(
+                Entity.session_id == self.game_session.id,
+                Entity.entity_type == EntityType.PLAYER,
+            )
+            .first()
+        )
+        if player:
+            # Map attitude to numeric values
+            attitude_map = {
+                "hostile": 10,
+                "unfriendly": 30,
+                "neutral": 50,
+                "friendly": 70,
+                "warm": 85,
+            }
+            initial_value = attitude_map.get(initial_attitude, 50)
+
+            relationship = Relationship(
+                session_id=self.game_session.id,
+                from_entity_id=npc.id,
+                to_entity_id=player.id,
+                trust=initial_value,
+                liking=initial_value,
+                familiarity=10,  # Just met
+            )
+            self.db.add(relationship)
+
+        self.db.flush()
+
+        return {
+            "success": True,
+            "created": True,
+            "entity_key": entity_key,
+            "entity_id": npc.id,
+            "message": f"{display_name} appears in the scene.",
+        }
+
+    def _execute_npc_leaves(self, args: dict[str, Any]) -> dict[str, Any]:
+        """Have an NPC leave the current scene.
+
+        Args:
+            args: Tool arguments with entity_key, destination, reason.
+
+        Returns:
+            Result with departure info.
+        """
+        from src.database.models.entities import NPCExtension
+
+        entity_key = args["entity_key"]
+        destination = args.get("destination")
+        reason = args.get("reason", "")
+
+        # Find NPC
+        npc = (
+            self.db.query(Entity)
+            .filter(
+                Entity.session_id == self.game_session.id,
+                Entity.entity_key == entity_key,
+            )
+            .first()
+        )
+        if not npc:
+            return {
+                "success": False,
+                "reason": f"NPC '{entity_key}' not found",
+                "message": f"Unknown NPC: {entity_key}",
+            }
+
+        # Update location
+        npc_ext = (
+            self.db.query(NPCExtension)
+            .filter(NPCExtension.entity_id == npc.id)
+            .first()
+        )
+        if npc_ext and destination:
+            npc_ext.current_location = destination
+            self.db.flush()
+
+        return {
+            "success": True,
+            "entity_key": entity_key,
+            "destination": destination,
+            "reason": reason,
+            "message": f"{npc.display_name} leaves the scene.",
+        }
