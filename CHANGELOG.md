@@ -8,6 +8,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **System-Authority Architecture (Phase 1 & 2)** - New game loop ensuring mechanical consistency
+  - Refactored from "LLM decides what happens" to "System decides, LLM describes"
+  - Guarantees no state/narrative drift - if narrative says player has item, inventory has item
+
+  **Phase 1 - Foundation:**
+  - `ActionValidator` with 33 action types for mechanical validation
+  - `ActionExecutor` with full manager integration for state changes
+  - Fixed UNEQUIP validator to use `get_equipped_items()` instead of `get_inventory()`
+  - Implemented `_is_in_combat()` with `combat_active` parameter
+  - Added separate ASK/TELL validators requiring `indirect_target`
+  - Added `delete_item()` to ItemManager for consumables
+  - Integrated `DeathManager.take_damage()` for combat damage with HP tracking
+  - Connected `RelationshipManager` to PERSUADE/INTIMIDATE with skill checks
+  - Connected `TimeManager` to REST/WAIT/SLEEP for time advancement
+  - Connected `NeedsManager` to EAT/DRINK/SLEEP for need satisfaction
+  - Added new GameState fields: `parsed_actions`, `ambient_flavor`, `validation_results`, `turn_result`
+
+  **Phase 2 - LangGraph Integration:**
+  - New `parse_intent_node` - Converts player input to structured actions
+  - New `validate_actions_node` - Validates actions mechanically
+  - New `execute_actions_node` - Executes valid actions, produces results
+  - New `narrator_node` - Generates constrained prose from facts
+  - New `ConstrainedNarrator` class in `src/narrator/` module
+  - New `build_system_authority_graph()` function for the new pipeline
+  - Linear flow: context_compiler → parse_intent → validate_actions → execute_actions → narrator → persistence
+
+  **Phase 3 - Complication Oracle:**
+  - New `src/oracle/` module for creative complication generation
+  - `ComplicationType` enum: discovery, interruption, cost, twist
+  - `EffectType` enum: hp_loss, hp_gain, resource_loss, status_add, reveal_fact, spawn_entity, etc.
+  - `Effect` dataclass with serialization (to_dict/from_dict)
+  - `Complication` dataclass with mechanical effects, new facts, foreshadowing
+  - `ProbabilityCalculator` with configurable base chance, max chance, and cooldown
+    - Risk tag modifiers (dangerous: +10%, mysterious: +8%, forbidden: +12%, etc.)
+    - Arc phase modifiers (climax: +15%, escalation: +10%, setup: +2%)
+    - Arc tension modifier (>50 tension adds up to +5%)
+    - Cooldown system to prevent complication spam (3-turn full cooldown, 6-turn recovery)
+    - Hard cap to never exceed max probability (default 35%)
+  - `ComplicationOracle` class with LLM and fallback generation
+    - Integrates with `StoryArcManager` for narrative context
+    - Integrates with `FactManager` for world facts
+    - `get_turns_since_complication()` for cooldown tracking
+    - `record_complication()` persists to database and records new facts
+  - New `ComplicationHistory` database model for tracking complications
+  - New `complication_oracle_node` for the LangGraph pipeline
+  - Updated `GameState` with `complication` field
+  - Updated narrator to include complications in fact extraction
+  - Pipeline flow updated: validate_actions → **complication_oracle** → execute_actions
+  - New prompt template: `data/templates/complication_generator.md`
+  - Unit tests: `tests/test_oracle/` with probability, types, and oracle tests
+
+  **Phase 4 - Migration & Cleanup:**
+  - Added `--pipeline` option to CLI commands: `rpg game start`, `rpg game play`, `rpg game turn`
+    - `system-authority` (default): New pipeline with guaranteed mechanical consistency
+    - `legacy`: Old LLM-decides-everything flow for backward compatibility
+  - Added deprecation notices to legacy nodes:
+    - `game_master_node.py` - Now marked as deprecated, recommends System-Authority flow
+    - `entity_extractor_node.py` - No longer needed with System-Authority (executor handles state)
+  - Updated `graph.py` module docstring documenting both pipeline options
+  - System-Authority is now the default for all new games
+
+- **Unit Tests for System-Authority:**
+  - `tests/test_validators/test_action_validator.py` - 15+ tests for validation logic
+  - `tests/test_executor/test_action_executor.py` - 15+ tests for execution logic
+
 - **Signal-Based Needs Communication System** - Prevents repetitive need narration ("stomach growls" every turn)
   - New `NeedsCommunicationLog` database model tracks when needs were last communicated to the player
   - New `NeedsCommunicationManager` with state tracking, alert generation, and reminder logic

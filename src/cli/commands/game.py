@@ -269,6 +269,12 @@ def start(
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Session name"),
     setting: Optional[str] = typer.Option(None, "--setting", help="Setting (fantasy, contemporary, scifi)"),
     wizard: bool = typer.Option(True, "--wizard/--conversational", help="Use wizard mode (default) or conversational AI"),
+    pipeline: str = typer.Option(
+        "system-authority",
+        "--pipeline",
+        "-p",
+        help="Pipeline: 'system-authority' (default, consistent) or 'legacy' (LLM decides)",
+    ),
 ) -> None:
     """Start a new game with guided setup wizard.
 
@@ -276,9 +282,16 @@ def start(
     in one seamless flow, then starts the game.
 
     Use --conversational for the old freeform AI character creation style.
+    Use --pipeline=legacy for the old LLM-decides-everything flow.
     """
+    # Validate pipeline option
+    use_system_authority = pipeline.lower() in ("system-authority", "system", "new")
+    if pipeline.lower() not in ("system-authority", "system", "new", "legacy", "old"):
+        display_error(f"Unknown pipeline: {pipeline}. Use 'system-authority' or 'legacy'.")
+        raise typer.Exit(1)
+
     try:
-        asyncio.run(_start_wizard_async(name, setting, use_wizard=wizard))
+        asyncio.run(_start_wizard_async(name, setting, use_wizard=wizard, use_system_authority=use_system_authority))
     except KeyboardInterrupt:
         display_info("\nWizard cancelled. No changes were saved.")
 
@@ -287,6 +300,7 @@ async def _start_wizard_async(
     preset_name: str | None = None,
     preset_setting: str | None = None,
     use_wizard: bool = True,
+    use_system_authority: bool = True,
 ) -> None:
     """Run the full game start wizard.
 
@@ -296,6 +310,7 @@ async def _start_wizard_async(
         preset_name: Optional preset session name (skips prompt).
         preset_setting: Optional preset setting (skips prompt).
         use_wizard: If True, use step-by-step wizard; if False, use conversational AI.
+        use_system_authority: If True (default), use the System-Authority pipeline.
     """
     from src.cli.commands.character import (
         CharacterCreationState,
@@ -450,7 +465,7 @@ async def _start_wizard_async(
 
         # Phase 4: Start the game loop directly
         console.print()
-        await _game_loop(db, game_session, entity)
+        await _game_loop(db, game_session, entity, use_system_authority=use_system_authority)
 
 
 @app.command("list")
@@ -532,8 +547,20 @@ def delete(
 @app.command()
 def play(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
+    pipeline: str = typer.Option(
+        "system-authority",
+        "--pipeline",
+        "-p",
+        help="Pipeline: 'system-authority' (default, consistent) or 'legacy' (LLM decides)",
+    ),
 ) -> None:
     """Start the interactive game loop."""
+    # Validate pipeline option
+    use_system_authority = pipeline.lower() in ("system-authority", "system", "new")
+    if pipeline.lower() not in ("system-authority", "system", "new", "legacy", "old"):
+        display_error(f"Unknown pipeline: {pipeline}. Use 'system-authority' or 'legacy'.")
+        raise typer.Exit(1)
+
     # First check for session and player
     game_session_id = None
     needs_character = False
@@ -578,7 +605,7 @@ def play(
                 raise typer.Exit(1)
 
             # Run the async game loop
-            asyncio.run(_game_loop(db, game_session, player))
+            asyncio.run(_game_loop(db, game_session, player, use_system_authority=use_system_authority))
 
     except KeyboardInterrupt:
         display_info("\nGame paused. Use 'rpg game play' to continue.")
@@ -683,22 +710,36 @@ def _display_resume_context(
     display_narrative(last_turn.gm_response)
 
 
-async def _game_loop(db, game_session: GameSession, player: Entity) -> None:
+async def _game_loop(
+    db,
+    game_session: GameSession,
+    player: Entity,
+    use_system_authority: bool = True,
+) -> None:
     """Main game loop.
 
     Args:
         db: Database session.
         game_session: Current game session.
         player: Player entity.
+        use_system_authority: If True (default), use the System-Authority pipeline
+            which ensures mechanical consistency. If False, use the legacy pipeline
+            where the LLM decides what happens.
     """
-    from src.agents.graph import build_game_graph
+    from src.agents.graph import build_game_graph, build_system_authority_graph
     from src.agents.state import create_initial_state
 
     display_welcome(game_session.session_name)
 
-    # Build and compile the graph
-    graph = build_game_graph()
+    # Build and compile the appropriate graph
+    if use_system_authority:
+        graph = build_system_authority_graph()
+        pipeline_name = "System-Authority"
+    else:
+        graph = build_game_graph()
+        pipeline_name = "Legacy"
     compiled = graph.compile()
+    display_info(f"Using {pipeline_name} pipeline")
 
     # Get player location (default to "starting_location")
     player_location = "starting_location"
@@ -1154,8 +1195,20 @@ async def _handle_portrait_command(
 def turn(
     player_input: str = typer.Argument(..., help="Player input to process"),
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
+    pipeline: str = typer.Option(
+        "system-authority",
+        "--pipeline",
+        "-p",
+        help="Pipeline: 'system-authority' (default, consistent) or 'legacy' (LLM decides)",
+    ),
 ) -> None:
     """Execute a single turn (for testing)."""
+    # Validate pipeline option
+    use_system_authority = pipeline.lower() in ("system-authority", "system", "new")
+    if pipeline.lower() not in ("system-authority", "system", "new", "legacy", "old"):
+        display_error(f"Unknown pipeline: {pipeline}. Use 'system-authority' or 'legacy'.")
+        raise typer.Exit(1)
+
     try:
         with get_db_session() as db:
             if session_id:
@@ -1170,7 +1223,7 @@ def turn(
             player = _get_or_create_player(db, game_session)
 
             # Run single turn
-            asyncio.run(_single_turn(db, game_session, player, player_input))
+            asyncio.run(_single_turn(db, game_session, player, player_input, use_system_authority=use_system_authority))
 
     except Exception as e:
         display_error(f"Error: {e}")
@@ -1182,6 +1235,7 @@ async def _single_turn(
     game_session: GameSession,
     player: Entity,
     player_input: str,
+    use_system_authority: bool = True,
 ) -> None:
     """Execute a single turn.
 
@@ -1190,11 +1244,15 @@ async def _single_turn(
         game_session: Current game session.
         player: Player entity.
         player_input: Player's input.
+        use_system_authority: If True (default), use the System-Authority pipeline.
     """
-    from src.agents.graph import build_game_graph
+    from src.agents.graph import build_game_graph, build_system_authority_graph
     from src.agents.state import create_initial_state
 
-    graph = build_game_graph()
+    if use_system_authority:
+        graph = build_system_authority_graph()
+    else:
+        graph = build_game_graph()
     compiled = graph.compile()
 
     game_session.total_turns += 1

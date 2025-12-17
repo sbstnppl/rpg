@@ -93,6 +93,8 @@ from src.database.models.narrative import (
     ArcPhase,
     ArcStatus,
     ArcType,
+    ComplicationHistory,
+    ComplicationType,
     Conflict,
     ConflictLevel,
     Mystery,
@@ -280,10 +282,12 @@ __all__ = [
     "ArcPhase",
     "ArcStatus",
     "ConflictLevel",
+    "ComplicationType",
     # Narrative models
     "StoryArc",
     "Mystery",
     "Conflict",
+    "ComplicationHistory",
     # Progression enums
     "AchievementType",
     # Progression models

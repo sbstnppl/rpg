@@ -104,6 +104,24 @@ class ItemManager(BaseManager):
             .first()
         )
 
+    def get_item_by_id(self, item_id: int) -> Item | None:
+        """Get item by ID.
+
+        Args:
+            item_id: Item database ID.
+
+        Returns:
+            Item if found, None otherwise.
+        """
+        return (
+            self.db.query(Item)
+            .filter(
+                Item.session_id == self.session_id,
+                Item.id == item_id,
+            )
+            .first()
+        )
+
     def create_item(
         self,
         item_key: str,
@@ -268,6 +286,86 @@ class ItemManager(BaseManager):
 
         self.db.flush()
         return item
+
+    def drop_item(self, item_key: str, location_key: str) -> Item:
+        """Drop item at a world location.
+
+        Removes item from holder and places it at the specified location.
+
+        Args:
+            item_key: Item key.
+            location_key: World location key where item is dropped.
+
+        Returns:
+            Updated Item.
+
+        Raises:
+            ValueError: If item not found.
+        """
+        item = self.get_item(item_key)
+        if item is None:
+            raise ValueError(f"Item not found: {item_key}")
+
+        item.holder_id = None
+        item.body_slot = None
+        item.body_layer = 0
+
+        # Update or create storage location
+        storage = (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.session_id,
+                StorageLocation.item_id == item.id,
+            )
+            .first()
+        )
+
+        if storage:
+            storage.location_type = StorageLocationType.PLACE
+            storage.location_key = location_key
+            storage.body_slot = None
+        else:
+            storage = StorageLocation(
+                session_id=self.session_id,
+                item_id=item.id,
+                location_type=StorageLocationType.PLACE,
+                location_key=location_key,
+            )
+            self.db.add(storage)
+
+        self.db.flush()
+        return item
+
+    def delete_item(self, item_key: str) -> None:
+        """Delete an item from the game (consumed, destroyed, etc.).
+
+        Also cleans up any associated storage location if it was a container.
+
+        Args:
+            item_key: Item key.
+
+        Raises:
+            ValueError: If item not found.
+        """
+        item = self.get_item(item_key)
+        if item is None:
+            raise ValueError(f"Item not found: {item_key}")
+
+        # If this was a container, delete its storage location too
+        if item.item_type == ItemType.CONTAINER:
+            storage = (
+                self.db.query(StorageLocation)
+                .filter(
+                    StorageLocation.session_id == self.session_id,
+                    StorageLocation.container_item_id == item.id,
+                )
+                .first()
+            )
+            if storage:
+                self.db.delete(storage)
+
+        self.db.delete(item)
+        self.db.flush()
 
     def get_equipped_items(self, entity_id: int) -> list[Item]:
         """Get all equipped items for entity.

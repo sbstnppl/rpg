@@ -432,3 +432,83 @@ class Conflict(Base, TimestampMixin):
     def __repr__(self) -> str:
         status = "resolved" if self.is_resolved else self.current_level.value
         return f"<Conflict {self.conflict_key} [{status}]>"
+
+
+class ComplicationType(str, PyEnum):
+    """Types of complications the oracle can introduce."""
+
+    DISCOVERY = "discovery"  # Learn something new
+    INTERRUPTION = "interruption"  # Situation changes
+    COST = "cost"  # Success with price
+    TWIST = "twist"  # Story revelation
+
+
+class ComplicationHistory(Base, TimestampMixin):
+    """History of complications for cooldown tracking.
+
+    Tracks when complications occurred to prevent spamming
+    and enable analysis of complication patterns.
+    """
+
+    __tablename__ = "complication_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("game_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # When it happened
+    turn_number: Mapped[int] = mapped_column(
+        nullable=False,
+        index=True,
+        comment="Turn when complication occurred",
+    )
+
+    # What happened
+    complication_type: Mapped[ComplicationType] = mapped_column(
+        Enum(ComplicationType, values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+    )
+    description: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="Description of the complication",
+    )
+
+    # Effects and facts
+    mechanical_effects: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Mechanical effects applied",
+    )
+    new_facts: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Facts recorded from this complication",
+    )
+
+    # Context
+    trigger_probability: Mapped[float | None] = mapped_column(
+        nullable=True,
+        comment="Probability that triggered this complication",
+    )
+    risk_tags: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Risk tags that contributed",
+    )
+
+    # Related story arc
+    story_arc_id: Mapped[int | None] = mapped_column(
+        ForeignKey("story_arcs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Relationships
+    session: Mapped["GameSession"] = relationship()
+    story_arc: Mapped["StoryArc | None"] = relationship()
+
+    def __repr__(self) -> str:
+        return f"<ComplicationHistory turn={self.turn_number} type={self.complication_type.value}>"

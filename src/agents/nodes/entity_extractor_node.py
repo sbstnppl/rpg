@@ -2,6 +2,14 @@
 
 This node extracts entities, facts, and state changes from GM responses
 using structured LLM output.
+
+.. deprecated::
+    This node is part of the LEGACY flow where the LLM narrates then we extract.
+    The new System-Authority flow uses execute_actions_node which directly
+    applies state changes without needing post-hoc extraction.
+
+    The legacy flow is retained for backward compatibility but may be removed
+    in a future version. Use build_system_authority_graph() for new games.
 """
 
 import logging

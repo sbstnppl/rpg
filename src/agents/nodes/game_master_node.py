@@ -2,6 +2,15 @@
 
 This node generates the GM's narrative response to player input
 using an LLM provider. Supports tool calling for dice rolls and NPC queries.
+
+.. deprecated::
+    This node is part of the LEGACY flow where the LLM decides what happens.
+    The new System-Authority flow uses:
+    - parse_intent_node → validate_actions_node → complication_oracle_node
+    - execute_actions_node → narrator_node
+
+    The legacy flow is retained for backward compatibility but may be removed
+    in a future version. Use build_system_authority_graph() for new games.
 """
 
 import json

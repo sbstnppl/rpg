@@ -11,7 +11,38 @@ The RPG uses a LangGraph-based multi-agent architecture where specialized agents
 - **NPC Full Character Generation** when NPCs are first introduced
 - **Companion Tracking** for NPCs traveling with the player
 
-## Agent Architecture
+## Game Pipelines
+
+The RPG supports two game pipelines, selectable via `--pipeline` flag on CLI commands.
+
+### System-Authority Pipeline (Default, Recommended)
+
+```
+START → ContextCompiler → ParseIntent → ValidateActions → ComplicationOracle
+                                                              ↓
+                         END ← Persistence ← Narrator ← ExecuteActions
+```
+
+**Philosophy**: "System decides what happens, LLM describes it"
+
+**Benefits**:
+- **Guaranteed consistency**: If narrative says player has item, inventory has item
+- **Testable mechanics**: 90%+ of game logic testable without LLM
+- **No drift**: No state/narrative divergence over time
+- **Faster iteration**: Debug mechanics without LLM calls
+
+**Components**:
+1. **ParseIntent** - Converts natural language to structured `Action` objects
+2. **ValidateActions** - Checks if actions are mechanically possible (weight, slots, reach)
+3. **ComplicationOracle** - Occasionally adds narrative complications (discovery, interruption, cost, twist)
+4. **ExecuteActions** - Applies state changes via Managers (ItemManager, etc.)
+5. **Narrator** - Generates constrained prose from mechanical facts
+
+**CLI**: `rpg game play --pipeline system-authority` (default)
+
+---
+
+### Legacy Pipeline (Backward Compatibility)
 
 ```
 START → ContextCompiler → GameMaster (with Tool Calling)
@@ -27,7 +58,25 @@ START → ContextCompiler → GameMaster (with Tool Calling)
                         Persistence → END
 ```
 
-## Agents
+**Philosophy**: "LLM decides what happens AND narrates it"
+
+**Use cases**:
+- Testing legacy behavior
+- Comparing output quality between pipelines
+- Gradual migration of existing games
+
+**Risks**:
+- GM may forget tool calls → state/narrative drift
+- Post-hoc extraction can miss or hallucinate entities
+- Less predictable outcomes
+
+**CLI**: `rpg game play --pipeline legacy`
+
+---
+
+## Agents (Legacy Pipeline)
+
+The following agents are used in the **Legacy Pipeline**. The System-Authority pipeline uses different nodes documented in `src/agents/nodes/`.
 
 ### ContextCompiler
 **Purpose**: Assembles relevant world state for GM prompts

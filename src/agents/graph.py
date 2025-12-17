@@ -1,7 +1,21 @@
 """LangGraph StateGraph builder for RPG game orchestration.
 
-This module defines the game's agent graph structure and routing logic.
-The graph flows through: context_compiler -> game_master -> [routing] -> persistence.
+This module defines two game pipelines:
+
+1. **Legacy Flow** (build_game_graph):
+   context_compiler → game_master → [routing] → persistence
+   - LLM decides what happens AND narrates it
+   - Requires post-hoc entity extraction
+   - Risk of state/narrative drift
+
+2. **System-Authority Flow** (build_system_authority_graph):
+   context_compiler → parse_intent → validate_actions → complication_oracle
+   → execute_actions → narrator → persistence
+   - System decides what happens (mechanically)
+   - LLM only describes outcomes
+   - Guaranteed consistency, no drift
+
+The System-Authority flow is the preferred approach for new games.
 """
 
 from typing import Literal
@@ -81,8 +95,15 @@ from src.agents.nodes.persistence_node import persistence_node
 from src.agents.nodes.world_simulator_node import world_simulator_node
 from src.agents.nodes.combat_resolver_node import combat_resolver_node
 
+# System-Authority pipeline nodes
+from src.agents.nodes.parse_intent_node import parse_intent_node
+from src.agents.nodes.validate_actions_node import validate_actions_node
+from src.agents.nodes.complication_oracle_node import complication_oracle_node
+from src.agents.nodes.execute_actions_node import execute_actions_node
+from src.agents.nodes.narrator_node import narrator_node
 
-# Map of agent names to node functions
+
+# Map of agent names to node functions (legacy flow)
 AGENT_NODES = {
     "context_compiler": context_compiler_node,
     "game_master": game_master_node,
@@ -90,6 +111,17 @@ AGENT_NODES = {
     "npc_generator": npc_generator_node,
     "combat_resolver": combat_resolver_node,
     "world_simulator": world_simulator_node,
+    "persistence": persistence_node,
+}
+
+# System-Authority pipeline nodes
+SYSTEM_AUTHORITY_NODES = {
+    "context_compiler": context_compiler_node,
+    "parse_intent": parse_intent_node,
+    "validate_actions": validate_actions_node,
+    "complication_oracle": complication_oracle_node,
+    "execute_actions": execute_actions_node,
+    "narrator": narrator_node,
     "persistence": persistence_node,
 }
 
@@ -170,6 +202,66 @@ def build_game_graph() -> StateGraph:
     graph.add_edge("npc_generator", "persistence")
 
     # persistence -> END
+    graph.add_edge("persistence", END)
+
+    return graph
+
+
+def build_system_authority_graph() -> StateGraph:
+    """Build the System-Authority game orchestration graph.
+
+    This is the new pipeline that ensures mechanical consistency:
+    - System decides what happens (mechanically)
+    - Oracle adds creative complications (without breaking mechanics)
+    - LLM describes it (narratively)
+
+    Graph structure:
+        START
+          |
+          v
+        context_compiler (gather scene context)
+          |
+          v
+        parse_intent (convert input to actions)
+          |
+          v
+        validate_actions (check if actions are possible)
+          |
+          v
+        complication_oracle (optionally add narrative complications)
+          |
+          v
+        execute_actions (apply mechanical changes)
+          |
+          v
+        narrator (generate prose from facts)
+          |
+          v
+        persistence (save state changes)
+          |
+          v
+        END
+
+    Returns:
+        Configured StateGraph ready to compile.
+    """
+    # Create graph with GameState schema
+    graph = StateGraph(GameState)
+
+    # Add all nodes
+    for name, func in SYSTEM_AUTHORITY_NODES.items():
+        graph.add_node(name, func)
+
+    # Set entry point
+    graph.set_entry_point("context_compiler")
+
+    # Define linear flow
+    graph.add_edge("context_compiler", "parse_intent")
+    graph.add_edge("parse_intent", "validate_actions")
+    graph.add_edge("validate_actions", "complication_oracle")
+    graph.add_edge("complication_oracle", "execute_actions")
+    graph.add_edge("execute_actions", "narrator")
+    graph.add_edge("narrator", "persistence")
     graph.add_edge("persistence", END)
 
     return graph
