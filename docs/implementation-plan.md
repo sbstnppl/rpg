@@ -152,6 +152,49 @@
   - `_get_turn_context()` - turn number and recent history for narrative continuity
   - `_get_equipment_description()` - visible equipment context
   - `_format_appearance()` - includes age support
+  - Integrates layered context summaries (story_summary, recent_summary, turns_since_night)
+  - Integrates stable conditions (stable_conditions) for repetition avoidance
+
+### 2.11b Layered Context Summary System (NEW) ✓
+- [x] Create `src/database/models/context_summary.py`
+  - `MilestoneType` enum (arc_phase_change, quest_complete, mystery_solved, major_relationship, region_transition, conflict_resolution, major_discovery, character_development)
+  - `SummaryType` enum (story, recent)
+  - `Milestone` model - tracks significant story events that trigger summary regeneration
+  - `ContextSummary` model - LLM-generated narrative summaries
+  - `NarrativeMentionLog` model - tracks what conditions have been mentioned to prevent repetition
+- [x] Create Alembic migration `929cfa212ff9_add_context_summary_models.py`
+- [x] Create `src/managers/milestone_manager.py` - MilestoneManager
+  - `record_milestone()` - log a milestone event
+  - `get_last_milestone()` - get the most recent milestone
+  - `get_milestones_since()` - get all milestones since a turn
+  - `get_all_milestones()` - get all milestones for the session
+  - `get_milestone_count()` - count of milestones
+  - `get_milestones_for_day()` - milestones on a specific day
+- [x] Create `src/managers/summary_manager.py` - SummaryManager
+  - Three-layer context architecture:
+    - Story summary (start → last milestone) - regenerated at milestones
+    - Recent summary (last milestone → last night) - regenerated daily
+    - Today's turns (full raw text since last night) - no truncation
+  - `get_story_summary()` - get story summary
+  - `get_recent_summary()` - get recent summary
+  - `get_turns_since_night()` - get full text of today's turns
+  - `regenerate_story_on_milestone()` - LLM-based story summary generation
+  - `regenerate_recent_on_new_day()` - LLM-based recent summary generation
+  - `is_new_day()` - check if day changed
+  - `needs_story_regeneration()` - check if story needs regen
+- [x] Create `src/managers/narrative_mention_manager.py` - NarrativeMentionManager
+  - `record_mention()` - track when a condition was mentioned
+  - `was_recently_mentioned()` - check if recently described
+  - `get_last_mention()` - get last mention of subject
+  - `get_stale_mentions()` - get mentions needing reminder
+  - `get_mentions_by_type()` - get mentions by category
+  - `clear_mention()` - clear when condition no longer applies
+  - `get_stable_conditions_for_context()` - categorized conditions
+  - `format_stable_conditions()` - formatted for narrator
+- [x] Update `src/narrator/narrator.py`
+  - Added `stable_conditions` parameter to `narrate()` method
+  - Updated NARRATOR_TEMPLATE with repetition avoidance rules
+- [x] Export managers in `src/managers/__init__.py`
 
 ### 2.12 Realism Managers (NEW)
 - [x] Create `src/managers/needs.py` - NeedsManager

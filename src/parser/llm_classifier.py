@@ -202,7 +202,11 @@ async def classify_intent(
             raw_input=text,
         )
 
-    result: ClassificationResult = response.parsed_content
+    # Handle both dict (from API) and Pydantic model (from tests)
+    if isinstance(response.parsed_content, dict):
+        result = ClassificationResult(**response.parsed_content)
+    else:
+        result = response.parsed_content
 
     # Convert to our action types
     actions = []

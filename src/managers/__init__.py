@@ -87,6 +87,9 @@ from src.managers.secret_manager import BetrayalRisk, NPCSecret, SecretManager
 from src.managers.story_arc_manager import ArcSummary, PacingHint, StoryArcManager
 from src.managers.task_manager import TaskManager
 from src.managers.time_manager import TimeManager
+from src.managers.milestone_manager import MilestoneManager
+from src.managers.summary_manager import SummaryManager
+from src.managers.narrative_mention_manager import NarrativeMentionManager
 
 __all__ = [
     # Base
@@ -198,4 +201,8 @@ __all__ = [
     # Destiny
     "DestinyManager",
     "ProphesyProgress",
+    # Context Summaries
+    "MilestoneManager",
+    "SummaryManager",
+    "NarrativeMentionManager",
 ]

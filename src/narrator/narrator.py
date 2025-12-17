@@ -5,7 +5,7 @@ and CANNOT add events that aren't in the facts.
 """
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Protocol, Sequence
 
 
 class LLMProviderProtocol(Protocol):
@@ -13,9 +13,12 @@ class LLMProviderProtocol(Protocol):
 
     async def complete(
         self,
-        prompt: str,
+        messages: Sequence[Any],
+        model: str | None = None,
+        max_tokens: int = 4096,
         temperature: float = 0.7,
-        max_tokens: int = 1000,
+        stop_sequences: Sequence[str] | None = None,
+        system_prompt: str | None = None,
     ) -> Any:
         """Complete a prompt."""
         ...
@@ -29,6 +32,8 @@ MECHANICAL FACTS (you MUST include ALL of these):
 SCENE CONTEXT:
 {scene_context}
 
+{stable_conditions}
+
 PLAYER'S MANNER: {ambient_flavor}
 
 Write 2-4 sentences narrating this turn.
@@ -40,6 +45,12 @@ RULES:
 - Do NOT add events that aren't in the facts
 - Do NOT contradict any mechanical outcome
 - Write in second person ("You grab the sword...")
+- Use American English (pants not trousers, color not colour, etc.)
+
+REPETITION AVOIDANCE:
+- Do NOT re-describe stable conditions (like "disheveled appearance") unless marked [REMIND]
+- Reference story summaries for continuity but don't repeat recent events verbatim
+- Only mention condition changes (e.g., "your hunger has grown worse")
 """
 
 
@@ -77,6 +88,7 @@ class ConstrainedNarrator:
         turn_result: dict[str, Any],
         scene_context: str = "",
         ambient_flavor: str | None = None,
+        stable_conditions: str = "",
     ) -> NarratorResult:
         """Generate narrative from turn result.
 
@@ -84,6 +96,7 @@ class ConstrainedNarrator:
             turn_result: Dict with executions, failed_actions, etc.
             scene_context: Description of current scene.
             ambient_flavor: How the player is acting (e.g., "nervously").
+            stable_conditions: Formatted stable conditions (do not re-describe).
 
         Returns:
             NarratorResult with generated narrative.
@@ -103,12 +116,17 @@ class ConstrainedNarrator:
         prompt = NARRATOR_TEMPLATE.format(
             facts="\n".join(f"- {fact}" for fact in facts),
             scene_context=scene_context or "A generic fantasy setting.",
+            stable_conditions=stable_conditions or "No stable conditions to avoid.",
             ambient_flavor=ambient_flavor or "neutral tone",
         )
 
+        # Build messages for LLM API
+        from src.llm.message_types import Message, MessageRole
+        messages = [Message(role=MessageRole.USER, content=prompt)]
+
         # Generate with LLM
         response = await self.llm_provider.complete(
-            prompt=prompt,
+            messages=messages,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )

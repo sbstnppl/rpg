@@ -139,6 +139,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Handler in character wizard clears `potential_stats` and triggers fresh dice roll
   - Maintains age/occupation modifiers while re-rolling innate potential
 
+- **Layered Context Summary System** - Prevents repetitive narration and improves narrative continuity
+  - New database models: `Milestone`, `ContextSummary`, `NarrativeMentionLog`
+  - Three-layer context architecture:
+    - **Story Summary**: From start to last milestone (LLM-generated, updated at milestones only)
+    - **Recent Summary**: From last milestone to last night (LLM-generated, updated once per in-game day)
+    - **Today's Turns**: Full raw text since last night (no truncation, typically 5-15 turns)
+  - New `MilestoneManager` for tracking story milestones (arc phase changes, quest completions, etc.)
+  - New `SummaryManager` with LLM prompts for generating narrative summaries
+  - New `NarrativeMentionManager` for tracking what conditions have been mentioned to prevent repetition
+  - Integrated into `ContextCompiler` with new fields: `story_summary`, `recent_summary`, `turns_since_night`, `stable_conditions`
+  - Updated `ConstrainedNarrator` template with repetition avoidance rules
+  - Fixes issue where GM would repeatedly describe stable conditions (e.g., "disheveled appearance") every turn
+  - Database migration: `929cfa212ff9_add_context_summary_models.py`
+
 ### Changed
 - **Documentation Updates** - Updated README.md and user-guide.md to reflect current state
   - Fixed incorrect CLI commands in README.md Quick Start (`rpg start` → `rpg game start`)

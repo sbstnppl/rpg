@@ -176,6 +176,15 @@ from src.database.models.destiny import (
     ProphesyStatus,
 )
 
+# Context summary system for layered narrative
+from src.database.models.context_summary import (
+    ContextSummary,
+    Milestone,
+    MilestoneType,
+    NarrativeMentionLog,
+    SummaryType,
+)
+
 __all__ = [
     # Base
     "Base",
@@ -341,4 +350,11 @@ __all__ = [
     # Destiny models
     "Prophesy",
     "DestinyElement",
+    # Context summary enums
+    "MilestoneType",
+    "SummaryType",
+    # Context summary models
+    "Milestone",
+    "ContextSummary",
+    "NarrativeMentionLog",
 ]

@@ -23,9 +23,11 @@ from src.managers.goal_manager import GoalManager
 from src.managers.injuries import InjuryManager
 from src.managers.item_manager import ItemManager
 from src.managers.map_manager import MapManager
+from src.managers.narrative_mention_manager import NarrativeMentionManager
 from src.managers.needs import NeedsManager
 from src.managers.needs_communication_manager import NeedsCommunicationManager
 from src.managers.relationship_manager import RelationshipManager
+from src.managers.summary_manager import SummaryManager
 from src.managers.zone_manager import ZoneManager
 
 
@@ -46,16 +48,38 @@ class SceneContext:
     world_facts_context: str = ""  # Established world facts for consistency
     location_inventory_context: str = ""  # Storage and items at location
     needs_alerts_context: str = ""  # Signal-based needs alerts for player
+    # Layered context summaries
+    story_summary: str = ""  # Start → last milestone
+    recent_summary: str = ""  # Last milestone → last night
+    turns_since_night: str = ""  # Full raw text of today's turns
+    stable_conditions: str = ""  # Stable conditions (do not re-describe)
 
     def to_prompt(self, include_secrets: bool = True) -> str:
         """Format as prompt string for GM."""
-        sections = [
+        sections = []
+
+        # Layered summaries at the top for narrative continuity
+        if self.story_summary:
+            sections.append(f"## Story So Far (start → last milestone)\n{self.story_summary}")
+
+        if self.recent_summary:
+            sections.append(f"## Recent Events (last milestone → last night)\n{self.recent_summary}")
+
+        if self.turns_since_night:
+            sections.append(f"## Today's Events (full text)\n{self.turns_since_night}")
+
+        # Stable conditions (what NOT to re-describe)
+        if self.stable_conditions:
+            sections.append(self.stable_conditions)
+
+        # Regular context sections
+        sections.extend([
             self.turn_context,
             self.time_context,
             self.location_context,
             self.player_context,
             self.npcs_context,
-        ]
+        ])
 
         # Add needs alerts right after player context for proximity
         if self.needs_alerts_context:
@@ -113,6 +137,8 @@ class ContextCompiler(BaseManager):
         self._discovery_manager = discovery_manager
         self._goal_manager = goal_manager
         self._needs_communication_manager: NeedsCommunicationManager | None = None
+        self._summary_manager: SummaryManager | None = None
+        self._narrative_mention_manager: NarrativeMentionManager | None = None
 
     @property
     def needs_manager(self) -> NeedsManager:
@@ -164,6 +190,20 @@ class ContextCompiler(BaseManager):
             )
         return self._needs_communication_manager
 
+    @property
+    def summary_manager(self) -> SummaryManager:
+        if self._summary_manager is None:
+            self._summary_manager = SummaryManager(self.db, self.game_session)
+        return self._summary_manager
+
+    @property
+    def narrative_mention_manager(self) -> NarrativeMentionManager:
+        if self._narrative_mention_manager is None:
+            self._narrative_mention_manager = NarrativeMentionManager(
+                self.db, self.game_session
+            )
+        return self._narrative_mention_manager
+
     def compile_scene(
         self,
         player_id: int,
@@ -184,6 +224,17 @@ class ContextCompiler(BaseManager):
         Returns:
             SceneContext with all compiled sections
         """
+        # Get layered summaries
+        story_summary = self.summary_manager.get_story_summary()
+        recent_summary = self.summary_manager.get_recent_summary()
+        turns_since_night = self.summary_manager.get_turns_since_night()
+
+        # Get stable conditions
+        game_time = self._get_game_datetime()
+        stable_conditions = self.narrative_mention_manager.format_stable_conditions(
+            turn_number, game_time
+        )
+
         return SceneContext(
             turn_context=self._get_turn_context(turn_number),
             time_context=self._get_time_context(),
@@ -198,6 +249,10 @@ class ContextCompiler(BaseManager):
             world_facts_context=self._get_world_facts_context(location_key),
             location_inventory_context=self._get_location_inventory_context(location_key),
             needs_alerts_context=self._get_needs_alerts(player_id, turn_number),
+            story_summary=story_summary,
+            recent_summary=recent_summary,
+            turns_since_night=turns_since_night,
+            stable_conditions=stable_conditions,
         )
 
     def _get_turn_context(self, turn_number: int, history_limit: int = 3) -> str:
