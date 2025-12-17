@@ -119,6 +119,8 @@ class GameState(TypedDict, total=False):
     validation_results: list[dict[str, Any]] | None  # ValidationResult dicts
     complication: dict[str, Any] | None  # Complication dict from oracle
     turn_result: dict[str, Any] | None  # TurnResult dict with execution results
+    is_scene_request: bool  # Whether this is a scene intro request (skip action processing)
+    scene_request_type: str | None  # Type of scene request ("intro", "description")
 
     # Runtime dependencies (injected by game loop, not persisted)
     _db: Any  # SQLAlchemy Session

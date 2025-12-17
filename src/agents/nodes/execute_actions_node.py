@@ -61,6 +61,9 @@ async def execute_actions_node(state: GameState) -> dict[str, Any]:
 
     executor = ActionExecutor(db, game_session)
 
+    # Get player location for execution
+    player_location = state.get("player_location", "")
+
     # Separate valid and failed validations
     valid_results = []
     failed_results = []
@@ -72,6 +75,7 @@ async def execute_actions_node(state: GameState) -> dict[str, Any]:
             target=action_dict.get("target"),
             indirect_target=action_dict.get("indirect_target"),
             manner=action_dict.get("manner"),
+            parameters=action_dict.get("parameters", {}),
         )
 
         validation = ValidationResult(
@@ -90,12 +94,12 @@ async def execute_actions_node(state: GameState) -> dict[str, Any]:
         else:
             failed_results.append(validation)
 
-    # Execute valid actions
+    # Execute valid actions (pass player_location for players without NPCExtension)
     turn_result = await executor.execute_turn(
         valid_actions=valid_results,
         failed_actions=failed_results,
-        complication=None,  # Complication oracle not yet implemented
         actor=actor,
+        actor_location=player_location,
     )
 
     # Convert TurnResult to dict for state serialization
@@ -114,7 +118,7 @@ async def execute_actions_node(state: GameState) -> dict[str, Any]:
         })
 
     failed_actions = []
-    for fail in turn_result.failed_actions:
+    for fail in turn_result.failed_validations:
         failed_actions.append({
             "action": {
                 "type": fail.action.type.value,
@@ -191,6 +195,9 @@ def create_execute_actions_node(
 
         executor = ActionExecutor(db, game_session)
 
+        # Get player location for execution
+        player_location = state.get("player_location", "")
+
         valid_results = []
         failed_results = []
 
@@ -201,6 +208,7 @@ def create_execute_actions_node(
                 target=action_dict.get("target"),
                 indirect_target=action_dict.get("indirect_target"),
                 manner=action_dict.get("manner"),
+                parameters=action_dict.get("parameters", {}),
             )
 
             validation = ValidationResult(
@@ -222,8 +230,8 @@ def create_execute_actions_node(
         turn_result = await executor.execute_turn(
             valid_actions=valid_results,
             failed_actions=failed_results,
-            complication=None,
             actor=actor,
+            actor_location=player_location,
         )
 
         executions = []
@@ -241,7 +249,7 @@ def create_execute_actions_node(
             })
 
         failed_actions = []
-        for fail in turn_result.failed_actions:
+        for fail in turn_result.failed_validations:
             failed_actions.append({
                 "action": {
                     "type": fail.action.type.value,

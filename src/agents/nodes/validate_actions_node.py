@@ -59,6 +59,9 @@ async def validate_actions_node(state: GameState) -> dict[str, Any]:
     combat_active = state.get("combat_active", False)
     validator = ActionValidator(db, game_session, combat_active=combat_active)
 
+    # Get player location for validation
+    player_location = state.get("player_location", "")
+
     validation_results = []
 
     for action_dict in parsed_actions:
@@ -68,10 +71,11 @@ async def validate_actions_node(state: GameState) -> dict[str, Any]:
             target=action_dict.get("target"),
             indirect_target=action_dict.get("indirect_target"),
             manner=action_dict.get("manner"),
+            parameters=action_dict.get("parameters", {}),
         )
 
-        # Validate
-        result = validator.validate(action, actor)
+        # Validate (pass player_location for players without NPCExtension)
+        result = validator.validate(action, actor, actor_location=player_location)
 
         # Convert to dict for state serialization
         result_dict = {
@@ -143,6 +147,7 @@ def create_validate_actions_node(
                 target=action_dict.get("target"),
                 indirect_target=action_dict.get("indirect_target"),
                 manner=action_dict.get("manner"),
+                parameters=action_dict.get("parameters", {}),
             )
 
             result = validator.validate(action, actor)

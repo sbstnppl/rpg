@@ -151,12 +151,12 @@
       "description": "Simple linen undergarments"
     },
     {
-      "item_key": "cloth_trousers",
-      "display_name": "Cloth Trousers",
+      "item_key": "cloth_pants",
+      "display_name": "Cloth Pants",
       "item_type": "clothing",
       "body_slot": "legs",
       "body_layer": 1,
-      "description": "Simple cloth trousers",
+      "description": "Simple cloth pants",
       "provides_slots": ["pocket_left", "pocket_right"]
     },
     {

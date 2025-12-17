@@ -131,16 +131,40 @@ class ActionValidator:
             self._managers_cache["combat"] = CombatManager(self.db, self.game_session)
         return self._managers_cache["combat"]
 
-    def validate(self, action: Action, actor: "Entity") -> ValidationResult:
+    def _get_actor_location(self, actor: "Entity") -> str:
+        """Get the actor's current location.
+
+        Uses the stored actor_location if set (for players), otherwise
+        tries to get it from the actor's NPCExtension.
+
+        Args:
+            actor: The entity to get location for.
+
+        Returns:
+            Location key string, or empty string if unknown.
+        """
+        if self._actor_location:
+            return self._actor_location
+        # Try NPCExtension for NPCs
+        if hasattr(actor, "npc_extension") and actor.npc_extension:
+            return actor.npc_extension.current_location or ""
+        return ""
+
+    def validate(
+        self, action: Action, actor: "Entity", actor_location: str | None = None
+    ) -> ValidationResult:
         """Validate a single action for an actor.
 
         Args:
             action: The action to validate.
             actor: The entity performing the action.
+            actor_location: Override location for actor (for players without NPCExtension).
 
         Returns:
             ValidationResult indicating if action is valid.
         """
+        # Store actor_location for use in validation methods
+        self._actor_location = actor_location
         # Dispatch based on action type
         match action.type:
             # Item actions
@@ -244,7 +268,7 @@ class ActionValidator:
             )
 
         # Find the item at current location
-        location_key = actor.current_location or ""
+        location_key = self._get_actor_location(actor)
         items_here = self.item_manager.get_items_at_location(location_key)
 
         # Try to match the target
@@ -364,7 +388,7 @@ class ActionValidator:
 
         # Check if recipient exists and is here
         recipient = self._find_entity_at_location(
-            action.indirect_target, actor.current_location
+            action.indirect_target, self._get_actor_location(actor)
         )
 
         if not recipient:
@@ -535,7 +559,7 @@ class ActionValidator:
                 )
 
         # Check items at location
-        items_here = self.item_manager.get_items_at_location(actor.current_location or "")
+        items_here = self.item_manager.get_items_at_location(self._get_actor_location(actor))
         for item in items_here:
             if target_lower in item.display_name.lower() or target_lower == item.item_key.lower():
                 risk_tags = self._assess_item_risk(item)
@@ -548,7 +572,7 @@ class ActionValidator:
                 )
 
         # Check entities at location
-        entity = self._find_entity_at_location(action.target, actor.current_location)
+        entity = self._find_entity_at_location(action.target, self._get_actor_location(actor))
         if entity:
             return ValidationResult(
                 action=action,
@@ -607,8 +631,9 @@ class ActionValidator:
             if location:
                 # Check if there's a valid path
                 # For now, allow if location exists
-                if location.properties and location.properties.get("dangerous"):
-                    risk_tags.append(RiskTag.DANGEROUS)
+                # Location model doesn't have properties - skip this check for now
+                # if location.properties and location.properties.get("dangerous"):
+                #     risk_tags.append(RiskTag.DANGEROUS)
                 return ValidationResult(
                     action=action,
                     valid=True,
@@ -644,7 +669,7 @@ class ActionValidator:
             )
 
         # Find target at location
-        target = self._find_entity_at_location(action.target, actor.current_location)
+        target = self._find_entity_at_location(action.target, self._get_actor_location(actor))
 
         if not target:
             return ValidationResult(
@@ -709,7 +734,7 @@ class ActionValidator:
                 action=action, valid=False, reason="Talk to whom?"
             )
 
-        target = self._find_entity_at_location(action.target, actor.current_location)
+        target = self._find_entity_at_location(action.target, self._get_actor_location(actor))
 
         if not target:
             return ValidationResult(
@@ -749,7 +774,7 @@ class ActionValidator:
                 reason=f"Ask {action.target} about what?",
             )
 
-        target = self._find_entity_at_location(action.target, actor.current_location)
+        target = self._find_entity_at_location(action.target, self._get_actor_location(actor))
 
         if not target:
             return ValidationResult(
@@ -790,7 +815,7 @@ class ActionValidator:
                 reason=f"Tell {action.target} what?",
             )
 
-        target = self._find_entity_at_location(action.target, actor.current_location)
+        target = self._find_entity_at_location(action.target, self._get_actor_location(actor))
 
         if not target:
             return ValidationResult(
@@ -821,7 +846,7 @@ class ActionValidator:
                 action=action, valid=False, reason="Trade with whom?"
             )
 
-        target = self._find_entity_at_location(action.target, actor.current_location)
+        target = self._find_entity_at_location(action.target, self._get_actor_location(actor))
 
         if not target:
             return ValidationResult(
@@ -845,7 +870,7 @@ class ActionValidator:
                 action=action, valid=False, reason=f"{verb.capitalize()} whom?"
             )
 
-        target = self._find_entity_at_location(action.target, actor.current_location)
+        target = self._find_entity_at_location(action.target, self._get_actor_location(actor))
 
         if not target:
             return ValidationResult(
@@ -870,8 +895,9 @@ class ActionValidator:
         risk_tags = []
 
         # Check if location has hidden elements
-        location = self.location_manager.get_location(actor.current_location or "")
-        if location and location.properties:
+        # Note: Location model doesn't have properties column yet
+        location = self.location_manager.get_location(self._get_actor_location(actor) or "")
+        if location and hasattr(location, 'properties') and location.properties:
             if location.properties.get("hidden_elements"):
                 risk_tags.append(RiskTag.HIDDEN)
             if location.properties.get("dangerous"):
@@ -899,8 +925,9 @@ class ActionValidator:
         risk_tags = []
 
         # Check if location is safe
-        location = self.location_manager.get_location(actor.current_location or "")
-        if location and location.properties:
+        # Note: Location model doesn't have properties column yet
+        location = self.location_manager.get_location(self._get_actor_location(actor) or "")
+        if location and hasattr(location, 'properties') and location.properties:
             if location.properties.get("dangerous"):
                 risk_tags.append(RiskTag.DANGEROUS)
 
@@ -1029,14 +1056,16 @@ class ActionValidator:
         if not location_key:
             return None
 
-        from src.database.models.entities import Entity
+        from src.database.models.entities import Entity, NPCExtension
         from src.database.models.enums import EntityType
 
+        # Query entities via NPCExtension to filter by location
         entities = (
             self.db.query(Entity)
+            .join(NPCExtension, Entity.id == NPCExtension.entity_id)
             .filter(
                 Entity.session_id == self.game_session.id,
-                Entity.current_location == location_key,
+                NPCExtension.current_location == location_key,
                 Entity.entity_type.in_([EntityType.NPC, EntityType.MONSTER, EntityType.ANIMAL]),
             )
             .all()
@@ -1059,13 +1088,13 @@ class ActionValidator:
         name_lower = name.lower()
 
         # Check items at location
-        items_here = self.item_manager.get_items_at_location(actor.current_location or "")
+        items_here = self.item_manager.get_items_at_location(self._get_actor_location(actor))
         for item in items_here:
             if name_lower in item.display_name.lower() or name_lower == item.item_key.lower():
                 return item.item_key
 
         # Check entities at location
-        entity = self._find_entity_at_location(name, actor.current_location)
+        entity = self._find_entity_at_location(name, self._get_actor_location(actor))
         if entity:
             return entity.entity_key
 

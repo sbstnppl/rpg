@@ -155,11 +155,31 @@ class ActionExecutor:
             )
         return self._managers_cache["relationship"]
 
+    def _get_actor_location(self, actor: "Entity") -> str:
+        """Get the actor's current location.
+
+        Uses the stored actor_location if set (for players), otherwise
+        tries to get it from the actor's NPCExtension.
+
+        Args:
+            actor: The entity to get location for.
+
+        Returns:
+            Location key string, or empty string if unknown.
+        """
+        if hasattr(self, "_actor_location") and self._actor_location:
+            return self._actor_location
+        # Try NPCExtension for NPCs
+        if hasattr(actor, "npc_extension") and actor.npc_extension:
+            return actor.npc_extension.current_location or ""
+        return ""
+
     async def execute_turn(
         self,
         valid_actions: list[ValidationResult],
         failed_actions: list[ValidationResult],
         actor: "Entity",
+        actor_location: str | None = None,
     ) -> TurnResult:
         """Execute all valid actions for a turn.
 
@@ -167,10 +187,14 @@ class ActionExecutor:
             valid_actions: List of validated actions to execute.
             failed_actions: List of actions that failed validation.
             actor: The entity performing the actions.
+            actor_location: Override location for actor (for players without NPCExtension).
 
         Returns:
             TurnResult with all execution results.
         """
+        # Store actor_location for use in execution methods
+        self._actor_location = actor_location
+
         result = TurnResult(failed_validations=failed_actions)
 
         for validation in valid_actions:
@@ -349,7 +373,7 @@ class ActionExecutor:
                 outcome=f"Item not found: {action.target}",
             )
 
-        location = actor.current_location or "unknown"
+        location = self._get_actor_location(actor) or "unknown"
 
         # Drop item at current location using manager
         try:
@@ -641,8 +665,9 @@ class ActionExecutor:
         destination = validation.resolved_target or action.target
         is_new = validation.metadata.get("new_location", False)
 
-        old_location = actor.current_location
-        actor.current_location = destination
+        old_location = self._get_actor_location(actor)
+        # Update stored location (for players, this is tracked in state)
+        self._actor_location = destination
 
         outcome_parts = [f"Moved to {destination}"]
         if is_new:
@@ -1240,7 +1265,7 @@ class ActionExecutor:
     ) -> ExecutionResult:
         """Execute looking around."""
         action = validation.action
-        location = actor.current_location or "unknown"
+        location = self._get_actor_location(actor) or "unknown"
 
         return ExecutionResult(
             action=action,

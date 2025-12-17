@@ -2069,19 +2069,62 @@ def _create_world_from_extraction(
     game_session: GameSession,
     player: Entity,
     world_data: dict,
-) -> None:
-    """Create fully-generated NPCs and relationships from extracted world data.
+) -> str | None:
+    """Create fully-generated NPCs, locations, and relationships from extracted world data.
 
     Args:
         db: Database session.
         game_session: Game session.
         player: Player entity.
         world_data: Extracted world data dict.
+
+    Returns:
+        Starting location key if found, None otherwise.
     """
+    from src.database.models.world import Location
     from src.services.emergent_npc_generator import EmergentNPCGenerator
 
     entity_manager = EntityManager(db, game_session)
     npc_generator = EmergentNPCGenerator(db, game_session)
+    starting_location_key = None
+
+    # Create locations from backstory
+    locations_data = world_data.get("locations", [])
+    created_locations = {}
+
+    for loc_data in locations_data:
+        location_key = loc_data.get("location_key")
+        if not location_key:
+            continue
+
+        # Check if location already exists
+        existing = db.query(Location).filter(
+            Location.session_id == game_session.id,
+            Location.location_key == location_key
+        ).first()
+
+        if not existing:
+            location = Location(
+                session_id=game_session.id,
+                location_key=location_key,
+                display_name=loc_data.get("display_name", location_key.replace("_", " ").title()),
+                description=loc_data.get("description"),
+                category=loc_data.get("location_type"),
+            )
+            db.add(location)
+            created_locations[location_key] = location
+
+        # Track player home as potential starting location
+        if loc_data.get("is_player_home"):
+            starting_location_key = location_key
+
+    # Get starting location from context if specified
+    starting_context = world_data.get("starting_context", {})
+    if starting_context.get("starting_location_key"):
+        starting_location_key = starting_context["starting_location_key"]
+
+    if created_locations:
+        console.print(f"[dim]Created {len(created_locations)} locations[/dim]")
 
     # Update player appearance from extraction
     player_appearance = world_data.get("player_appearance", {})
@@ -2177,6 +2220,8 @@ def _create_world_from_extraction(
     # Log results
     if created_entities:
         console.print(f"[dim]Created {len(created_entities)} backstory connections[/dim]")
+
+    return starting_location_key
 
 
 def _create_character_preferences(

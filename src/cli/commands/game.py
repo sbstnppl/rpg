@@ -437,8 +437,9 @@ async def _start_wizard_async(
             setting_name=selected_setting,
             session_id=game_session.id,
         )
+        starting_location_key = None
         if world_data:
-            _create_world_from_extraction(db, game_session, entity, world_data)
+            starting_location_key = _create_world_from_extraction(db, game_session, entity, world_data)
 
         # Infer gameplay fields (skills, preferences, modifiers)
         console.print("[dim]Inferring skills and preferences...[/dim]")
@@ -465,7 +466,11 @@ async def _start_wizard_async(
 
         # Phase 4: Start the game loop directly
         console.print()
-        await _game_loop(db, game_session, entity, use_system_authority=use_system_authority)
+        await _game_loop(
+            db, game_session, entity,
+            use_system_authority=use_system_authority,
+            initial_location=starting_location_key,
+        )
 
 
 @app.command("list")
@@ -685,29 +690,46 @@ def _display_resume_context(
         lines.append(f"Present: {', '.join(npc_names)}")
 
     # Add a brief context excerpt from the last response (first ~150 chars)
+    # But skip if it's a minimal/bad response
     if last_turn.gm_response:
-        # Get first sentence or first 150 chars
         response = last_turn.gm_response.strip()
-        first_sentence_end = min(
-            response.find(". ") + 1 if ". " in response else len(response),
-            response.find(".\n") + 1 if ".\n" in response else len(response),
-            150
+        is_bad_excerpt = (
+            len(response) < 50
+            or response.startswith("Attempted:")
+            or response == "Nothing happens."
         )
-        if first_sentence_end < 20:  # Too short, take more
-            first_sentence_end = min(150, len(response))
-        excerpt = response[:first_sentence_end].strip()
-        if len(response) > first_sentence_end:
-            excerpt += "..."
-        lines.append("")
-        lines.append(f"[dim italic]{excerpt}[/dim italic]")
+        if not is_bad_excerpt:
+            # Get first sentence or first 150 chars
+            first_sentence_end = min(
+                response.find(". ") + 1 if ". " in response else len(response),
+                response.find(".\n") + 1 if ".\n" in response else len(response),
+                150
+            )
+            if first_sentence_end < 20:  # Too short, take more
+                first_sentence_end = min(150, len(response))
+            excerpt = response[:first_sentence_end].strip()
+            if len(response) > first_sentence_end:
+                excerpt += "..."
+            lines.append("")
+            lines.append(f"[dim italic]{excerpt}[/dim italic]")
 
     # Display as a panel
     console.print(Panel("\n".join(lines), title="Session Resumed", border_style="cyan"))
     console.print()
 
     # Show the last GM response so player knows where they left off
-    display_info("When we last left off...")
-    display_narrative(last_turn.gm_response)
+    # But skip if it's a minimal/bad response (like "Attempted: custom.")
+    gm_response = last_turn.gm_response or ""
+    is_bad_response = (
+        len(gm_response) < 50
+        or gm_response.strip().startswith("Attempted:")
+        or gm_response.strip() == "Nothing happens."
+    )
+    if gm_response and not is_bad_response:
+        display_info("When we last left off...")
+        display_narrative(gm_response)
+    else:
+        display_info("Type 'look around' or '/look' to see your surroundings.")
 
 
 async def _game_loop(
@@ -715,6 +737,7 @@ async def _game_loop(
     game_session: GameSession,
     player: Entity,
     use_system_authority: bool = True,
+    initial_location: str | None = None,
 ) -> None:
     """Main game loop.
 
@@ -725,6 +748,7 @@ async def _game_loop(
         use_system_authority: If True (default), use the System-Authority pipeline
             which ensures mechanical consistency. If False, use the legacy pipeline
             where the LLM decides what happens.
+        initial_location: Optional starting location key from character creation.
     """
     from src.agents.graph import build_game_graph, build_system_authority_graph
     from src.agents.state import create_initial_state
@@ -741,8 +765,20 @@ async def _game_loop(
     compiled = graph.compile()
     display_info(f"Using {pipeline_name} pipeline")
 
-    # Get player location (default to "starting_location")
-    player_location = "starting_location"
+    # Get player location - use initial_location if provided, otherwise look for home location
+    from src.database.models.world import Location
+
+    player_location = initial_location
+    if not player_location:
+        # Try to find a home location for the player
+        home_location = db.query(Location).filter(
+            Location.session_id == game_session.id,
+            Location.category.in_(["home", "residence"])
+        ).first()
+        if home_location:
+            player_location = home_location.location_key
+        else:
+            player_location = "starting_location"
 
     display_info("Type your actions. Use /quit to exit, /help for commands.")
     console.print()
@@ -836,6 +872,10 @@ async def _game_loop(
                 from src.cli.commands.character import equipment
                 equipment(session_id=game_session.id)
                 continue
+            elif cmd in ("look", "l"):
+                # LOOK command - trigger scene generation
+                player_input = "look around"
+                # Fall through to process as normal input
             elif cmd == "outfit":
                 from src.cli.commands.character import outfit
                 outfit(session_id=game_session.id)
@@ -1082,8 +1122,12 @@ def _show_location(db, game_session: GameSession, player_location: str) -> None:
         if location.category:
             lines.append(f"Type: {location.category}")
         console.print(Panel("\n".join(lines), title="Current Location", border_style="green"))
+    elif player_location in ("starting_location", "unknown"):
+        console.print("[dim]Location not yet established. Type '/look' to explore your surroundings.[/dim]")
     else:
-        console.print(f"[dim]Location: {player_location}[/dim]")
+        # Location key exists but no record - display humanized version
+        display_name = player_location.replace("_", " ").title()
+        console.print(f"[dim]Location: {display_name}[/dim]")
 
 
 def _show_quests(db, game_session: GameSession) -> None:
@@ -1220,7 +1264,10 @@ def turn(
                 display_error("No active session found")
                 raise typer.Exit(1)
 
-            player = _get_or_create_player(db, game_session)
+            player = _get_player(db, game_session)
+            if not player:
+                display_error("No player found in session. Create a character first.")
+                raise typer.Exit(1)
 
             # Run single turn
             asyncio.run(_single_turn(db, game_session, player, player_input, use_system_authority=use_system_authority))

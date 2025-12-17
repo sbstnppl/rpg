@@ -87,8 +87,9 @@ COMMAND_PATTERNS: list[tuple[str, ActionType, list[str]]] = [
 # Patterns should be ordered from most specific to least specific
 NATURAL_LANGUAGE_PATTERNS: list[tuple[str, ActionType, list[str], float]] = [
     # Movement - high confidence patterns
+    # Stop capturing at punctuation or common clause starters like "in order to", "to look", etc.
     (
-        r"\b(?:go|walk|head|move|travel|run)\s+(?:to|towards?|into|over\s+to)\s+(?:the\s+)?(.+)",
+        r"\b(?:go|walk|head|move|travel|run)\s+(?:to|towards?|into|over\s+to)\s+(?:the\s+)?([^.?!]+?)(?:\s+(?:in\s+order\s+to|to\s+(?:look|find|see|get|search|check)|and\s+|then\s+)|[.?!]|$)",
         ActionType.MOVE,
         ["target"],
         0.9,
@@ -229,8 +230,9 @@ NATURAL_LANGUAGE_PATTERNS: list[tuple[str, ActionType, list[str], float]] = [
         0.85,
     ),
     # World interaction
+    # Note: "look around" is handled by LOOK pattern, not SEARCH
     (
-        r"\b(?:search|look\s+around|investigate)(?:\s+(?:the\s+)?(.+))?",
+        r"\b(?:search|investigate)(?:\s+(?:the\s+)?(.+))?",
         ActionType.SEARCH,
         ["target"],
         0.8,
@@ -300,6 +302,12 @@ NATURAL_LANGUAGE_PATTERNS: list[tuple[str, ActionType, list[str], float]] = [
     # Meta - very high confidence since these are simple
     (
         r"^(?:look\s+around|look$|l$)",
+        ActionType.LOOK,
+        [],
+        0.95,
+    ),
+    (
+        r"^(?:where\s+am\s+i|where\s+is\s+this|what\s+(?:is\s+this\s+place|place\s+is\s+this))\??$",
         ActionType.LOOK,
         [],
         0.95,

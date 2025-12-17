@@ -107,7 +107,10 @@ class IntentParser:
     async def parse_async(
         self, text: str, context: SceneContext | None = None
     ) -> ParsedIntent:
-        """Parse player input, falling back to LLM for complex inputs.
+        """Parse player input using LLM for natural language.
+
+        Uses LLM as the primary parser for natural language input,
+        with patterns only for explicit /commands.
 
         Args:
             text: Raw player input.
@@ -116,18 +119,25 @@ class IntentParser:
         Returns:
             ParsedIntent with recognized actions.
         """
-        # Try pattern matching first
-        intent = self.parse(text, context)
+        # Check for explicit /commands first (patterns only)
+        if text.strip().startswith("/"):
+            intent = self.parse(text, context)
+            if intent.actions or intent.needs_clarification:
+                return intent
 
-        # If we got actions, we're done
+        # For all natural language, use LLM if available
+        if self.llm_provider:
+            # Build a minimal context if none provided
+            if context is None:
+                context = SceneContext()
+            return await self._llm_classify(text, context)
+
+        # Fallback to pattern matching if no LLM
+        intent = self.parse(text, context)
         if intent.actions or intent.needs_clarification:
             return intent
 
-        # No patterns matched - try LLM classification
-        if self.llm_provider and context:
-            return await self._llm_classify(text, context)
-
-        # No LLM available - mark as custom action
+        # No LLM and no patterns matched - mark as custom action
         return ParsedIntent(
             actions=[Action(type=ActionType.CUSTOM, parameters={"raw_input": text})],
             raw_input=text,

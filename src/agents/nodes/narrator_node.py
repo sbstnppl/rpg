@@ -9,7 +9,106 @@ from sqlalchemy.orm import Session
 
 from src.agents.state import GameState
 from src.database.models.session import GameSession
+from src.llm.factory import get_gm_provider
+from src.llm.message_types import Message, MessageRole
 from src.narrator.narrator import ConstrainedNarrator
+
+
+SCENE_INTRO_SYSTEM = """You are the Game Master for a fantasy RPG. Generate atmospheric narrative introductions.
+
+Write in second person ("You are...", "You see..."). Be evocative and immersive.
+Use American English (pants not trousers, color not colour, etc.).
+Do NOT include any game mechanics, dice rolls, or meta-commentary.
+"""
+
+SCENE_INTRO_PROMPT = """Generate an atmospheric introduction for this scene.
+
+SCENE CONTEXT:
+{scene_context}
+
+Write 3-5 paragraphs introducing this scene. Include:
+- Description of the player character (who they are, what they look like, what they're wearing)
+- How the character is feeling right now
+- Description of the current location and atmosphere
+- Any NPCs present and what they're doing
+- Sensory details (sights, sounds, smells)
+"""
+
+LOOK_SYSTEM = """You are the Game Master for a fantasy RPG. Describe what the player sees when they look around.
+
+Write in second person ("You see...", "You notice..."). Be concise but evocative.
+Use American English (pants not trousers, color not colour, etc.).
+Do NOT describe the player's feelings, clothing, or internal state - just what they observe.
+Do NOT invent items or NPCs that aren't in the scene context.
+Do NOT include any game mechanics, dice rolls, or meta-commentary.
+"""
+
+LOOK_PROMPT = """Describe what the player sees when they look around.
+
+SCENE CONTEXT:
+{scene_context}
+
+Write 2-3 short paragraphs describing:
+- The location and its notable features
+- Any people present and what they're doing
+- Any visible items or objects of interest
+- Available exits or directions
+
+Keep it brief and factual. Only mention things that are actually in the scene context above.
+"""
+
+
+async def _generate_scene_intro(scene_context: str) -> str:
+    """Generate a scene introduction using the LLM.
+
+    Args:
+        scene_context: Compiled scene context from ContextCompiler.
+
+    Returns:
+        Narrative introduction text.
+    """
+    try:
+        llm = get_gm_provider()
+        prompt = SCENE_INTRO_PROMPT.format(scene_context=scene_context)
+        messages = [Message(role=MessageRole.USER, content=prompt)]
+        response = await llm.complete(messages, temperature=0.8, max_tokens=1000, system_prompt=SCENE_INTRO_SYSTEM)
+        return response.content if hasattr(response, "content") else str(response)
+    except Exception as e:
+        # Fallback if LLM fails
+        return f"You find yourself in an unfamiliar place... (Error generating intro: {e})"
+
+
+async def _generate_look_description(scene_context: str) -> str:
+    """Generate a LOOK description using the LLM.
+
+    This is shorter and more focused than scene_intro - just describes
+    what the player sees, not their feelings or clothing.
+
+    Args:
+        scene_context: Compiled scene context from ContextCompiler.
+
+    Returns:
+        Brief description of visible surroundings.
+    """
+    try:
+        llm = get_gm_provider()
+        prompt = LOOK_PROMPT.format(scene_context=scene_context)
+        messages = [Message(role=MessageRole.USER, content=prompt)]
+        response = await llm.complete(messages, temperature=0.7, max_tokens=500, system_prompt=LOOK_SYSTEM)
+        return response.content if hasattr(response, "content") else str(response)
+    except Exception as e:
+        # Fallback if LLM fails
+        return f"You look around... (Error generating description: {e})"
+
+
+def _is_look_action(turn_result: dict) -> bool:
+    """Check if the turn result is a LOOK action that needs scene description."""
+    executions = turn_result.get("executions", [])
+    failed = turn_result.get("failed_actions", [])
+    if len(executions) == 1 and not failed:
+        action = executions[0].get("action", {})
+        return action.get("type") == "look"
+    return False
 
 
 async def narrator_node(state: GameState) -> dict[str, Any]:
@@ -24,11 +123,27 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
     Returns:
         Partial state update with gm_response.
     """
+    # Handle scene requests (first turn intro, etc.)
+    if state.get("is_scene_request"):
+        scene_context = state.get("scene_context", "")
+        if scene_context:
+            narrative = await _generate_scene_intro(scene_context)
+            return {"gm_response": narrative}
+        return {"gm_response": "You find yourself in an unfamiliar place..."}
+
     turn_result = state.get("turn_result")
     if not turn_result:
         return {
             "gm_response": "Nothing happens.",
         }
+
+    # Handle LOOK actions - generate brief scene description
+    if _is_look_action(turn_result):
+        scene_context = state.get("scene_context", "")
+        if scene_context:
+            narrative = await _generate_look_description(scene_context)
+            return {"gm_response": narrative}
+        return {"gm_response": "You look around but there's nothing particularly notable to see."}
 
     # Inject complication from state if not already in turn_result
     complication = state.get("complication")
@@ -39,8 +154,13 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
     scene_context = state.get("scene_context", "")
     ambient_flavor = state.get("ambient_flavor")
 
-    # Use fallback narrator (no LLM for now - can be enhanced later)
-    narrator = ConstrainedNarrator()
+    # Use LLM-powered narrator for proper prose generation
+    try:
+        llm = get_gm_provider()
+        narrator = ConstrainedNarrator(llm_provider=llm)
+    except Exception:
+        # Fallback to non-LLM narrator if provider unavailable
+        narrator = ConstrainedNarrator()
 
     result = await narrator.narrate(
         turn_result=turn_result,
