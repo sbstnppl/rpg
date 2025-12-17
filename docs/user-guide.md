@@ -4,30 +4,61 @@
 
 ### Installation
 
+#### Prerequisites
+- Python 3.11 or higher
+- PostgreSQL database server
+- API key for Anthropic Claude or OpenAI GPT
+
+#### Steps
+
 ```bash
-# Clone the repository
+# 1. Clone the repository
 git clone <repo-url>
 cd rpg
 
-# Install dependencies
-pip install -e .
+# 2. Create and activate virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Set up database
+# 3. Install dependencies
+pip install -e .           # Basic installation
+# Or for development:
+pip install -e ".[dev]"    # Includes pytest, black, ruff, mypy
+
+# 4. Set up PostgreSQL database
 createdb rpg_game
-alembic upgrade head
 
-# Configure environment
+# 5. Configure environment
 cp .env.example .env
-# Edit .env with your API keys
+# Edit .env with your API keys (see below)
+
+# 6. Run database migrations
+alembic upgrade head
 ```
 
 ### Configuration
 
-Create a `.env` file:
-```
-ANTHROPIC_API_KEY=your-key-here
-OPENAI_API_KEY=your-key-here
+Edit your `.env` file with your settings:
+
+```bash
+# Database (required)
 DATABASE_URL=postgresql://localhost/rpg_game
+
+# LLM API Keys (at least one required)
+ANTHROPIC_API_KEY=your-anthropic-key-here
+OPENAI_API_KEY=your-openai-key-here
+
+# LLM Provider (anthropic or openai)
+LLM_PROVIDER=anthropic
+
+# Optional: Model selection (defaults shown)
+# GM_MODEL=claude-sonnet-4-20250514
+# EXTRACTION_MODEL=claude-sonnet-4-20250514
+# CHEAP_MODEL=claude-haiku-3
+
+# Optional: Debug settings
+# DEBUG=false
+# LOG_LLM_CALLS=false
 ```
 
 ## Starting a New Game
@@ -37,6 +68,30 @@ DATABASE_URL=postgresql://localhost/rpg_game
 ```bash
 rpg game start
 ```
+
+### Pipeline Options
+
+The game supports two pipelines, selectable via `--pipeline`:
+
+```bash
+# System-Authority pipeline (default, recommended)
+rpg game start --pipeline system-authority
+rpg game play --pipeline system-authority
+
+# Legacy pipeline (LLM decides everything)
+rpg game start --pipeline legacy
+rpg game play --pipeline legacy
+```
+
+**System-Authority Pipeline** (default):
+- System decides what happens mechanically, LLM describes it
+- Guaranteed consistency between narrative and game state
+- Faster, more reliable, better for most gameplay
+
+**Legacy Pipeline**:
+- LLM decides what happens AND narrates it
+- More creative freedom, but may have state/narrative drift
+- Use for testing or if you prefer the older style
 
 The unified game wizard guides you through:
 1. **Setting Selection** - Choose fantasy, contemporary, or sci-fi
@@ -282,17 +337,50 @@ The GM handles this naturally through roleplay:
 
 ## Special Commands
 
+### Character Commands
 | Command | Description |
 |---------|-------------|
 | `/status` | View character stats, needs, and conditions |
 | `/inventory` | List items you're carrying |
 | `/equipment` | Show equipped items with body slots |
 | `/outfit` | See layered clothing by body slot |
-| `/tasks` | View active tasks and quests |
+
+### World Commands
+| Command | Description |
+|---------|-------------|
+| `/location` | Current location details |
+| `/nearby` | NPCs and items at your location |
 | `/time` | Check current time, day, and weather |
-| `/save` | Save your game |
-| `/quit` | Exit game |
+| `/quests` | View active quests and tasks |
+
+### Action Commands (Validated)
+These commands validate constraints before the GM responds:
+| Command | Description |
+|---------|-------------|
+| `/go <place>` | Move to a location |
+| `/take <item>` | Pick up an item |
+| `/drop <item>` | Drop an item |
+| `/give <item> to <npc>` | Give an item to someone |
+| `/attack <target>` | Start combat |
+
+### Image Generation Commands
+Generate FLUX image prompts for your scene or character:
+| Command | Description |
+|---------|-------------|
+| `/scene [pov\|third] [photo\|art]` | Generate scene prompt |
+| `/portrait [base\|current] [photo\|art]` | Generate character portrait prompt |
+
+Options:
+- `pov` = First-person view, `third` = Player visible in scene
+- `base` = Appearance only, `current` = With equipment & condition
+- `photo` = Photorealistic, `art` = Digital illustration
+
+### System Commands
+| Command | Description |
+|---------|-------------|
 | `/help` | Show available commands |
+| `/save` | Save your game |
+| `/quit` | Save and exit (or use Ctrl+C) |
 
 ## NPCs and Relationships
 

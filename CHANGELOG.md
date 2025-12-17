@@ -140,6 +140,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Maintains age/occupation modifiers while re-rolling innate potential
 
 ### Changed
+- **Documentation Updates** - Updated README.md and user-guide.md to reflect current state
+  - Fixed incorrect CLI commands in README.md Quick Start (`rpg start` → `rpg game start`)
+  - Added missing commands to user-guide.md: `/location`, `/nearby`, `/portrait`, `/scene`, action commands
+  - Added `--pipeline` flag documentation for System-Authority vs Legacy pipelines
+  - Expanded installation instructions with prerequisites and virtual environment setup
+  - Reorganized Special Commands section into logical categories
 - **Stats-Derived Build** - Character physical build now auto-derived from calculated attributes
   - Added `infer_build_from_stats()` function to `attribute_calculator.py`
   - Removed `build` from required NAME section fields (now optional)

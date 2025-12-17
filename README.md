@@ -40,14 +40,18 @@ alembic upgrade head
 ## Quick Start
 
 ```bash
-# Start a new game
-rpg start
+# Start a new game (interactive wizard)
+rpg game start
 
-# Continue existing session
-rpg continue
+# Continue playing (or start if no session exists)
+rpg play
+# Or: rpg game play
 
-# List saved sessions
-rpg list
+# List saved games
+rpg game list
+
+# Delete a game
+rpg game delete <id>
 ```
 
 ## Configuration
