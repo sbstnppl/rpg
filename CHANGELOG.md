@@ -156,6 +156,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Extracts visual properties from `item.properties["visual"]` if available
 
 ### Fixed
+- **Character Wizard Background Confirmation Bypass** - Fixed bug where BACKGROUND/PERSONALITY sections completed without user confirmation
+  - Root cause: When background was saved via `field_updates` in a previous turn, `already_saved` check passed and `newly_added` was empty, skipping confirmation
+  - Fix: Added special handling for content-heavy sections (BACKGROUND, PERSONALITY) that always requires user confirmation before completing
+  - Now shows "Say 'ok' to confirm, or provide changes" even when field was previously saved
+- **No Current Value When Revisiting Wizard Section** - Fixed bug where revisiting Background/Personality sections showed only the header
+  - Root cause: `_run_section_conversation()` only displayed `display_section_header(title)` with no content preview
+  - Fix: Added display of current saved value in a Panel when entering sections that already have content
+  - Now shows "Current background:" with the full text before prompting for input
 - **Character Occupation Not in Opening Scene** - Fixed bug where player occupation was ignored in game opening
   - Root cause: `ContextCompiler._get_player_context()` omitted occupation from player context passed to GM
   - Fix: Added occupation (with years if set) to player context after appearance section

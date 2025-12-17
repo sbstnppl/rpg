@@ -3328,6 +3328,8 @@ async def _run_section_conversation(
     Returns:
         True if section completed successfully, False if cancelled.
     """
+    from rich.panel import Panel
+
     from src.llm.factory import get_cheap_provider
     from src.llm.message_types import Message, MessageRole
     from src.cli.display import (
@@ -3350,6 +3352,17 @@ async def _run_section_conversation(
     # Display section header
     title = WIZARD_SECTION_TITLES.get(section_name, section_name.value.title())
     display_section_header(title)
+
+    # Display current value for content-heavy sections when revisiting
+    char = wizard_state.character
+    if section_name == WizardSectionName.BACKGROUND and char.background:
+        console.print("[dim]Current background:[/dim]")
+        console.print(Panel(char.background, style="dim", padding=(0, 1)))
+        console.print()
+    elif section_name == WizardSectionName.PERSONALITY and char.personality_notes:
+        console.print("[dim]Current personality:[/dim]")
+        console.print(Panel(char.personality_notes, style="dim", padding=(0, 1)))
+        console.print()
 
     # Build species list with their available genders
     available_species_with_genders = "Human (Male, Female)"  # Default
@@ -3577,6 +3590,20 @@ async def _run_section_conversation(
                             value = getattr(wizard_state.character, field_name, None)
                             if value is not None and value != "":
                                 newly_added.append(f"{field_name}={value}")
+
+                    # For content-heavy sections (BACKGROUND, PERSONALITY), always require
+                    # confirmation even if the field was saved in a previous turn
+                    content_sections = {
+                        WizardSectionName.BACKGROUND,
+                        WizardSectionName.PERSONALITY,
+                    }
+                    if section_name in content_sections and not newly_added:
+                        # Field was previously saved, still require confirmation
+                        console.print(
+                            "[dim]Say 'ok' to confirm, or provide changes[/dim]"
+                        )
+                        pending_confirmation = True
+                        continue
 
                     if newly_added:
                         # LLM snuck in values without asking - show them and ask for confirmation

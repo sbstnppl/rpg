@@ -86,6 +86,7 @@ rpg/
 - `.claude/docs/coding-standards.md` - Code style guide
 - `.claude/docs/agent-prompts.md` - LLM prompt templates
 - `.claude/docs/database-conventions.md` - DB patterns
+- `.claude/docs/gameplay-testing-guide.md` - How to observe/debug gameplay
 
 ## Core Patterns
 
