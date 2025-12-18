@@ -201,6 +201,13 @@ class Entity(Base, TimestampMixin):
         comment="Turn number when entity was first mentioned",
     )
 
+    # Dynamic state (transient, cleared on location change or explicit action)
+    temporary_state: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Transient entity state (posture, position, temporary conditions)",
+    )
+
     # Relationships
     session: Mapped["GameSession"] = relationship(
         back_populates="entities",

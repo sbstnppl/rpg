@@ -98,8 +98,10 @@ from src.agents.nodes.combat_resolver_node import combat_resolver_node
 # System-Authority pipeline nodes
 from src.agents.nodes.parse_intent_node import parse_intent_node
 from src.agents.nodes.validate_actions_node import validate_actions_node
+from src.agents.nodes.dynamic_planner_node import dynamic_planner_node
 from src.agents.nodes.complication_oracle_node import complication_oracle_node
 from src.agents.nodes.execute_actions_node import execute_actions_node
+from src.agents.nodes.state_validator_node import state_validator_node
 from src.agents.nodes.narrator_node import narrator_node
 
 
@@ -119,8 +121,10 @@ SYSTEM_AUTHORITY_NODES = {
     "context_compiler": context_compiler_node,
     "parse_intent": parse_intent_node,
     "validate_actions": validate_actions_node,
+    "dynamic_planner": dynamic_planner_node,
     "complication_oracle": complication_oracle_node,
     "execute_actions": execute_actions_node,
+    "state_validator": state_validator_node,
     "narrator": narrator_node,
     "persistence": persistence_node,
 }
@@ -212,7 +216,9 @@ def build_system_authority_graph() -> StateGraph:
 
     This is the new pipeline that ensures mechanical consistency:
     - System decides what happens (mechanically)
+    - Dynamic planner transforms CUSTOM actions into structured plans
     - Oracle adds creative complications (without breaking mechanics)
+    - State validator ensures data integrity after execution
     - LLM describes it (narratively)
 
     Graph structure:
@@ -228,10 +234,16 @@ def build_system_authority_graph() -> StateGraph:
         validate_actions (check if actions are possible)
           |
           v
+        dynamic_planner (transform CUSTOM actions into execution plans)
+          |
+          v
         complication_oracle (optionally add narrative complications)
           |
           v
         execute_actions (apply mechanical changes)
+          |
+          v
+        state_validator (ensure data integrity, auto-fix issues)
           |
           v
         narrator (generate prose from facts)
@@ -258,9 +270,11 @@ def build_system_authority_graph() -> StateGraph:
     # Define linear flow
     graph.add_edge("context_compiler", "parse_intent")
     graph.add_edge("parse_intent", "validate_actions")
-    graph.add_edge("validate_actions", "complication_oracle")
+    graph.add_edge("validate_actions", "dynamic_planner")
+    graph.add_edge("dynamic_planner", "complication_oracle")
     graph.add_edge("complication_oracle", "execute_actions")
-    graph.add_edge("execute_actions", "narrator")
+    graph.add_edge("execute_actions", "state_validator")
+    graph.add_edge("state_validator", "narrator")
     graph.add_edge("narrator", "persistence")
     graph.add_edge("persistence", END)
 

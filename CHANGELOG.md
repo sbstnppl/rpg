@@ -59,6 +59,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New prompt template: `data/templates/complication_generator.md`
   - Unit tests: `tests/test_oracle/` with probability, types, and oracle tests
 
+  **Phase 4 - Dynamic Action Planner:**
+  - New `src/planner/` module for transforming CUSTOM actions into structured plans
+  - `DynamicActionType` enum: state_change, recall, narrative_only
+  - `StateChangeType` enum: item_property, entity_state, fact, knowledge_query
+  - `StateChange` dataclass for atomic state modifications
+  - `DynamicActionPlan` dataclass with narrator_facts, state_changes, roll requirements
+  - `DynamicActionPlanner` class with LLM-powered plan generation
+    - Gathers current state (inventory, equipped items, known facts, entity state)
+    - Calls LLM with structured output schema
+    - Returns mechanical execution plan
+  - New `dynamic_planner_node` for the LangGraph pipeline
+  - New `temporary_state` JSON column on Entity model for transient state
+  - `ItemManager.update_item_property()` for modifying item properties
+  - `ItemManager.get_item_property()` for reading item properties
+  - `EntityManager.update_temporary_state()` for entity transient state
+  - `EntityManager.get_temporary_state()` for reading entity state
+  - `EntityManager.clear_temporary_state()` for clearing transient state
+  - Updated `ActionExecutor._execute_custom()` to use dynamic plans
+  - Added `_apply_state_change()` helper for applying plan changes
+  - Pipeline flow: validate_actions → **dynamic_planner** → complication_oracle
+
+  **Phase 5 - State Integrity Validator:**
+  - New `src/validators/state_integrity_validator.py` module
+  - `StateIntegrityValidator` class with auto-fix capabilities
+  - `ValidationReport` and `IntegrityViolation` dataclasses
+  - Entity checks: NPC locations, required fields
+  - Item checks: ownership/location, duplicate body slots
+  - Relationship checks: orphaned refs, self-relationships
+  - Auto-fix mode: sets NPC locations to "unknown", fixes item ownership
+  - New `state_validator_node` for the LangGraph pipeline
+  - Pipeline flow: execute_actions → **state_validator** → narrator
+
   **Phase 4 - Migration & Cleanup:**
   - Added `--pipeline` option to CLI commands: `rpg game start`, `rpg game play`, `rpg game turn`
     - `system-authority` (default): New pipeline with guaranteed mechanical consistency

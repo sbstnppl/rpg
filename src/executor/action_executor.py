@@ -180,6 +180,7 @@ class ActionExecutor:
         failed_actions: list[ValidationResult],
         actor: "Entity",
         actor_location: str | None = None,
+        dynamic_plans: dict[str, Any] | None = None,
     ) -> TurnResult:
         """Execute all valid actions for a turn.
 
@@ -188,12 +189,15 @@ class ActionExecutor:
             failed_actions: List of actions that failed validation.
             actor: The entity performing the actions.
             actor_location: Override location for actor (for players without NPCExtension).
+            dynamic_plans: Plans for CUSTOM actions from dynamic_planner_node.
 
         Returns:
             TurnResult with all execution results.
         """
         # Store actor_location for use in execution methods
         self._actor_location = actor_location
+        # Store dynamic plans for CUSTOM action execution
+        self._dynamic_plans = dynamic_plans or {}
 
         result = TurnResult(failed_validations=failed_actions)
 
@@ -1312,13 +1316,126 @@ class ActionExecutor:
     async def _execute_custom(
         self, validation: ValidationResult, actor: "Entity"
     ) -> ExecutionResult:
-        """Execute a custom action."""
-        action = validation.action
+        """Execute a custom action using dynamic plan if available.
 
-        # Custom actions are passed through for narrator to handle creatively
+        If a dynamic plan exists for this action, applies state changes
+        and returns narrator facts. Otherwise falls back to simple pass-through.
+
+        Args:
+            validation: The validation result containing the action.
+            actor: Entity performing the action.
+
+        Returns:
+            ExecutionResult with outcome and narrator facts.
+        """
+        action = validation.action
+        raw_input = action.parameters.get("raw_input", str(action))
+
+        # Look up dynamic plan
+        plan_dict = self._dynamic_plans.get(raw_input)
+        if not plan_dict:
+            # No plan - fall back to simple pass-through
+            return ExecutionResult(
+                action=action,
+                success=True,
+                outcome=f"Attempted: {raw_input}",
+                metadata={"custom": True},
+            )
+
+        # We have a dynamic plan - execute it
+        from src.planner.schemas import DynamicActionPlan, DynamicActionType
+
+        # Parse plan (it's stored as dict)
+        plan = DynamicActionPlan(**plan_dict)
+
+        # Handle already_true case (action is redundant)
+        if plan.already_true:
+            return ExecutionResult(
+                action=action,
+                success=True,
+                outcome=plan.already_true_message or "Already in that state",
+                state_changes=[],
+                metadata={
+                    "custom": True,
+                    "plan_type": plan.action_type,
+                    "narrator_facts": plan.narrator_facts,
+                    "already_true": True,
+                },
+            )
+
+        # Apply state changes for STATE_CHANGE type
+        state_changes = []
+        if plan.action_type == DynamicActionType.STATE_CHANGE:
+            for change in plan.state_changes:
+                try:
+                    self._apply_state_change(change, actor)
+                    state_changes.append(
+                        f"{change.target_key}.{change.property_name}: "
+                        f"{change.old_value} -> {change.new_value}"
+                    )
+                except Exception as e:
+                    # Log but continue with other changes
+                    state_changes.append(f"Failed: {change.target_key}.{change.property_name}: {e}")
+
+        # Build outcome from first narrator fact or action type
+        outcome = plan.narrator_facts[0] if plan.narrator_facts else f"Completed: {raw_input}"
+
         return ExecutionResult(
             action=action,
             success=True,
-            outcome=f"Attempted: {action.parameters.get('raw_input', str(action))}",
-            metadata={"custom": True},
+            outcome=outcome,
+            state_changes=state_changes,
+            metadata={
+                "custom": True,
+                "plan_type": plan.action_type,
+                "narrator_facts": plan.narrator_facts,
+                "requires_roll": plan.requires_roll,
+                "roll_type": plan.roll_type,
+                "roll_dc": plan.roll_dc,
+            },
         )
+
+    def _apply_state_change(self, change: Any, actor: "Entity") -> None:
+        """Apply a single state change from a dynamic plan.
+
+        Args:
+            change: StateChange object with change details.
+            actor: Entity performing the action (for context).
+
+        Raises:
+            ValueError: If change cannot be applied.
+        """
+        from src.planner.schemas import StateChangeType
+
+        if change.change_type == StateChangeType.ITEM_PROPERTY:
+            # Update item property via ItemManager
+            self.item_manager.update_item_property(
+                item_key=change.target_key,
+                property_name=change.property_name,
+                value=change.new_value,
+            )
+
+        elif change.change_type == StateChangeType.ENTITY_STATE:
+            # Update entity temporary state via EntityManager
+            self.entity_manager.update_temporary_state(
+                entity_key=change.target_key,
+                property_name=change.property_name,
+                value=change.new_value,
+            )
+
+        elif change.change_type == StateChangeType.FACT:
+            # Record a new fact via FactManager
+            from src.managers.fact_manager import FactManager
+            fact_manager = FactManager(self.db, self.game_session)
+            fact_manager.record_fact(
+                subject_key=change.target_key,
+                predicate=change.property_name,
+                value=str(change.new_value),
+            )
+
+        elif change.change_type == StateChangeType.KNOWLEDGE_QUERY:
+            # Knowledge queries don't modify state
+            pass
+
+        else:
+            raise ValueError(f"Unknown change type: {change.change_type}")

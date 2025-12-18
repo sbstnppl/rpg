@@ -64,6 +64,9 @@ async def execute_actions_node(state: GameState) -> dict[str, Any]:
     # Get player location for execution
     player_location = state.get("player_location", "")
 
+    # Get dynamic plans for CUSTOM actions
+    dynamic_plans = state.get("dynamic_plans", {})
+
     # Separate valid and failed validations
     valid_results = []
     failed_results = []
@@ -100,6 +103,7 @@ async def execute_actions_node(state: GameState) -> dict[str, Any]:
         failed_actions=failed_results,
         actor=actor,
         actor_location=player_location,
+        dynamic_plans=dynamic_plans,
     )
 
     # Convert TurnResult to dict for state serialization
@@ -198,6 +202,9 @@ def create_execute_actions_node(
         # Get player location for execution
         player_location = state.get("player_location", "")
 
+        # Get dynamic plans for CUSTOM actions
+        dynamic_plans = state.get("dynamic_plans", {})
+
         valid_results = []
         failed_results = []
 
@@ -232,6 +239,7 @@ def create_execute_actions_node(
             failed_actions=failed_results,
             actor=actor,
             actor_location=player_location,
+            dynamic_plans=dynamic_plans,
         )
 
         executions = []

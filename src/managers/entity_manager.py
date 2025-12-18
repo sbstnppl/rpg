@@ -82,6 +82,81 @@ class EntityManager(BaseManager):
             .first()
         )
 
+    def get_temporary_state(
+        self,
+        entity_key: str,
+        property_name: str,
+        default: any = None,
+    ) -> any:
+        """Get a property from entity's temporary_state JSON.
+
+        Args:
+            entity_key: Entity key.
+            property_name: Property to get.
+            default: Default value if property not found.
+
+        Returns:
+            Property value or default.
+        """
+        entity = self.get_entity(entity_key)
+        if entity is None or entity.temporary_state is None:
+            return default
+        return entity.temporary_state.get(property_name, default)
+
+    def update_temporary_state(
+        self,
+        entity_key: str,
+        property_name: str,
+        value: any,
+    ) -> Entity:
+        """Update entity's temporary state.
+
+        Temporary state is transient (posture, position, etc.) and may be
+        cleared on location change or other events.
+
+        Args:
+            entity_key: Entity key.
+            property_name: State property (e.g., "posture").
+            value: New value.
+
+        Returns:
+            Updated Entity.
+
+        Raises:
+            ValueError: If entity not found.
+        """
+        from sqlalchemy.orm.attributes import flag_modified
+
+        entity = self.get_entity(entity_key)
+        if entity is None:
+            raise ValueError(f"Entity not found: {entity_key}")
+
+        if entity.temporary_state is None:
+            entity.temporary_state = {}
+
+        entity.temporary_state[property_name] = value
+
+        flag_modified(entity, "temporary_state")
+
+        self.db.flush()
+        return entity
+
+    def clear_temporary_state(self, entity_key: str) -> None:
+        """Clear entity's temporary state.
+
+        Call this on location change or when transient state should reset.
+
+        Args:
+            entity_key: Entity key.
+        """
+        from sqlalchemy.orm.attributes import flag_modified
+
+        entity = self.get_entity(entity_key)
+        if entity and entity.temporary_state:
+            entity.temporary_state = {}
+            flag_modified(entity, "temporary_state")
+            self.db.flush()
+
     def create_entity(
         self,
         entity_key: str,

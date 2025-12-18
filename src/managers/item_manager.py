@@ -122,6 +122,65 @@ class ItemManager(BaseManager):
             .first()
         )
 
+    def get_item_property(
+        self,
+        item_key: str,
+        property_name: str,
+        default: any = None,
+    ) -> any:
+        """Get a property from item's properties JSON.
+
+        Args:
+            item_key: Item key.
+            property_name: Property to get.
+            default: Default value if property not found.
+
+        Returns:
+            Property value or default.
+        """
+        item = self.get_item(item_key)
+        if item is None or item.properties is None:
+            return default
+        return item.properties.get(property_name, default)
+
+    def update_item_property(
+        self,
+        item_key: str,
+        property_name: str,
+        value: any,
+    ) -> Item:
+        """Update a single property in item's properties JSON.
+
+        Args:
+            item_key: Item key.
+            property_name: Property to update (e.g., "buttoned").
+            value: New value for the property.
+
+        Returns:
+            Updated Item.
+
+        Raises:
+            ValueError: If item not found.
+        """
+        from sqlalchemy.orm.attributes import flag_modified
+
+        item = self.get_item(item_key)
+        if item is None:
+            raise ValueError(f"Item not found: {item_key}")
+
+        # Initialize properties if None
+        if item.properties is None:
+            item.properties = {}
+
+        # Update the property
+        item.properties[property_name] = value
+
+        # Mark as modified for SQLAlchemy JSON tracking
+        flag_modified(item, "properties")
+
+        self.db.flush()
+        return item
+
     def create_item(
         self,
         item_key: str,

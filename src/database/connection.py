@@ -9,11 +9,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from src.config import settings
 from src.database.models.base import Base
 
-# Create engine
+# Create engine with connection timeouts for remote databases
 engine = create_engine(
     settings.database_url,
     echo=settings.debug,
     pool_pre_ping=True,
+    connect_args={
+        "connect_timeout": 10,  # Connection timeout in seconds
+        "options": "-c statement_timeout=30000",  # Query timeout 30s
+    },
 )
 
 # Create session factory
