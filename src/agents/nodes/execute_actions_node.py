@@ -146,8 +146,15 @@ async def execute_actions_node(state: GameState) -> dict[str, Any]:
         "complication": None,  # Will be added when oracle is implemented
     }
 
+    # Collect spawned items from execution metadata
+    spawned_items = []
+    for ex in turn_result.executions:
+        if ex.metadata.get("spawned_items"):
+            spawned_items.extend(ex.metadata["spawned_items"])
+
     return {
         "turn_result": turn_result_dict,
+        "spawned_items": spawned_items,
     }
 
 

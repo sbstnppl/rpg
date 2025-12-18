@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Autonomous World Generation & Narrative Validation** - Two-layer system for grounded narratives
+  - `SPAWN_ITEM` state change type in `DynamicActionPlanner` for autonomous item creation
+  - `SpawnItemSpec` schema for specifying emergent items (item_type, context, display_name, quality, condition)
+  - Enhanced planner prompts with world generation rules (when to spawn contextually appropriate items)
+  - Enhanced planner prompts with grounding rules (only reference items that exist or are being spawned)
+  - `NarrativeValidator` class for post-narration validation against known game state
+  - `narrative_validator_node` in graph pipeline with conditional re-narration routing
+  - Max 2 re-narration attempts with strict constraints on retry
+  - New state fields: `spawned_items`, `narrative_retry_count`, `narrative_validation_result`, `narrative_constraints`
+  - Executor integration with `EmergentItemGenerator` for rich item creation
+
 - **System-Authority Architecture (Phase 1 & 2)** - New game loop ensuring mechanical consistency
   - Refactored from "LLM decides what happens" to "System decides, LLM describes"
   - Guarantees no state/narrative drift - if narrative says player has item, inventory has item
@@ -79,6 +90,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated `ActionExecutor._execute_custom()` to use dynamic plans
   - Added `_apply_state_change()` helper for applying plan changes
   - Pipeline flow: validate_actions → **dynamic_planner** → complication_oracle
+
+  **Phase 4b - Comprehensive Player Query System:**
+  - Updated `CLASSIFIER_SYSTEM_PROMPT` to route player queries (memory, inventory, state, perception, possibility, relationship, location) as CUSTOM actions
+  - Expanded `RelevantState` schema with 8 new fields for comprehensive queries:
+    - `character_needs`: hunger/thirst/energy/wellness (0=critical, 100=satisfied)
+    - `visible_injuries`: injuries on exposed body parts only
+    - `character_memories`: emotional memories (subject, emotion, context)
+    - `npcs_present`: NPCs with VISIBLE info only (appearance, mood, visible equipment)
+    - `items_at_location`: items on surfaces (not in closed containers)
+    - `available_exits`: exits with accessibility info (blocked_reason, access_requirements)
+    - `discovered_locations`: location keys player has visited
+    - `relationships`: attitudes toward NPCs player has MET (knows=True only)
+  - Added 10+ helper methods to `DynamicActionPlanner` for visibility-filtered data gathering:
+    - `_get_character_needs()`, `_get_visible_injuries()`, `_get_character_memories()`
+    - `_get_visible_npcs()`, `_get_visible_equipment()`, `_get_visible_location_items()`
+    - `_get_available_exits()`, `_get_discovered_locations()`, `_get_known_relationships()`
+  - Updated `PLANNER_SYSTEM_PROMPT` with detailed query handling instructions
+  - Updated `PLANNER_USER_TEMPLATE` to include all new state fields
+  - Updated `dynamic_planner_node` to pass `actor_location` to the planner
+  - Enforces information boundaries:
+    - NPC secrets (hidden_backstory, dark_secret) never revealed
+    - Only visible equipment layers shown (is_visible=True)
+    - Relationships only for NPCs player has met (knows=True)
+    - Only discovered locations shown
+    - Secret facts excluded (is_secret=True)
 
   **Phase 5 - State Integrity Validator:**
   - New `src/validators/state_integrity_validator.py` module

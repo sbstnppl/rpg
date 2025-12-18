@@ -154,6 +154,9 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
     scene_context = state.get("scene_context", "")
     ambient_flavor = state.get("ambient_flavor")
 
+    # Check for constraints from failed narrative validation
+    narrative_constraints = state.get("narrative_constraints", "")
+
     # Use LLM-powered narrator for proper prose generation
     try:
         llm = get_gm_provider()
@@ -166,6 +169,7 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
         turn_result=turn_result,
         scene_context=scene_context,
         ambient_flavor=ambient_flavor,
+        stable_conditions=narrative_constraints,  # Include validation constraints if present
     )
 
     # Collect any warnings

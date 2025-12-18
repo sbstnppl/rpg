@@ -1365,14 +1365,22 @@ class ActionExecutor:
 
         # Apply state changes for STATE_CHANGE type
         state_changes = []
+        spawned_items = []
         if plan.action_type == DynamicActionType.STATE_CHANGE:
             for change in plan.state_changes:
                 try:
-                    self._apply_state_change(change, actor)
-                    state_changes.append(
-                        f"{change.target_key}.{change.property_name}: "
-                        f"{change.old_value} -> {change.new_value}"
-                    )
+                    result = self._apply_state_change(change, actor)
+                    # Track spawned items
+                    if result is not None:
+                        spawned_items.append(result)
+                        state_changes.append(
+                            f"Spawned: {result.get('display_name', 'item')}"
+                        )
+                    else:
+                        state_changes.append(
+                            f"{change.target_key}.{change.property_name}: "
+                            f"{change.old_value} -> {change.new_value}"
+                        )
                 except Exception as e:
                     # Log but continue with other changes
                     state_changes.append(f"Failed: {change.target_key}.{change.property_name}: {e}")
@@ -1392,20 +1400,24 @@ class ActionExecutor:
                 "requires_roll": plan.requires_roll,
                 "roll_type": plan.roll_type,
                 "roll_dc": plan.roll_dc,
+                "spawned_items": spawned_items,
             },
         )
 
-    def _apply_state_change(self, change: Any, actor: "Entity") -> None:
+    def _apply_state_change(self, change: Any, actor: "Entity") -> dict[str, Any] | None:
         """Apply a single state change from a dynamic plan.
 
         Args:
             change: StateChange object with change details.
             actor: Entity performing the action (for context).
 
+        Returns:
+            For SPAWN_ITEM: dict with spawned item info. Otherwise None.
+
         Raises:
             ValueError: If change cannot be applied.
         """
-        from src.planner.schemas import StateChangeType
+        from src.planner.schemas import StateChangeType, SpawnItemSpec
 
         if change.change_type == StateChangeType.ITEM_PROPERTY:
             # Update item property via ItemManager
@@ -1414,6 +1426,7 @@ class ActionExecutor:
                 property_name=change.property_name,
                 value=change.new_value,
             )
+            return None
 
         elif change.change_type == StateChangeType.ENTITY_STATE:
             # Update entity temporary state via EntityManager
@@ -1422,6 +1435,7 @@ class ActionExecutor:
                 property_name=change.property_name,
                 value=change.new_value,
             )
+            return None
 
         elif change.change_type == StateChangeType.FACT:
             # Record a new fact via FactManager
@@ -1432,10 +1446,72 @@ class ActionExecutor:
                 predicate=change.property_name,
                 value=str(change.new_value),
             )
+            return None
 
         elif change.change_type == StateChangeType.KNOWLEDGE_QUERY:
             # Knowledge queries don't modify state
-            pass
+            return None
+
+        elif change.change_type == StateChangeType.SPAWN_ITEM:
+            # Create emergent item at current location
+            return self._apply_spawn_item(change, actor)
 
         else:
             raise ValueError(f"Unknown change type: {change.change_type}")
+
+    def _apply_spawn_item(self, change: Any, actor: "Entity") -> dict[str, Any]:
+        """Apply a SPAWN_ITEM state change to create an emergent item.
+
+        Args:
+            change: StateChange with spawn_spec.
+            actor: Entity performing the action (for location context).
+
+        Returns:
+            Dict with spawned item info (item_key, display_name, item_type).
+
+        Raises:
+            ValueError: If spawn_spec is missing or invalid.
+        """
+        from src.planner.schemas import SpawnItemSpec
+        from src.services.emergent_item_generator import (
+            EmergentItemGenerator,
+            ItemConstraints,
+        )
+
+        # Parse spawn_spec
+        spec = change.spawn_spec
+        if spec is None:
+            raise ValueError("SPAWN_ITEM requires spawn_spec")
+
+        if isinstance(spec, dict):
+            spec = SpawnItemSpec(**spec)
+
+        # Get current location
+        location_key = self._get_actor_location(actor)
+        if not location_key:
+            location_key = "unknown"
+
+        # Build constraints from spec if any are specified
+        constraints = None
+        if spec.display_name or spec.quality or spec.condition:
+            constraints = ItemConstraints(
+                name=spec.display_name,
+                quality=spec.quality,
+                condition=spec.condition,
+            )
+
+        # Create the item using EmergentItemGenerator
+        generator = EmergentItemGenerator(self.db, self.game_session)
+        item_state = generator.create_item(
+            item_type=spec.item_type,
+            context=spec.context,
+            location_key=location_key,
+            owner_entity_id=None,  # Unowned environmental item
+            constraints=constraints,
+        )
+
+        return {
+            "item_key": item_state.item_key,
+            "display_name": item_state.display_name,
+            "item_type": item_state.item_type,
+        }

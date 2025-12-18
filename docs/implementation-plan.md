@@ -1642,6 +1642,109 @@ ENCUMBRANCE_EFFECTS = {
 
 ---
 
+## Phase 15b: Comprehensive Player Query System [COMPLETE]
+
+**Purpose:** Allow players to ask questions like in a tabletop RPG, with the system answering based on what their character actually knows or can perceive.
+
+### 15b.1 Intent Classifier Updates [COMPLETE]
+
+**File:** `src/parser/llm_classifier.py`
+
+- [x] Updated `CLASSIFIER_SYSTEM_PROMPT` to route player queries as CUSTOM actions
+- [x] Query types: memory, inventory, character state, perception, possibility, relationship, location
+- [x] Updated `classify_intent()` to preserve `raw_input` in CUSTOM action parameters
+
+### 15b.2 RelevantState Schema Expansion [COMPLETE]
+
+**File:** `src/planner/schemas.py`
+
+- [x] Added `character_needs: dict[str, int]` - hunger/thirst/energy/wellness (0-100)
+- [x] Added `visible_injuries: list[dict]` - injuries on exposed body parts
+- [x] Added `character_memories: list[dict]` - emotional memories (subject, emotion, context)
+- [x] Added `npcs_present: list[dict]` - NPCs with VISIBLE info only
+- [x] Added `items_at_location: list[dict]` - items on surfaces (not in containers)
+- [x] Added `available_exits: list[dict]` - exits with accessibility info
+- [x] Added `discovered_locations: list[str]` - location keys visited
+- [x] Added `relationships: list[dict]` - attitudes for NPCs player has MET
+
+### 15b.3 Dynamic Action Planner Expansion [COMPLETE]
+
+**File:** `src/planner/dynamic_action_planner.py`
+
+- [x] Added lazy-loaded manager properties (needs, injury, memory, discovery, relationship, location)
+- [x] Updated `plan()` to accept `actor_location` parameter
+- [x] Updated `_gather_relevant_state()` to collect all new fields
+- [x] Added `_get_character_needs()` - hunger/thirst/energy/wellness
+- [x] Added `_get_visible_injuries()` - injuries on VISIBLE_BODY_PARTS only
+- [x] Added `_get_character_memories()` - emotional memories with limit
+- [x] Added `_get_visible_npcs()` - NPCs at location with visibility filtering
+- [x] Added `_get_visible_equipment()` - outermost layer only (is_visible=True)
+- [x] Added `_get_visible_location_items()` - items on surfaces, not in containers
+- [x] Added `_get_available_exits()` - exits with accessibility, excluding secrets
+- [x] Added `_get_discovered_locations()` - zone and location discoveries
+- [x] Added `_get_known_relationships()` - relationships where knows=True
+
+### 15b.4 Planner Prompts [COMPLETE]
+
+**File:** `src/planner/prompts.py`
+
+- [x] Updated `PLANNER_SYSTEM_PROMPT` with query type handling
+- [x] Added examples for each query type (memory, inventory, state, perception, possibility, relationship, location)
+- [x] Updated `PLANNER_USER_TEMPLATE` with all new state fields
+- [x] Added information boundary rules
+
+### 15b.5 Node Integration [COMPLETE]
+
+**File:** `src/agents/nodes/dynamic_planner_node.py`
+
+- [x] Updated to pass `actor_location` from state to planner
+
+### 15b.6 Information Boundaries Enforced
+
+- **NPC Secrets:** hidden_backstory, dark_secret, hidden_goal never revealed
+- **Equipment Layers:** Only visible equipment shown (is_visible=True, outermost layer)
+- **Relationships:** Only for NPCs player has met (knows=True)
+- **Locations:** Only discovered locations shown
+- **Facts:** Secret facts excluded (is_secret=True)
+- **Containers:** Items in closed containers not visible
+
+### 15b.7 Autonomous World Generation & Narrative Validation [COMPLETE]
+
+**Files:** `src/planner/schemas.py`, `src/planner/prompts.py`, `src/executor/action_executor.py`, `src/narrator/narrative_validator.py`, `src/agents/nodes/narrative_validator_node.py`, `src/agents/graph.py`
+
+**Problem Solved:** When players search for items, the planner could hallucinate items that don't exist. The narrator would describe them, creating state/narrative drift.
+
+**Solution: Two-Layer Protection**
+
+1. **Layer 1 - Autonomous GM World Generation:**
+   - [x] Added `StateChangeType.SPAWN_ITEM` enum value
+   - [x] Added `SpawnItemSpec` schema (item_type, context, display_name, quality, condition)
+   - [x] Updated `StateChange` to include optional `spawn_spec` field
+   - [x] Enhanced `PLANNER_SYSTEM_PROMPT` with world generation rules
+   - [x] Enhanced prompts with grounding rules (only reference items that exist or are spawned)
+   - [x] Added `_apply_spawn_item()` in ActionExecutor using EmergentItemGenerator
+   - [x] Spawned items become full database Items (takeable, usable, examinable)
+
+2. **Layer 2 - Post-Narration Validation:**
+   - [x] Created `NarrativeValidator` class in `src/narrator/narrative_validator.py`
+   - [x] Validates narrative against known items, NPCs, locations
+   - [x] Created `narrative_validator_node` in `src/agents/nodes/`
+   - [x] Added conditional routing: if validation fails, re-narrate with strict constraints
+   - [x] Max 2 re-narration attempts before proceeding with warning
+
+**New State Fields:**
+- [x] Added `spawned_items: list[dict]` - items created this turn via SPAWN_ITEM
+- [x] Added `narrative_retry_count: int` - re-narration attempt counter
+- [x] Added `narrative_validation_result: dict` - validation outcome
+- [x] Added `narrative_constraints: str` - constraints for retry narration
+
+**Graph Update:**
+- [x] Added `narrative_validator` node to `SYSTEM_AUTHORITY_NODES`
+- [x] Added `route_after_narrative_validator()` conditional routing function
+- [x] Updated graph: `narrator` → `narrative_validator` → [conditional] → `narrator` or `persistence`
+
+---
+
 ## Phase 16: Future Considerations
 
 ### 16.1 Potential Additions (Not Planned)

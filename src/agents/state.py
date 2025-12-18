@@ -117,10 +117,19 @@ class GameState(TypedDict, total=False):
     parsed_actions: list[dict[str, Any]] | None  # List of parsed Action dicts
     ambient_flavor: str | None  # Non-mechanical flavor (e.g., "nervously")
     validation_results: list[dict[str, Any]] | None  # ValidationResult dicts
+    dynamic_plans: dict[str, Any] | None  # Plans for CUSTOM actions from dynamic_planner_node
     complication: dict[str, Any] | None  # Complication dict from oracle
     turn_result: dict[str, Any] | None  # TurnResult dict with execution results
     is_scene_request: bool  # Whether this is a scene intro request (skip action processing)
     scene_request_type: str | None  # Type of scene request ("intro", "description")
+
+    # World generation fields (autonomous item spawning)
+    spawned_items: list[dict[str, Any]] | None  # Items created this turn via SPAWN_ITEM
+
+    # Narrative validation fields
+    narrative_retry_count: int  # Counter for re-narration attempts (max 2)
+    narrative_validation_result: dict[str, Any] | None  # Validation outcome
+    narrative_constraints: str | None  # Additional constraints for retry narration
 
     # Runtime dependencies (injected by game loop, not persisted)
     _db: Any  # SQLAlchemy Session
@@ -191,8 +200,15 @@ def create_initial_state(
         parsed_actions=None,
         ambient_flavor=None,
         validation_results=None,
+        dynamic_plans=None,
         complication=None,
         turn_result=None,
+        # World generation
+        spawned_items=None,
+        # Narrative validation
+        narrative_retry_count=0,
+        narrative_validation_result=None,
+        narrative_constraints=None,
         # Metadata
         turn_number=turn_number,
         errors=[],

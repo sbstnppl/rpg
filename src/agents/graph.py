@@ -103,6 +103,7 @@ from src.agents.nodes.complication_oracle_node import complication_oracle_node
 from src.agents.nodes.execute_actions_node import execute_actions_node
 from src.agents.nodes.state_validator_node import state_validator_node
 from src.agents.nodes.narrator_node import narrator_node
+from src.agents.nodes.narrative_validator_node import narrative_validator_node
 
 
 # Map of agent names to node functions (legacy flow)
@@ -126,8 +127,28 @@ SYSTEM_AUTHORITY_NODES = {
     "execute_actions": execute_actions_node,
     "state_validator": state_validator_node,
     "narrator": narrator_node,
+    "narrative_validator": narrative_validator_node,
     "persistence": persistence_node,
 }
+
+
+def route_after_narrative_validator(
+    state: GameState,
+) -> Literal["narrator", "persistence"]:
+    """Route after narrative validation.
+
+    If validation failed and retries remain, go back to narrator.
+    Otherwise, proceed to persistence.
+
+    Args:
+        state: Current game state.
+
+    Returns:
+        "narrator" if re-narration needed, "persistence" otherwise.
+    """
+    if state.get("_route_to_narrator"):
+        return "narrator"
+    return "persistence"
 
 
 def build_game_graph() -> StateGraph:
@@ -249,10 +270,15 @@ def build_system_authority_graph() -> StateGraph:
         narrator (generate prose from facts)
           |
           v
-        persistence (save state changes)
+        narrative_validator (check for hallucinations)
           |
-          v
-        END
+        [conditional]
+         /        \\
+        v          v
+    narrator   persistence
+    (retry)        |
+                   v
+                  END
 
     Returns:
         Configured StateGraph ready to compile.
@@ -275,7 +301,20 @@ def build_system_authority_graph() -> StateGraph:
     graph.add_edge("complication_oracle", "execute_actions")
     graph.add_edge("execute_actions", "state_validator")
     graph.add_edge("state_validator", "narrator")
-    graph.add_edge("narrator", "persistence")
+
+    # Narrator -> narrative_validator
+    graph.add_edge("narrator", "narrative_validator")
+
+    # Narrative validator conditionally routes back to narrator or to persistence
+    graph.add_conditional_edges(
+        "narrative_validator",
+        route_after_narrative_validator,
+        {
+            "narrator": "narrator",
+            "persistence": "persistence",
+        },
+    )
+
     graph.add_edge("persistence", END)
 
     return graph
