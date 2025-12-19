@@ -288,7 +288,7 @@ Stakes: {arc.stakes or 'Unknown'}"""
 
         # Parse response
         try:
-            content = response.text if hasattr(response, "text") else str(response)
+            content = response.content if hasattr(response, "content") else str(response)
             # Try to extract JSON from response
             json_start = content.find("{")
             json_end = content.rfind("}") + 1
@@ -618,7 +618,7 @@ Respond ONLY with valid JSON:
                 max_tokens=300,
             )
 
-            content = response.text if hasattr(response, "text") else str(response)
+            content = response.content if hasattr(response, "content") else str(response)
 
             # Parse JSON
             json_start = content.find("{")
