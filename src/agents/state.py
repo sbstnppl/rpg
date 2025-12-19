@@ -131,6 +131,10 @@ class GameState(TypedDict, total=False):
     narrative_validation_result: dict[str, Any] | None  # Validation outcome
     narrative_constraints: str | None  # Additional constraints for retry narration
 
+    # Response mode routing fields
+    response_mode: str | None  # "info" (skip narrator) or "narrate" (full prose)
+    narrative_style: str | None  # "observe", "action", "dialogue", "combat", "emote"
+
     # Runtime dependencies (injected by game loop, not persisted)
     _db: Any  # SQLAlchemy Session
     _game_session: Any  # GameSession model
@@ -209,6 +213,9 @@ def create_initial_state(
         narrative_retry_count=0,
         narrative_validation_result=None,
         narrative_constraints=None,
+        # Response mode routing
+        response_mode=None,
+        narrative_style=None,
         # Metadata
         turn_number=turn_number,
         errors=[],

@@ -1745,6 +1745,40 @@ ENCUMBRANCE_EFFECTS = {
 
 ---
 
+### 15.7 Response Mode Routing
+
+**Files:** `src/planner/schemas.py`, `src/planner/prompts.py`, `src/agents/nodes/info_formatter_node.py`, `src/agents/nodes/narrator_node.py`, `src/agents/graph.py`, `src/agents/state.py`, `src/narrator/narrator.py`
+
+**Problem Solved:** All player inputs went through the verbose narrator pipeline, causing:
+- Excessive verbosity for simple queries (100+ words for "what color is my shirt?")
+- Hallucination risk (more words = more chances to invent things)
+- Poor UX (player wants quick answer, gets a novel)
+- Wasted tokens on LLM calls for what could be direct formatting
+
+**Solution: Two Output Pipelines:**
+- **INFO mode:** Direct answers, bypasses narrator (5-20 words)
+- **NARRATE mode:** Full narrator with style hints for controlled verbosity
+
+**Implementation:**
+- [x] Added `ResponseMode` enum: INFO, NARRATE
+- [x] Added `NarrativeStyle` enum: OBSERVE, ACTION, DIALOGUE, COMBAT, EMOTE
+- [x] Updated `DynamicActionPlan` with `response_mode` and `narrative_style` fields
+- [x] Added planner prompt examples for response mode classification
+- [x] Created `info_formatter_node.py` for concise INFO responses
+- [x] Updated `dynamic_planner_node.py` to output response_mode/narrative_style to state
+- [x] Added `route_by_response_mode()` routing function
+- [x] Updated graph: `state_validator` → [conditional] → `info_formatter` or `narrator`
+- [x] Added `style_instruction` parameter to `ConstrainedNarrator.narrate()`
+- [x] Updated `narrator_node.py` with STYLE_CONFIGS for max_tokens and instructions per style
+
+**Graph Update:**
+- [x] Added `info_formatter` node to `SYSTEM_AUTHORITY_NODES`
+- [x] Added conditional routing after `state_validator` based on `response_mode`
+- [x] INFO mode path: `state_validator` → `info_formatter` → `persistence` (skips narrator validation)
+- [x] NARRATE mode path: `state_validator` → `narrator` → `narrative_validator` → `persistence`
+
+---
+
 ## Phase 16: Future Considerations
 
 ### 16.1 Potential Additions (Not Planned)

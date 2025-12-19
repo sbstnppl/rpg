@@ -36,7 +36,7 @@ SCENE CONTEXT:
 
 PLAYER'S MANNER: {ambient_flavor}
 
-Write 2-4 sentences narrating this turn.
+{style_instruction}
 
 RULES:
 - Include every mechanical fact naturally in the prose
@@ -94,6 +94,7 @@ class ConstrainedNarrator:
         scene_context: str = "",
         ambient_flavor: str | None = None,
         stable_conditions: str = "",
+        style_instruction: str = "",
     ) -> NarratorResult:
         """Generate narrative from turn result.
 
@@ -102,6 +103,7 @@ class ConstrainedNarrator:
             scene_context: Description of current scene.
             ambient_flavor: How the player is acting (e.g., "nervously").
             stable_conditions: Formatted stable conditions (do not re-describe).
+            style_instruction: Style hint for output (e.g., "Write 1-3 sentences...").
 
         Returns:
             NarratorResult with generated narrative.
@@ -123,6 +125,7 @@ class ConstrainedNarrator:
             scene_context=scene_context or "A generic fantasy setting.",
             stable_conditions=stable_conditions or "No stable conditions to avoid.",
             ambient_flavor=ambient_flavor or "neutral tone",
+            style_instruction=style_instruction or "Write 2-4 sentences narrating this turn.",
         )
 
         # Build messages for LLM API

@@ -122,14 +122,37 @@ async def dynamic_planner_node(state: GameState) -> dict[str, Any]:
 
             # Store plan keyed by raw_input for executor lookup
             raw_input = action.parameters.get("raw_input", str(action))
-            plans[raw_input] = plan.model_dump()
+            plan_dict = plan.model_dump()
+            plans[raw_input] = plan_dict
+
+            # Store _relevant_state in the plan for narrator/validator context
+            relevant_state = planner._gather_relevant_state(actor, player_location)
+            plan_dict["_relevant_state"] = {
+                "items_at_location": relevant_state.items_at_location,
+                "npcs_present": relevant_state.npcs_present,
+                "inventory": relevant_state.inventory,
+                "equipped": relevant_state.equipped,
+            }
 
             logger.info(
                 f"Generated plan for '{raw_input[:50]}...': "
-                f"type={plan.action_type}, changes={len(plan.state_changes)}"
+                f"type={plan.action_type}, mode={plan.response_mode}, "
+                f"style={plan.narrative_style}, changes={len(plan.state_changes)}"
             )
         except Exception as e:
             logger.error(f"Failed to plan action: {e}")
             # Continue with other actions
 
-    return {"dynamic_plans": plans}
+    # Extract response mode from plans (use first plan's mode, or default to narrate)
+    response_mode = "narrate"
+    narrative_style = "action"
+    for plan_dict in plans.values():
+        response_mode = plan_dict.get("response_mode", "narrate")
+        narrative_style = plan_dict.get("narrative_style", "action")
+        break  # Use first plan's mode
+
+    return {
+        "dynamic_plans": plans,
+        "response_mode": response_mode,
+        "narrative_style": narrative_style,
+    }

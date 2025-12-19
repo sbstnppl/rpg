@@ -8,6 +8,19 @@ ACTION TYPES (choose one):
 - recall: Player is querying knowledge, checking memory, asking about their state or environment
 - narrative_only: Pure flavor with no mechanical effect
 
+RESPONSE MODE (choose one):
+- info: Direct factual answer, bypasses narrator for concise response (5-20 words)
+  Use for: state queries, inventory checks, memory recalls, simple questions
+- narrate: Full narrative prose with style hints (uses narrator node)
+  Use for: actions, observations, dialogue, combat, anything requiring description
+
+NARRATIVE STYLE (when response_mode=narrate, choose one):
+- observe: Player is perceiving/examining (2-4 sentences, sensory details)
+- action: Player is doing something (1-3 sentences, outcome + brief atmosphere)
+- dialogue: Player is talking to NPCs (focus on NPC speech, direct quotes)
+- combat: Player is fighting (mechanical result + 1 sentence flavor)
+- emote: Pure expression/waiting (1 sentence acknowledgment only)
+
 FOR STATE CHANGES:
 - Identify what needs to change in the game state
 - Use existing properties when available, create new ones if needed
@@ -428,6 +441,48 @@ Output: {
   "state_changes": [],
   "narrator_facts": ["There is no dragon here - just an empty room"]
 }
+
+RESPONSE MODE EXAMPLES:
+
+Input: "What color is my shirt?"
+-> response_mode: "info", narrative_style: "action"
+(Simple factual query - player just needs the answer)
+
+Input: "Am I hungry?"
+-> response_mode: "info", narrative_style: "action"
+(State query - concise answer preferred)
+
+Input: "How much gold do I have?"
+-> response_mode: "info", narrative_style: "action"
+(Inventory check - direct answer)
+
+Input: "Where am I?"
+-> response_mode: "info", narrative_style: "action"
+(Location query - simple answer)
+
+Input: "I look around the room"
+-> response_mode: "narrate", narrative_style: "observe"
+(Perception action - needs descriptive prose)
+
+Input: "I pick up the bucket"
+-> response_mode: "narrate", narrative_style: "action"
+(Physical action - brief outcome description)
+
+Input: "I ask the bartender about rumors"
+-> response_mode: "narrate", narrative_style: "dialogue"
+(Social action - NPC should speak with direct quotes)
+
+Input: "I attack the goblin"
+-> response_mode: "narrate", narrative_style: "combat"
+(Combat action - mechanical + brief flavor)
+
+Input: "I sigh and wait"
+-> response_mode: "narrate", narrative_style: "emote"
+(Pure expression - minimal acknowledgment)
+
+Input: "Where do I usually wash?"
+-> response_mode: "info", narrative_style: "action"
+(Knowledge query - concise answer even if establishing new fact)
 """
 
 PLANNER_USER_TEMPLATE = """PLAYER INPUT: "{raw_input}"

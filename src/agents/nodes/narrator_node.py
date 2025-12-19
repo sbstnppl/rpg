@@ -120,6 +120,31 @@ def _is_look_action(turn_result: dict) -> bool:
     return False
 
 
+# Style configurations for narrative output
+STYLE_CONFIGS = {
+    "observe": {
+        "max_tokens": 200,
+        "instruction": "Write 2-4 sentences with sensory details about what the player perceives.",
+    },
+    "action": {
+        "max_tokens": 150,
+        "instruction": "Write 1-3 sentences focusing on the outcome and brief atmosphere.",
+    },
+    "dialogue": {
+        "max_tokens": 300,
+        "instruction": "Focus on NPC speech with direct quotes. Keep prose minimal, speech prominent.",
+    },
+    "combat": {
+        "max_tokens": 100,
+        "instruction": "Write 1-2 sentences: mechanical result + brief flavor.",
+    },
+    "emote": {
+        "max_tokens": 50,
+        "instruction": "Write just 1 sentence acknowledging the action.",
+    },
+}
+
+
 async def narrator_node(state: GameState) -> dict[str, Any]:
     """Generate narrative from turn result.
 
@@ -166,10 +191,17 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
     # Check for constraints from failed narrative validation
     narrative_constraints = state.get("narrative_constraints", "")
 
+    # Get narrative style for verbosity control
+    narrative_style = state.get("narrative_style", "action")
+    style_config = STYLE_CONFIGS.get(narrative_style, STYLE_CONFIGS["action"])
+
     # Use LLM-powered narrator for proper prose generation
     try:
         llm = get_gm_provider()
-        narrator = ConstrainedNarrator(llm_provider=llm)
+        narrator = ConstrainedNarrator(
+            llm_provider=llm,
+            max_tokens=style_config["max_tokens"],
+        )
     except Exception:
         # Fallback to non-LLM narrator if provider unavailable
         narrator = ConstrainedNarrator()
@@ -179,6 +211,7 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
         scene_context=scene_context,
         ambient_flavor=ambient_flavor,
         stable_conditions=narrative_constraints,  # Include validation constraints if present
+        style_instruction=style_config["instruction"],
     )
 
     # Collect any warnings

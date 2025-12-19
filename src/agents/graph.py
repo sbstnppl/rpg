@@ -102,6 +102,7 @@ from src.agents.nodes.dynamic_planner_node import dynamic_planner_node
 from src.agents.nodes.complication_oracle_node import complication_oracle_node
 from src.agents.nodes.execute_actions_node import execute_actions_node
 from src.agents.nodes.state_validator_node import state_validator_node
+from src.agents.nodes.info_formatter_node import info_formatter_node
 from src.agents.nodes.narrator_node import narrator_node
 from src.agents.nodes.narrative_validator_node import narrative_validator_node
 
@@ -126,10 +127,35 @@ SYSTEM_AUTHORITY_NODES = {
     "complication_oracle": complication_oracle_node,
     "execute_actions": execute_actions_node,
     "state_validator": state_validator_node,
+    "info_formatter": info_formatter_node,
     "narrator": narrator_node,
     "narrative_validator": narrative_validator_node,
     "persistence": persistence_node,
 }
+
+
+def route_by_response_mode(
+    state: GameState,
+) -> Literal["info_formatter", "narrator"]:
+    """Route based on response mode after state validation.
+
+    INFO mode skips the narrator for concise factual answers.
+    NARRATE mode goes through the full narrator pipeline.
+
+    Args:
+        state: Current game state with response_mode.
+
+    Returns:
+        "info_formatter" for INFO mode, "narrator" otherwise.
+    """
+    # Scene requests always go to narrator
+    if state.get("is_scene_request"):
+        return "narrator"
+
+    mode = state.get("response_mode", "narrate")
+    if mode == "info":
+        return "info_formatter"
+    return "narrator"
 
 
 def route_after_narrative_validator(
@@ -300,9 +326,21 @@ def build_system_authority_graph() -> StateGraph:
     graph.add_edge("dynamic_planner", "complication_oracle")
     graph.add_edge("complication_oracle", "execute_actions")
     graph.add_edge("execute_actions", "state_validator")
-    graph.add_edge("state_validator", "narrator")
 
-    # Narrator -> narrative_validator
+    # Route based on response mode: INFO skips narrator, NARRATE uses narrator
+    graph.add_conditional_edges(
+        "state_validator",
+        route_by_response_mode,
+        {
+            "info_formatter": "info_formatter",
+            "narrator": "narrator",
+        },
+    )
+
+    # Info formatter goes directly to persistence (skip narrative validation)
+    graph.add_edge("info_formatter", "persistence")
+
+    # Narrator goes through narrative_validator
     graph.add_edge("narrator", "narrative_validator")
 
     # Narrative validator conditionally routes back to narrator or to persistence

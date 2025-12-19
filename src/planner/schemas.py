@@ -28,6 +28,30 @@ class DynamicActionType(str, Enum):
     NARRATIVE_ONLY = "narrative_only"  # Pure flavor, no mechanical effect
 
 
+class ResponseMode(str, Enum):
+    """How to format the response to the player.
+
+    INFO: Direct answer, bypasses narrator for factual queries.
+    NARRATE: Full narrative pipeline with style hints.
+    """
+
+    INFO = "info"
+    NARRATE = "narrate"
+
+
+class NarrativeStyle(str, Enum):
+    """Style hint for narrator (when mode=NARRATE).
+
+    Controls verbosity and focus of the narrative output.
+    """
+
+    OBSERVE = "observe"    # Perception, 2-4 sentences, sensory details
+    ACTION = "action"      # State change, 1-3 sentences, outcome + atmosphere
+    DIALOGUE = "dialogue"  # NPC speech focus, direct quotes
+    COMBAT = "combat"      # Mechanical result + brief flavor, 1-2 sentences
+    EMOTE = "emote"        # 1 sentence acknowledgment only
+
+
 class SpawnItemSpec(BaseModel):
     """Specification for creating an emergent item during gameplay.
 
@@ -100,6 +124,14 @@ class DynamicActionPlan(BaseModel):
 
     action_type: DynamicActionType = Field(
         description="Category of action (state_change, recall, narrative_only)"
+    )
+    response_mode: ResponseMode = Field(
+        default=ResponseMode.NARRATE,
+        description="How to format response: 'info' for direct answers, 'narrate' for prose"
+    )
+    narrative_style: NarrativeStyle = Field(
+        default=NarrativeStyle.ACTION,
+        description="Style hint for narrator: observe, action, dialogue, combat, emote"
     )
     requires_roll: bool = Field(
         default=False,

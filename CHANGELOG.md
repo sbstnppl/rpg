@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Response Mode Routing** - Two output pipelines for different player intents
+  - **INFO mode** for factual queries (bypasses narrator, 5-20 words)
+    - "What color is my shirt?" → "Light purple with brown stitching."
+    - "Am I hungry?" → "You are quite hungry."
+    - "Where am I?" → "The farmhouse kitchen."
+  - **NARRATE mode** with style hints (full narrator, controlled verbosity)
+    - OBSERVE: 2-4 sentences, sensory details
+    - ACTION: 1-3 sentences, outcome focused
+    - DIALOGUE: NPC speech with direct quotes
+    - COMBAT: mechanical result + brief flavor
+    - EMOTE: 1 sentence acknowledgment
+  - New `ResponseMode` and `NarrativeStyle` enums in `src/planner/schemas.py`
+  - New `info_formatter_node.py` for concise INFO responses
+  - Graph routing based on `response_mode` after state validation
+  - `ConstrainedNarrator` now accepts `style_instruction` parameter
+  - Reduces verbose output for simple queries (100+ words → 5-20 words)
+
 - **LLM-Based Item Extraction** - Replaces regex-based hallucination detection with LLM
   - New `ItemExtractor` class (`src/narrator/item_extractor.py`) using Claude Haiku
   - Classifies items by importance: IMPORTANT (bucket, washbasin), DECORATIVE (pebbles, dust), REFERENCE (talked about)
