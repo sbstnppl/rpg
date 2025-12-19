@@ -40,6 +40,14 @@ async def dynamic_planner_node(state: GameState) -> dict[str, Any]:
             "errors": ["Missing database session or game session in state"],
         }
 
+    # Ensure clean transaction state before proceeding
+    try:
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
+    except Exception:
+        logger.warning("Rolling back failed transaction in dynamic_planner_node")
+        db.rollback()
+
     validation_results = state.get("validation_results", [])
     if not validation_results:
         return {"dynamic_plans": {}}
@@ -71,8 +79,9 @@ async def dynamic_planner_node(state: GameState) -> dict[str, Any]:
             "errors": [f"Player entity not found: {player_id}"],
         }
 
-    # Get scene context
+    # Get scene context and location
     scene_context = state.get("scene_context", "")
+    player_location = state.get("player_location", "")
 
     # Get LLM provider (lazy import to avoid circular dependency)
     try:
@@ -107,7 +116,9 @@ async def dynamic_planner_node(state: GameState) -> dict[str, Any]:
 
         # Generate plan
         try:
-            plan = await planner.plan(action, actor, scene_context)
+            plan = await planner.plan(
+                action, actor, scene_context, actor_location=player_location
+            )
 
             # Store plan keyed by raw_input for executor lookup
             raw_input = action.parameters.get("raw_input", str(action))

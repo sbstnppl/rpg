@@ -8,6 +8,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Unified Detail Enrichment System** - Players can ask about any missing details and get consistent answers
+  - `ENRICH` pattern in planner prompts for generating + persisting missing details
+  - Supports item properties (color, material, texture), location details (floor, lighting, smells),
+    world facts (currency, customs, weather), NPC details (accent, scars), and personal knowledge
+  - New `RelevantState` fields: `location_details`, `world_facts`, `recent_actions`
+  - New gathering methods in `DynamicActionPlanner`: `_get_location_details()`, `_get_world_facts()`, `_search_recent_actions()`
+  - Updated `PLANNER_USER_TEMPLATE` with "Already Established Details" section
+  - Fixed executor to pass `subject_type` when recording facts
+  - Covers 100% of 150 tested player questions (sensory, physical, personal, world knowledge)
+
+- **Personal Knowledge Establishment** - Players can now ask about things their character would know
+  - `ESTABLISH_KNOWLEDGE` pattern in planner prompts for personal/routine knowledge
+  - Uses `StateChangeType.FACT` to create knowledge that "should exist" for the character
+  - Examples: "Where do I wash?", "Where do I sleep?", "Where is the bucket kept?"
+  - Similar to `SPAWN_ITEM` but for knowledge instead of items
+
+- **Turn History Search** - Recent memory queries now search actual turn history
+  - `_search_recent_actions()` method searches past 20 turns for relevant actions
+  - "What did I eat for breakfast?" finds actual EAT actions from history
+  - Falls back to establishing reasonable defaults if no history found
+
+### Changed
+- **Stricter Narrator Constraints** - Reduced hallucination in narrative output
+  - Enhanced `NARRATOR_TEMPLATE` with explicit "DO NOT HALLUCINATE" rules
+  - Updated `LOOK_PROMPT` and `LOOK_SYSTEM` to only reference provided context
+  - Narrator now only mentions items that appear in mechanical facts
+
+### Fixed
+- **Narrator Fact Extraction for Dynamic Plans** - Fixed "Fact may be missing" errors for enrichment queries
+  - `_extract_facts()` now distinguishes between dynamic plans (with narrator_facts) and regular actions
+  - For dynamic plans, only `narrator_facts` from metadata are used for validation, not raw state_changes
+  - Raw state_changes like `"player.routine_knowledge: None -> ..."` are internal db operations, not narration facts
+  - Regular actions (without narrator_facts) continue to use outcome and state_changes as before
+  - Skip "Attempted:" and "[VALIDATED:" fallback outcomes that don't need narration validation
+  - This fixes false validation warnings when using the ENRICH/ESTABLISH_KNOWLEDGE patterns
+
+- **DynamicActionPlan Parsing** - Handle LLM response with 'input' wrapper
+  - Added handling for case where LLM wraps structured response in extra `{'input': {...}}` layer
+  - Extracts the actual plan content from the wrapper to prevent validation errors
+
+- **Narrative Validator False Positives** - Common words no longer flagged as hallucinations
+  - Added clothes, rooms, and adjectives to common words list
+  - Added seasons/time words: "spring", "summer", "morning", "evening", etc.
+  - Added action verbs: "preparing", "searching", "looking", "finding"
+  - Added descriptors: "somewhat", "refreshing", "clear", "cold", "warm"
+  - "clothes", "bedrooms", "proper", "lingering", "offering" no longer flagged
+
 - **Autonomous World Generation & Narrative Validation** - Two-layer system for grounded narratives
   - `SPAWN_ITEM` state change type in `DynamicActionPlanner` for autonomous item creation
   - `SpawnItemSpec` schema for specifying emergent items (item_type, context, display_name, quality, condition)

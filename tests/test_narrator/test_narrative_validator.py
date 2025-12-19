@@ -92,6 +92,25 @@ class TestNarrativeValidator:
         # Should not flag these common environmental words
         assert result.is_valid
 
+    def test_clothing_and_room_words_not_flagged(self) -> None:
+        """Test that clothes, rooms, and adjectives aren't flagged as hallucinations."""
+        validator = NarrativeValidator(
+            items_at_location=[],
+            npcs_present=[],
+            available_exits=[],
+        )
+
+        # Words like "clothes", "bedrooms", "proper" should not be flagged
+        narrative = (
+            "Your clothes feel grimy as you stand in the bedroom. "
+            "You need a proper wash to feel clean."
+        )
+        result = validator.validate(narrative)
+
+        # Should not flag these common words
+        assert result.is_valid
+        assert len(result.hallucinated_items) == 0
+
     def test_short_narrative_skipped(self) -> None:
         """Test that very short narratives skip validation."""
         validator = NarrativeValidator(

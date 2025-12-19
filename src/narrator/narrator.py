@@ -42,10 +42,15 @@ RULES:
 - Include every mechanical fact naturally in the prose
 - Match the player's manner/tone if provided
 - Add atmospheric detail and sensory description
-- Do NOT add events that aren't in the facts
-- Do NOT contradict any mechanical outcome
 - Write in second person ("You grab the sword...")
 - Use American English (pants not trousers, color not colour, etc.)
+
+CRITICAL - DO NOT HALLUCINATE:
+- You may ONLY mention specific items/objects that appear in the MECHANICAL FACTS above
+- Do NOT invent rooms, items, furniture, or objects not mentioned in the facts
+- If the facts say "Player recalls washing at the well" - only mention the well, not basins or bedrooms
+- Use GENERIC language for atmosphere (e.g., "your surroundings" not "the washbasin")
+- When describing searches with no result, say "found nothing" - don't invent what was searched
 
 REPETITION AVOIDANCE:
 - Do NOT re-describe stable conditions (like "disheveled appearance") unless marked [REMIND]
@@ -155,14 +160,26 @@ class ConstrainedNarrator:
 
         # Extract from executions
         for execution in turn_result.get("executions", []):
-            outcome = execution.get("outcome", "")
-            if outcome:
-                facts.append(outcome)
+            metadata = execution.get("metadata", {})
+            narrator_facts = metadata.get("narrator_facts", [])
 
-            # Add state changes as facts
-            for change in execution.get("state_changes", []):
-                if change and not change.startswith("Time"):
-                    facts.append(change)
+            # For dynamic plans (has narrator_facts), use those instead of
+            # raw state_changes which are internal db operations
+            if narrator_facts:
+                for fact in narrator_facts:
+                    if fact and fact not in facts:
+                        facts.append(fact)
+            else:
+                # For regular actions, use outcome and state_changes
+                outcome = execution.get("outcome", "")
+                # Skip fallback outcomes that don't need narration
+                if outcome and not outcome.startswith("Attempted:") and not outcome.startswith("[VALIDATED:"):
+                    facts.append(outcome)
+
+                # Add state changes as facts (for non-dynamic-plan actions)
+                for change in execution.get("state_changes", []):
+                    if change and not change.startswith("Time"):
+                        facts.append(change)
 
         # Extract from failed actions
         for failed in turn_result.get("failed_actions", []):

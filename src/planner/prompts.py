@@ -42,6 +42,38 @@ The player is asking about something. Use the CURRENT STATE provided to answer:
 7. Location queries ("Have I been here before?")
    -> Check discovered_locations
 
+FOR PERSONAL/ROUTINE KNOWLEDGE QUERIES:
+When the player asks about something their CHARACTER WOULD DEFINITELY KNOW but isn't in the data:
+- Where they sleep, wash, eat in their own home
+- Daily routines (what time they wake, their chores)
+- Where things are kept in familiar locations
+- Family habits and schedules
+
+Use ESTABLISH_KNOWLEDGE: Create a fact that makes sense for the character and setting.
+
+Use state_change with change_type="fact":
+{
+  "change_type": "fact",
+  "target_type": "world",
+  "target_key": "player",
+  "property_name": "routine_knowledge",
+  "old_value": null,
+  "new_value": "Finn washes at the well behind the farmhouse"
+}
+
+Then put the answer in narrator_facts.
+
+WHEN TO ESTABLISH KNOWLEDGE:
+- "Where do I wash?" in player's own home -> ESTABLISH (they would know this)
+- "Where do I sleep?" -> ESTABLISH (they live here)
+- "What time does father wake?" -> ESTABLISH (family routine)
+- "Where is the bucket kept?" at familiar location -> ESTABLISH
+
+WHEN NOT TO ESTABLISH (use "I don't know" instead):
+- Questions about unfamiliar locations -> "You're not sure"
+- Questions about strangers -> "You don't know them well enough"
+- Questions about secrets/hidden things -> "You've never learned this"
+
 FOR SEARCH/PERCEPTION ACTIONS (player is looking for something):
 When a player searches for or looks for an item that:
 1. Is NOT in items_at_location (doesn't exist yet)
@@ -79,6 +111,66 @@ WHEN NOT TO SPAWN (inappropriate or too valuable):
 - Items that don't fit the setting/location type -> NO
 
 After spawning, reference the item in narrator_facts as if it now exists (because it does).
+
+FOR MISSING DETAIL QUERIES (ENRICH):
+When the player asks about a detail that:
+1. Is NOT in the provided state
+2. BUT should logically exist (sensory, physical, visual properties)
+
+Use ENRICH to generate and persist the detail. This ensures consistency - if they ask again, same answer.
+
+ENRICH TARGET TYPES:
+- item_property: For item details (color, material, weight, texture, smell, taste)
+- location fact: For environment (floor_type, lighting, sounds, smells, temperature)
+- npc fact/appearance: For NPC details not yet defined (accent, scars, mannerisms)
+- player fact: For personal traits, preferences, skills, memories
+- world fact: For setting facts (currency, customs, geography, local ruler)
+
+For ITEM properties (color, material, etc.):
+{
+  "change_type": "item_property",
+  "target_type": "item",
+  "target_key": "worn_shirt",
+  "property_name": "color",
+  "old_value": null,
+  "new_value": "faded blue"
+}
+
+For LOCATION/WORLD/NPC/PLAYER facts:
+{
+  "change_type": "fact",
+  "target_type": "location",  // or "world", "entity"
+  "target_key": "farmhouse_kitchen",  // or "session", "player", "npc_key"
+  "property_name": "floor_type",
+  "old_value": null,
+  "new_value": "packed dirt with scattered straw"
+}
+
+WHEN TO ENRICH (details about existing things):
+- "What color is this shirt?" -> ENRICH item_property: color
+- "What's the floor made of?" -> ENRICH location fact: floor_type
+- "What do I smell?" -> ENRICH location fact: ambient_smell
+- "What's the temperature?" -> ENRICH world fact: temperature
+- "What's my favorite food?" -> ENRICH player fact: favorite_food
+- "What currency do they use?" -> ENRICH world fact: currency
+- "Does the guard have a beard?" -> ENRICH npc appearance: facial_hair
+
+WHEN NOT TO ENRICH (existence questions - use RECALL instead):
+- "Is there a dragon here?" -> Check npcs_present, don't create one
+- "Do I have a magic sword?" -> Check inventory, don't create one
+- "Is there treasure hidden here?" -> Don't create treasure
+
+IMPORTANT: Check location_details and world_facts first!
+If a detail is already established there, use it - don't regenerate.
+
+FOR RECENT MEMORY QUERIES:
+When player asks about something that happened recently:
+- "What did I eat for breakfast?" -> Check recent_actions for EAT
+- "Did I lock the door?" -> Check recent_actions for LOCK
+- "Where did I put my keys?" -> Check recent_actions for DROP/PLACE
+
+If action found in recent_actions -> Report what actually happened
+If no action found -> Establish a reasonable default fact
 
 CRITICAL GROUNDING RULES:
 You can ONLY reference items from these sources:
@@ -215,6 +307,127 @@ Output: {
   "state_changes": [],
   "narrator_facts": ["Player searches thoroughly but finds no gold or valuables"]
 }
+
+Input: "Where do I usually wash myself?"
+Current: background says "You are Finn, a young farmhand", location is farmhouse
+Output: {
+  "action_type": "state_change",
+  "state_changes": [{
+    "change_type": "fact",
+    "target_type": "world",
+    "target_key": "player",
+    "property_name": "routine_knowledge",
+    "old_value": null,
+    "new_value": "Finn washes at the well behind the farmhouse, drawing water with a bucket"
+  }],
+  "narrator_facts": ["Player recalls that they usually wash at the well behind the farmhouse, drawing water with a bucket"]
+}
+
+Input: "Where would I find a bucket?"
+Current: background mentions farmhouse, items_at_location is empty
+Output: {
+  "action_type": "state_change",
+  "state_changes": [{
+    "change_type": "fact",
+    "target_type": "world",
+    "target_key": "player",
+    "property_name": "routine_knowledge",
+    "old_value": null,
+    "new_value": "Buckets are usually kept near the well or in the barn"
+  }],
+  "narrator_facts": ["Player knows that buckets are usually kept near the well or in the barn"]
+}
+
+Input: "What color is this shirt?"
+Current: equipped has item "worn_shirt" with no color property
+Output: {
+  "action_type": "state_change",
+  "state_changes": [{
+    "change_type": "item_property",
+    "target_type": "item",
+    "target_key": "worn_shirt",
+    "property_name": "color",
+    "old_value": null,
+    "new_value": "faded brown"
+  }],
+  "narrator_facts": ["The worn shirt is a faded brown, its color bleached by years of wear"]
+}
+
+Input: "What's the floor made of?"
+Current: location_details is empty for current location
+Output: {
+  "action_type": "state_change",
+  "state_changes": [{
+    "change_type": "fact",
+    "target_type": "location",
+    "target_key": "farmhouse_kitchen",
+    "property_name": "floor_type",
+    "old_value": null,
+    "new_value": "packed dirt with scattered straw"
+  }],
+  "narrator_facts": ["The floor is packed dirt, with straw scattered here and there to absorb mud"]
+}
+
+Input: "What do I smell?"
+Current: location_details has no ambient_smell
+Output: {
+  "action_type": "state_change",
+  "state_changes": [{
+    "change_type": "fact",
+    "target_type": "location",
+    "target_key": "farmhouse_kitchen",
+    "property_name": "ambient_smell",
+    "old_value": null,
+    "new_value": "woodsmoke and old grease"
+  }],
+  "narrator_facts": ["You catch the scent of woodsmoke and old grease from countless meals"]
+}
+
+Input: "What's the temperature?"
+Current: world_facts has no temperature
+Output: {
+  "action_type": "state_change",
+  "state_changes": [{
+    "change_type": "fact",
+    "target_type": "world",
+    "target_key": "session",
+    "property_name": "temperature",
+    "old_value": null,
+    "new_value": "cool, about 60 degrees"
+  }],
+  "narrator_facts": ["The air is cool, perhaps sixty degrees - comfortable with a light layer"]
+}
+
+Input: "What's my favorite food?"
+Current: no fact about player's favorite food
+Output: {
+  "action_type": "state_change",
+  "state_changes": [{
+    "change_type": "fact",
+    "target_type": "entity",
+    "target_key": "player",
+    "property_name": "favorite_food",
+    "old_value": null,
+    "new_value": "fresh bread with honey"
+  }],
+  "narrator_facts": ["You've always had a weakness for fresh bread drizzled with honey"]
+}
+
+Input: "What did I have for breakfast?"
+Current: recent_actions shows EAT action with target "bread" from turn 3
+Output: {
+  "action_type": "recall",
+  "state_changes": [],
+  "narrator_facts": ["You had some bread earlier this morning"]
+}
+
+Input: "Is there a dragon here?"
+Current: npcs_present has no dragon
+Output: {
+  "action_type": "recall",
+  "state_changes": [],
+  "narrator_facts": ["There is no dragon here - just an empty room"]
+}
 """
 
 PLANNER_USER_TEMPLATE = """PLAYER INPUT: "{raw_input}"
@@ -236,6 +449,14 @@ NPCs Present: {npcs_present}
 Items at Location: {items_at_location}
 Available Exits: {available_exits}
 
+ALREADY ESTABLISHED DETAILS (use these, don't regenerate):
+Location Details: {location_details}
+World Facts: {world_facts}
+
+RECENT ACTION HISTORY (for memory queries):
+{recent_actions}
+
 Scene Context: {scene_context}
 
-Generate a plan. For queries, use action_type="recall" and put the answer in narrator_facts."""
+Generate a plan. For queries, use action_type="recall" and put the answer in narrator_facts.
+For missing details, use ENRICH to generate and persist them."""

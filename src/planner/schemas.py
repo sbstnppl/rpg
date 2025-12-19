@@ -206,3 +206,17 @@ class RelevantState(BaseModel):
         default_factory=list,
         description="Attitudes toward NPCs player has MET (knows=True only)"
     )
+
+    # NEW - Enrichment Context (already-established details)
+    location_details: dict[str, str] = Field(
+        default_factory=dict,
+        description="Already-established facts about current location (floor_type, lighting, ambient_smell, etc.)"
+    )
+    world_facts: dict[str, str] = Field(
+        default_factory=dict,
+        description="World-level facts (weather, currency, customs, local_ruler, etc.)"
+    )
+    recent_actions: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Recent player actions from turn history (for memory queries like 'what did I eat?')"
+    )

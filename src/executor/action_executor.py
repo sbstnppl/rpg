@@ -1442,6 +1442,7 @@ class ActionExecutor:
             from src.managers.fact_manager import FactManager
             fact_manager = FactManager(self.db, self.game_session)
             fact_manager.record_fact(
+                subject_type=change.target_type,  # "location", "world", "entity", etc.
                 subject_key=change.target_key,
                 predicate=change.property_name,
                 value=str(change.new_value),

@@ -62,21 +62,38 @@ CLASSIFIER_SYSTEM_PROMPT = """You are an intent classifier for a fantasy RPG gam
 Your job is to identify the mechanical actions a player wants to perform from their natural language input.
 
 Guidelines:
-1. Extract ONLY mechanical actions that can be executed by the game system
+1. Extract mechanical actions that can be executed by the game system
 2. Ignore flavor text that doesn't affect game state
 3. Resolve ambiguous references using the scene context provided
 4. If truly ambiguous, set needs_clarification=true and provide a clarification question
-5. For roleplay or dialogue that doesn't contain actions, return an empty actions list
+5. For pure roleplay statements with no action or query, return an empty actions list
+
+IMPORTANT - Player Queries (classify as "custom"):
+Questions directed at the GAME SYSTEM (not at NPCs) should be classified as "custom":
+
+- Memory/Knowledge: "Do I know...?", "What do I remember about...?", "Have I heard of...?"
+- Inventory/Equipment: "Do I have...?", "What am I wearing?", "What's in my bag?"
+- Character State: "Am I hungry?", "How tired am I?", "Am I injured?"
+- Perception: "What can I see?", "What is X wearing?", "Can I see any weapons?"
+- Possibility: "Can I go...?", "Is the door locked?", "Is the path blocked?"
+- Relationships: "Does X like me?", "Have I met this person?"
+- Location: "Have I been here before?", "Do I know this place?"
+
+These are NOT the same as:
+- Questions TO NPCs -> use "ask" (e.g., "Ask the guard about the castle")
+- Looking around -> use "look"
+- Checking inventory explicitly -> use "inventory"
 
 Action Types:
 - Movement: move (go somewhere), enter (enter building/room), exit (leave current area)
 - Items: take, drop, give, use, equip, unequip, examine, open, close
 - Combat: attack, defend, flee
-- Social: talk, ask, tell, trade, persuade, intimidate
+- Social: talk, ask (question TO an NPC), tell, trade, persuade, intimidate
 - World: search, rest, wait, sleep
 - Consumption: eat, drink
 - Skills: craft, lockpick, sneak, climb, swim
 - Meta: look (look around), inventory, status
+- Custom: custom (freeform actions AND player queries to the game system)
 
 Target Resolution:
 - Use entity_key if the target matches an entity in the scene
@@ -211,11 +228,17 @@ async def classify_intent(
     # Convert to our action types
     actions = []
     for classified in result.actions:
+        action_type = _action_type_from_string(classified.action_type)
+
+        # Include raw_input in parameters for CUSTOM actions so the planner can access it
+        params = {"raw_input": text} if action_type == ActionType.CUSTOM else {}
+
         action = Action(
-            type=_action_type_from_string(classified.action_type),
+            type=action_type,
             target=classified.target,
             indirect_target=classified.indirect_target,
             manner=classified.manner,
+            parameters=params,
         )
         actions.append(action)
 

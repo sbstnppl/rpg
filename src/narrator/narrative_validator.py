@@ -256,9 +256,32 @@ class NarrativeValidator:
         # Check for common words that aren't really items
         # (to reduce false positives)
         common_words = {
+            # Natural elements
             "water", "food", "drink", "air", "light", "dark",
             "dust", "dirt", "stone", "wood", "floor", "wall",
             "ceiling", "door", "window", "fire", "smoke",
+            # Body/clothing generics (player always has these)
+            "clothes", "clothing", "outfit", "attire", "garments",
+            "shoes", "pants", "shirt", "tunic", "dress",
+            # Room/location words (not items)
+            "room", "rooms", "bedroom", "bedrooms", "kitchen",
+            "hallway", "hall", "chamber", "cellar", "attic",
+            # Adjectives that get caught
+            "proper", "clean", "dirty", "old", "new", "simple",
+            "small", "large", "wooden", "metal", "leather",
+            "uncomfortable", "properly", "familiar", "cool",
+            "somewhat", "refreshing", "clear", "cold", "warm",
+            # Actions/states/verbs
+            "offering", "lingering", "washing", "cleaning",
+            "preparing", "searching", "looking", "finding",
+            # Nature/seasons
+            "spring", "summer", "autumn", "winter", "morning",
+            "evening", "night", "day", "dawn", "dusk",
+            # Common household items (too generic to track individually)
+            "bucket", "soap", "towel", "rag", "cloth", "well",
+            # Common words that get caught by regex
+            "that", "this", "these", "those", "which", "what",
+            "here", "there", "where", "when", "how", "why",
         }
         if item_lower in common_words:
             return True
