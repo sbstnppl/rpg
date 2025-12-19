@@ -25,6 +25,7 @@ from src.agents.state import GameState
 from src.database.models.session import GameSession
 from src.narrator.narrative_validator import NarrativeValidator
 from src.narrator.item_extractor import ItemExtractor, ItemImportance, ExtractedItem
+from src.narrator.location_extractor import LocationExtractor
 from src.narrator.hallucination_handler import spawn_hallucinated_items
 from src.oracle.complication_types import ItemSpawnDecision, ItemSpawnResult
 
@@ -107,6 +108,7 @@ async def narrative_validator_node(state: GameState) -> dict[str, Any]:
         inventory=inventory,
         equipped=equipped,
         item_extractor=item_extractor,
+        current_location=player_location,
     )
 
     # Use async validation if extractor available, else fall back to sync
@@ -188,11 +190,55 @@ async def _handle_hallucinated_items(
     plot_hook_missing: list[ItemSpawnResult] = []
     plot_hook_relocated: list[ItemSpawnResult] = []
     new_facts: list[str] = []
+    extracted_locations: list[dict[str, Any]] = []
 
     # Get LLM provider for oracle decisions
     from src.llm.factory import get_extraction_provider
+    from src.managers.location_manager import LocationManager
 
     llm_provider = get_extraction_provider()
+
+    # Extract locations from narrative for proper item placement
+    # This enables "bucket at the well" to create the well location
+    location_key_map: dict[str, str] = {}
+    if db and game_session:
+        location_manager = LocationManager(db, game_session)
+        known_locations = location_manager.get_all_location_keys()
+
+        # Get the narrative from the validation result's context
+        narrative = state.get("gm_response", "")
+
+        if narrative:
+            location_extractor = LocationExtractor(llm_provider=llm_provider)
+            loc_result = await location_extractor.extract(narrative, known_locations)
+
+            if loc_result.locations:
+                for loc in loc_result.locations:
+                    # Create or resolve location
+                    location = location_manager.resolve_or_create_location(
+                        location_text=loc.name,
+                        parent_hint=loc.parent_hint,
+                        category=loc.category.value,
+                        description=loc.description,
+                    )
+                    location_key_map[loc.name.lower()] = location.location_key
+
+                    # Also map without "the " prefix
+                    name_no_the = loc.name.lower()
+                    if name_no_the.startswith("the "):
+                        name_no_the = name_no_the[4:]
+                    location_key_map[name_no_the] = location.location_key
+
+                    extracted_locations.append({
+                        "location_key": location.location_key,
+                        "display_name": location.display_name,
+                        "category": loc.category.value,
+                        "description": loc.description,
+                    })
+
+                logger.debug(
+                    f"Extracted {len(loc_result.locations)} locations from narrative"
+                )
 
     # Create oracle if we have db and session
     oracle = None
@@ -276,36 +322,100 @@ async def _handle_hallucinated_items(
                     f"(plot hook: {hook.plot_hook_description})"
                 )
 
-    # Spawn normal items at player location
+    # Spawn normal items at their extracted locations (or player location if none)
     if items_to_spawn and db and game_session:
-        item_names = [i.name for i in items_to_spawn]
-        spawned = spawn_hallucinated_items(
-            db=db,
-            game_session=game_session,
-            items=item_names,
-            location_key=player_location,
-            context="spawned to match narrative",
-        )
-        newly_spawned.extend(spawned)
+        # Group items by their location for batch spawning
+        items_by_location: dict[str, list[ExtractedItem]] = {}
+        for item in items_to_spawn:
+            # Determine spawn location
+            spawn_loc = player_location
+            if item.location:
+                item_loc_lower = item.location.lower()
+                if item_loc_lower in location_key_map:
+                    spawn_loc = location_key_map[item_loc_lower]
+                elif item_loc_lower.startswith("the "):
+                    item_loc_lower = item_loc_lower[4:]
+                    if item_loc_lower in location_key_map:
+                        spawn_loc = location_key_map[item_loc_lower]
+                else:
+                    # Try fuzzy match or create new location
+                    location_manager = LocationManager(db, game_session)
+                    matched = location_manager.fuzzy_match_location(item.location)
+                    if matched:
+                        spawn_loc = matched.location_key
+                    else:
+                        new_loc = location_manager.resolve_or_create_location(
+                            location_text=item.location,
+                            category="exterior",
+                            description="Location mentioned in narrative",
+                        )
+                        spawn_loc = new_loc.location_key
+                        location_key_map[item_loc_lower] = spawn_loc
+
+            if spawn_loc not in items_by_location:
+                items_by_location[spawn_loc] = []
+            items_by_location[spawn_loc].append(item)
+
+        # Spawn items at each location
+        for loc_key, items in items_by_location.items():
+            item_names = [i.name for i in items]
+            spawned = spawn_hallucinated_items(
+                db=db,
+                game_session=game_session,
+                items=item_names,
+                location_key=loc_key,
+                context="spawned to match narrative",
+            )
+            newly_spawned.extend(spawned)
+
+            logger.info(
+                "Spawned %d items at %s: %s",
+                len(spawned),
+                loc_key,
+                [s.get("display_name") for s in spawned],
+            )
+
         db.commit()
 
-        logger.info(
-            "Spawned %d items to fix narrative: %s",
-            len(spawned),
-            [s.get("display_name") for s in spawned],
-        )
+    # Track deferred items for later on-demand spawning with correct locations
+    deferred_items = []
+    for item in items_to_defer:
+        item_location = player_location
+        if item.location:
+            item_loc_lower = item.location.lower()
+            if item_loc_lower in location_key_map:
+                item_location = location_key_map[item_loc_lower]
+            elif item_loc_lower.startswith("the "):
+                item_loc_lower = item_loc_lower[4:]
+                if item_loc_lower in location_key_map:
+                    item_location = location_key_map[item_loc_lower]
+            elif db and game_session:
+                # Try fuzzy match or create location
+                location_manager = LocationManager(db, game_session)
+                matched = location_manager.fuzzy_match_location(item.location)
+                if matched:
+                    item_location = matched.location_key
+                else:
+                    new_loc = location_manager.resolve_or_create_location(
+                        location_text=item.location,
+                        category="exterior",
+                        description="Location mentioned in narrative",
+                    )
+                    item_location = new_loc.location_key
+                    location_key_map[item_loc_lower] = item_location
 
-    # Track deferred items for later on-demand spawning
-    deferred_items = [
-        {"name": i.name, "context": i.context, "location": player_location}
-        for i in items_to_defer
-    ]
+        deferred_items.append({
+            "name": item.name,
+            "context": item.context,
+            "location": item_location,
+            "location_description": item.location_description,
+        })
 
     if deferred_items:
         logger.debug(f"Deferred {len(deferred_items)} decorative items for later spawning")
 
     # All items handled - validation now passes
-    return {
+    result_dict: dict[str, Any] = {
         "narrative_validation_result": {
             "is_valid": True,
             "fixed_by_spawning": [i.name for i in items_to_spawn],
@@ -315,6 +425,12 @@ async def _handle_hallucinated_items(
         "spawned_items": newly_spawned,
         "deferred_items": deferred_items,  # For persistence node
     }
+
+    # Include extracted locations if any were created
+    if extracted_locations:
+        result_dict["extracted_locations"] = extracted_locations
+
+    return result_dict
 
 
 async def _handle_plot_hook_missing(

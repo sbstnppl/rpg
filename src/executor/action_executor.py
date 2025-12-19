@@ -228,6 +228,15 @@ class ActionExecutor:
         """
         action = validation.action
 
+        # Handle deferred item spawning (items mentioned in narrative but not yet real)
+        # This spawns the item BEFORE execution so the action handler can find it
+        if validation.metadata.get("spawn_on_demand"):
+            spawned = self._spawn_deferred_item(validation, actor)
+            if spawned:
+                # Update metadata with the spawned item info
+                validation.metadata["item_id"] = spawned.get("item_id")
+                validation.metadata["spawned_on_demand"] = True
+
         # Dispatch based on action type
         match action.type:
             # Item actions
@@ -310,6 +319,58 @@ class ActionExecutor:
                     success=False,
                     outcome=f"Unknown action type: {action.type}",
                 )
+
+    # =========================================================================
+    # Deferred Item Spawning
+    # =========================================================================
+
+    def _spawn_deferred_item(
+        self, validation: ValidationResult, actor: "Entity"
+    ) -> dict[str, Any] | None:
+        """Spawn a deferred item that was mentioned in narrative but not yet real.
+
+        Deferred items are decorative/environmental items mentioned in previous
+        narrative but not spawned until the player actually references them.
+        This enables consistent world-building while avoiding item bloat.
+
+        Args:
+            validation: ValidationResult with deferred_item in metadata.
+            actor: Entity performing the action (for location context).
+
+        Returns:
+            Dict with spawned item info (item_key, item_id, display_name) or None.
+        """
+        from src.narrator.hallucination_handler import spawn_hallucinated_items
+
+        deferred = validation.metadata.get("deferred_item")
+        if not deferred:
+            return None
+
+        item_name = deferred.get("name", validation.resolved_target)
+        # Use the item's stored location, falling back to actor location
+        location_key = deferred.get("location") or self._get_actor_location(actor)
+        context = deferred.get("context", "")
+
+        # Spawn the item
+        spawned_items = spawn_hallucinated_items(
+            db=self.db,
+            game_session=self.game_session,
+            items=[item_name],
+            location_key=location_key,
+            context=context,
+        )
+
+        if spawned_items:
+            spawned = spawned_items[0]
+            # Flush to ensure item is visible to subsequent queries
+            self.db.flush()
+            return {
+                "item_key": spawned.get("item_key"),
+                "item_id": spawned.get("item_id"),
+                "display_name": spawned.get("display_name"),
+            }
+
+        return None
 
     # =========================================================================
     # Item Execution

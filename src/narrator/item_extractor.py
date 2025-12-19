@@ -40,12 +40,18 @@ class ExtractedItem:
         name: The item name as mentioned in the narrative.
         importance: Gameplay importance classification.
         context: How the item appears in the narrative (e.g., "on shelf", "in corner").
+        location: Where the item is located - REQUIRED, always infer from context.
+                  This is a place you can go to (e.g., "the well", "the library").
+        location_description: Precise placement within that location
+                              (e.g., "on the shelf", "hanging from a hook").
         is_new: True if narrative introduces this as newly discovered/appearing.
     """
 
     name: str
     importance: ItemImportance
     context: str = ""
+    location: str = ""  # Required - never null, always infer from context
+    location_description: str = ""  # "on the shelf", "by the well", etc.
     is_new: bool = True
 
 
@@ -83,6 +89,8 @@ EXTRACTION_PROMPT = """You are extracting PHYSICAL OBJECTS from narrative text f
 NARRATIVE:
 {narrative}
 
+CURRENT SCENE LOCATION: {current_location}
+
 EXTRACT items that are:
 - Tangible physical objects the player could theoretically interact with
 - Newly introduced or described in this text (not just referenced in passing)
@@ -105,13 +113,35 @@ CLASSIFY each item by importance:
 - REFERENCE: Items talked about but NOT physically present in the current scene
   Examples: "the sword your father used to own", "the bucket that was stolen"
 
+LOCATION (REQUIRED - every item must have a location):
+Items always exist somewhere. Infer the location from context:
+- Explicit: "bucket at the well" → location: "the well"
+- Action context: "wash at the well using a washbasin" → location: "the well" (same action context)
+- Scene default: "picks up a lantern" with no location context → location: current scene location
+- Inferred: If an item logically belongs where the action happens, use that location
+
+Locations are PLACES you can go to (the well, the library, the kitchen).
+NOT furniture or surfaces (the shelf, the table, the corner) - those go in location_description.
+
+LOCATION_DESCRIPTION (precise placement within the location):
+Where exactly within that location is the item?
+- "book on the shelf" → location_description: "on the shelf"
+- "bucket by the well" → location_description: "by the well" or "beside the well"
+- "lantern hanging from a hook" → location_description: "hanging from a hook"
+- "coins scattered on the floor" → location_description: "scattered on the floor"
+- If not specified, leave empty ""
+
+This ensures consistency: if we say "book on the shelf", it stays on the shelf.
+
 Respond ONLY with valid JSON:
 {{
   "items": [
     {{
       "name": "item name",
       "importance": "important|decorative|reference",
-      "context": "where/how it appears",
+      "context": "brief context from narrative",
+      "location": "the location name (REQUIRED - never null)",
+      "location_description": "where within the location (or empty string)",
       "is_new": true
     }}
   ],
@@ -154,11 +184,17 @@ class ItemExtractor:
         self.temperature = temperature
         self.max_tokens = max_tokens
 
-    async def extract(self, narrative: str) -> ItemExtractionResult:
+    async def extract(
+        self,
+        narrative: str,
+        current_location: str = "unknown",
+    ) -> ItemExtractionResult:
         """Extract physical items from narrative text.
 
         Args:
             narrative: The narrative text to analyze.
+            current_location: The current scene location for context-aware inference.
+                              Items without explicit location will default to this.
 
         Returns:
             ItemExtractionResult with extracted items and reasoning.
@@ -179,7 +215,7 @@ class ItemExtractor:
             )
 
         try:
-            return await self._extract_with_llm(narrative)
+            return await self._extract_with_llm(narrative, current_location)
         except Exception as e:
             logger.warning(f"Item extraction failed: {e}")
             return ItemExtractionResult(
@@ -187,18 +223,26 @@ class ItemExtractor:
                 reasoning=f"Extraction failed: {e}",
             )
 
-    async def _extract_with_llm(self, narrative: str) -> ItemExtractionResult:
+    async def _extract_with_llm(
+        self,
+        narrative: str,
+        current_location: str,
+    ) -> ItemExtractionResult:
         """Extract items using LLM.
 
         Args:
             narrative: The narrative text.
+            current_location: Current scene location for default item placement.
 
         Returns:
             ItemExtractionResult with extracted items.
         """
         from src.llm.message_types import Message
 
-        prompt = EXTRACTION_PROMPT.format(narrative=narrative)
+        prompt = EXTRACTION_PROMPT.format(
+            narrative=narrative,
+            current_location=current_location,
+        )
 
         response = await self.llm_provider.complete(
             messages=[Message.user(prompt)],
@@ -254,11 +298,18 @@ class ItemExtractor:
                 except ValueError:
                     importance = ItemImportance.IMPORTANT
 
+                # Ensure location is never null - use empty string as fallback
+                location = item_data.get("location") or ""
+                if location == "null":
+                    location = ""
+
                 items.append(
                     ExtractedItem(
                         name=name,
                         importance=importance,
                         context=item_data.get("context", ""),
+                        location=location,
+                        location_description=item_data.get("location_description", ""),
                         is_new=item_data.get("is_new", True),
                     )
                 )

@@ -85,6 +85,7 @@ class NarrativeValidator:
         inventory: list[dict[str, Any]] | None = None,
         equipped: list[dict[str, Any]] | None = None,
         item_extractor: "ItemExtractor | None" = None,
+        current_location: str = "unknown",
     ):
         """Initialize validator with known state.
 
@@ -97,6 +98,7 @@ class NarrativeValidator:
             equipped: Items player has equipped.
             item_extractor: Optional LLM-based item extractor for accurate detection.
                 If provided, validate_async() will use it instead of regex.
+            current_location: Current scene location for item extraction context.
         """
         self.items_at_location = items_at_location or []
         self.npcs_present = npcs_present or []
@@ -105,6 +107,7 @@ class NarrativeValidator:
         self.inventory = inventory or []
         self.equipped = equipped or []
         self.item_extractor = item_extractor
+        self.current_location = current_location
 
         # Build lookup sets for fast validation
         self._item_names = self._build_item_names()
@@ -245,7 +248,10 @@ class NarrativeValidator:
         # Extract items using LLM
         from src.narrator.item_extractor import ItemImportance
 
-        extraction_result = await self.item_extractor.extract(narrative)
+        extraction_result = await self.item_extractor.extract(
+            narrative,
+            current_location=self.current_location,
+        )
         result.extracted_items = extraction_result.items
 
         # Check each extracted item against known state

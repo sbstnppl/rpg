@@ -42,6 +42,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `TurnManager` class with `get_mentioned_items_at_location()` method
   - `ActionValidator` checks deferred items when real item not found
   - Player can reference decorative items mentioned in narrative → spawned on demand
+  - `DynamicActionPlanner._get_visible_location_items()` now includes deferred items
+  - `ActionExecutor._spawn_deferred_item()` spawns items before action execution
+  - Fixes issue where narrator didn't know about deferred items at location
+
+- **LLM-Based Location Extraction** - Automatic world-building from narrative
+  - New `LocationExtractor` class (`src/narrator/location_extractor.py`) using Claude Haiku
+  - Extracts named places from narrative: "the well behind the farmhouse" → location with parent
+  - Categories: wilderness, settlement, establishment, interior, exterior, public
+  - Infers parent-child hierarchy from context
+  - Locations created immediately when narrative mentions them
+
+- **Item Location Context** - Items now extracted with their mentioned location
+  - `ExtractedItem.location` field now REQUIRED (never null, always inferred from context)
+  - New `ExtractedItem.location_description` field for precise placement ("on the shelf", "by the well")
+  - Context-aware location inference: "wash at the well using a washbasin" → washbasin at the well
+  - `ItemExtractor.extract()` now accepts `current_location` for default placement
+  - "bucket at the well" → item with location="the well", location_description="by the well"
+  - `LocationManager.resolve_or_create_location()` matches text to existing or creates new
+  - `LocationManager.fuzzy_match_location()` finds locations by partial name match
+  - Deferred items now have correct location (not player's current location)
+  - Ensures consistency: items don't mysteriously move between visits
+
+- **Database Reference Documentation** - `.claude/docs/database-reference.md`
+  - Connection details from .env
+  - Table schemas for key tables (turns, entities, items, locations, etc.)
+  - Common query examples
 
 - **Plot Hook System** - Missing/relocated items create narrative hooks
   - PLOT_HOOK_MISSING: Item mysteriously absent → triggers re-narration with constraints
@@ -106,6 +132,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Items like "bucket and washbasin" mentioned in INFO responses now get deferred
   - Added `TurnManager.get_all_mentioned_items()` fallback for cross-location lookup
   - `ActionValidator._find_deferred_item()` now checks ALL deferred items as fallback
+
+- **Items Deferred at Wrong Location** - "bucket at the well" was saved at player's location
+  - Both `info_formatter_node` and `narrative_validator_node` used `player_location` for all items
+  - Now extracts actual location from narrative context using `ItemExtractor.location` field
+  - Creates location if it doesn't exist via `LocationManager.resolve_or_create_location()`
+  - Deferred items now correctly placed at their mentioned location (e.g., bucket → farmhouse_well)
 
 - **Deferred Items Not Persisted** - Fixed `Turn.mentioned_items` never being saved
   - `persistence_node._create_turn_record()` now persists `deferred_items` from state to `Turn.mentioned_items`

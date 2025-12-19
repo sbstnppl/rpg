@@ -559,6 +559,10 @@ class DynamicActionPlanner:
     ) -> list[dict[str, Any]]:
         """Get items visible at current location.
 
+        Includes both real items in the database AND deferred items from
+        recent narrative (mentioned_items). Deferred items are marked so
+        downstream code knows to spawn them when referenced.
+
         Args:
             actor_location: Current location key (string) or ID (int).
 
@@ -567,6 +571,8 @@ class DynamicActionPlanner:
         """
         if not actor_location:
             return []
+
+        result_items: list[dict[str, Any]] = []
 
         try:
             # Handle both location key (string) and location ID (int or numeric string)
@@ -592,18 +598,61 @@ class DynamicActionPlanner:
             if not location:
                 return []
 
-            # Get items at this location that are on surfaces (visible)
-            # Note: get_items_at_location expects location_key (string), not location.id
-            items = self.item_manager.get_items_at_location(location.location_key)
-            return [
-                {
-                    "key": item.item_key,
-                    "name": item.display_name,
-                    "description": item.description[:100] if item.description else None,
-                }
-                for item in items
-                if item.is_visible  # Only visible items
-            ]
+            location_key = location.location_key
+
+            # Get real items at this location that are on surfaces (visible)
+            items = self.item_manager.get_items_at_location(location_key)
+            for item in items:
+                if item.is_visible:  # Only visible items
+                    result_items.append({
+                        "key": item.item_key,
+                        "name": item.display_name,
+                        "description": item.description[:100] if item.description else None,
+                    })
+
+            # Also include deferred items from recent narrative (mentioned but not yet spawned)
+            # These are items the narrator mentioned that will spawn on-demand when referenced
+            from src.managers.turn_manager import TurnManager
+            turn_manager = TurnManager(self.db, self.game_session)
+
+            # Track names we've already included to avoid duplicates
+            existing_names = {item["name"].lower() for item in result_items}
+
+            # First: deferred items at current location
+            deferred_items = turn_manager.get_mentioned_items_at_location(
+                location_key, lookback_turns=10
+            )
+
+            for deferred in deferred_items:
+                item_name = deferred.get("name", "")
+                if item_name.lower() not in existing_names:
+                    result_items.append({
+                        "key": f"deferred_{item_name.lower().replace(' ', '_')}",
+                        "name": item_name,
+                        "description": deferred.get("context", "")[:100] if deferred.get("context") else None,
+                        "deferred": True,  # Mark as deferred for spawn-on-demand
+                        "at_location": location_key,
+                    })
+                    existing_names.add(item_name.lower())
+
+            # Second: ALL deferred items from recent turns (for compound "go + use" actions)
+            # This enables "go to the well and use the bucket" to work even when
+            # the player is currently in the kitchen
+            all_deferred = turn_manager.get_all_mentioned_items(lookback_turns=10)
+            for deferred in all_deferred:
+                item_name = deferred.get("name", "")
+                item_location = deferred.get("location", "")
+                if item_name.lower() not in existing_names and item_location != location_key:
+                    result_items.append({
+                        "key": f"deferred_{item_name.lower().replace(' ', '_')}",
+                        "name": item_name,
+                        "description": deferred.get("context", "")[:100] if deferred.get("context") else None,
+                        "deferred": True,
+                        "at_location": item_location,  # Include where the item is
+                    })
+                    existing_names.add(item_name.lower())
+
+            return result_items
         except Exception as e:
             logger.warning(f"Could not get location items: {e}")
             self.db.rollback()

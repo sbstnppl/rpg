@@ -440,3 +440,205 @@ class LocationManager(BaseManager):
             raise ValueError("No player entity found")
 
         entity_manager.update_location(player.entity_key, location_key)
+
+    def get_all_location_keys(self) -> list[str]:
+        """Get all location keys for this session.
+
+        Returns:
+            List of location key strings.
+        """
+        locations = (
+            self.db.query(Location.location_key)
+            .filter(Location.session_id == self.session_id)
+            .all()
+        )
+        return [loc[0] for loc in locations]
+
+    def fuzzy_match_location(self, location_text: str) -> Location | None:
+        """Match location text to an existing Location using fuzzy matching.
+
+        Tries multiple strategies:
+        1. Exact key match: "farmhouse_well" -> location_key="farmhouse_well"
+        2. Display name match (case-insensitive): "The Well" -> display_name
+        3. Partial key match: "well" -> finds "farmhouse_well"
+        4. Key derived from text: "the well" -> "well" or "the_well"
+
+        Args:
+            location_text: The location text from narrative (e.g., "the well").
+
+        Returns:
+            Matching Location if found, None otherwise.
+        """
+        if not location_text:
+            return None
+
+        location_text = location_text.strip()
+
+        # 1. Try exact key match
+        location = self.get_location(location_text)
+        if location:
+            return location
+
+        # 2. Try display name match (case-insensitive)
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.display_name.ilike(location_text),
+            )
+            .first()
+        )
+        if location:
+            return location
+
+        # 3. Normalize text to key format and try
+        # "the well" -> "well" or "the_well"
+        normalized = location_text.lower().replace(" ", "_")
+        if normalized.startswith("the_"):
+            normalized = normalized[4:]  # Remove "the_" prefix
+
+        location = self.get_location(normalized)
+        if location:
+            return location
+
+        # 4. Try partial match - find location keys containing the normalized text
+        all_locations = (
+            self.db.query(Location)
+            .filter(Location.session_id == self.session_id)
+            .all()
+        )
+
+        for loc in all_locations:
+            # Check if normalized text is in the key
+            if normalized in loc.location_key:
+                return loc
+            # Check if key is in the normalized text (for cases like "farmhouse well" matching "well")
+            key_parts = loc.location_key.split("_")
+            if any(part == normalized for part in key_parts):
+                return loc
+
+        return None
+
+    def resolve_or_create_location(
+        self,
+        location_text: str,
+        parent_hint: str | None = None,
+        category: str = "exterior",
+        description: str = "",
+    ) -> Location:
+        """Match location text to existing Location or create new.
+
+        This is the main entry point for creating locations from narrative.
+        It first tries to find an existing location, then creates a new one
+        if needed.
+
+        Args:
+            location_text: The location name from narrative (e.g., "the well").
+            parent_hint: Hint about parent location (e.g., "farmhouse").
+            category: Location category if creating new.
+            description: Description if creating new.
+
+        Returns:
+            Existing or newly created Location.
+        """
+        # First try to find existing location
+        existing = self.fuzzy_match_location(location_text)
+        if existing:
+            return existing
+
+        # Generate location key from text
+        location_key = self._generate_location_key(location_text, parent_hint)
+
+        # Check for duplicate key (shouldn't happen but safety)
+        existing = self.get_location(location_key)
+        if existing:
+            return existing
+
+        # Generate display name
+        display_name = self._generate_display_name(location_text)
+
+        # Resolve parent if hint provided
+        parent_key = None
+        if parent_hint:
+            parent = self.fuzzy_match_location(parent_hint)
+            if parent:
+                parent_key = parent.location_key
+
+        # Create new location
+        return self.create_location(
+            location_key=location_key,
+            display_name=display_name,
+            description=description or f"A location known as {display_name}.",
+            category=category,
+            parent_key=parent_key,
+        )
+
+    def _generate_location_key(
+        self,
+        location_text: str,
+        parent_hint: str | None = None,
+    ) -> str:
+        """Generate a location key from text and optional parent hint.
+
+        Examples:
+            ("the well", "farmhouse") -> "farmhouse_well"
+            ("the village square", None) -> "village_square"
+            ("butcher's shop", "village") -> "village_butcher_shop"
+
+        Args:
+            location_text: The location name.
+            parent_hint: Optional parent location hint.
+
+        Returns:
+            A snake_case location key.
+        """
+        import re
+
+        # Normalize text
+        key = location_text.lower().strip()
+
+        # Remove common prefixes
+        for prefix in ["the ", "a ", "an "]:
+            if key.startswith(prefix):
+                key = key[len(prefix):]
+
+        # Remove possessives and special chars
+        key = key.replace("'s ", "_").replace("'", "")
+        key = re.sub(r"[^a-z0-9\s]", "", key)
+        key = re.sub(r"\s+", "_", key)
+
+        # Add parent prefix if provided and not already similar
+        if parent_hint:
+            parent_norm = parent_hint.lower().strip()
+            for prefix in ["the ", "a ", "an "]:
+                if parent_norm.startswith(prefix):
+                    parent_norm = parent_norm[len(prefix):]
+            parent_norm = re.sub(r"[^a-z0-9]", "_", parent_norm)
+            parent_norm = re.sub(r"_+", "_", parent_norm).strip("_")
+
+            # Don't duplicate if key already starts with parent
+            if not key.startswith(parent_norm):
+                key = f"{parent_norm}_{key}"
+
+        return key
+
+    def _generate_display_name(self, location_text: str) -> str:
+        """Generate a display name from location text.
+
+        Examples:
+            "the well" -> "The Well"
+            "butcher's shop" -> "Butcher's Shop"
+
+        Args:
+            location_text: The location name.
+
+        Returns:
+            A title-cased display name.
+        """
+        name = location_text.strip()
+
+        # If it starts with "the", keep it but title case
+        if name.lower().startswith("the "):
+            return "The " + name[4:].title()
+
+        return name.title()
