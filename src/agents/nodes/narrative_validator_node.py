@@ -116,8 +116,8 @@ async def narrative_validator_node(state: GameState) -> dict[str, Any]:
         result = validator.validate(narrative)
 
     if not result.is_valid:
-        logger.warning(
-            "Narrative validation failed: hallucinated_items=%s",
+        logger.info(
+            "New items detected in narrative, evaluating spawn decisions: %s",
             [getattr(i, 'name', str(i)) for i in result.hallucinated_items],
         )
 
