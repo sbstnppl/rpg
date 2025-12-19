@@ -219,6 +219,28 @@ class Turn(Base):
         comment="[{name, context, location}] - decorative items for deferred spawn",
     )
 
+    # Deferred NPCs (mentioned in narrative but not spawned yet)
+    # For on-demand spawning when player interacts with them later
+    mentioned_npcs: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="[{name, description, context, location}] - background NPCs for deferred spawn",
+    )
+
+    # Chained subturn metadata (hidden from player, for debugging/analytics)
+    subturn_metadata: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="[{index, action, execution, complication, state_after}] - subturn details",
+    )
+
+    # Queued actions from OFFER_CHOICE continuation (for next turn)
+    queued_actions: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Remaining actions for player choice continuation",
+    )
+
     # Timestamp (immutable)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

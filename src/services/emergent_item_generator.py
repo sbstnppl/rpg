@@ -566,6 +566,7 @@ class EmergentItemGenerator:
 
         # Look up location ID for environmental items (no entity owner)
         owner_location_id = None
+        storage_location_id = None
         if owner_entity_id is None and location_key:
             location = (
                 self.db.query(Location)
@@ -577,6 +578,8 @@ class EmergentItemGenerator:
             )
             if location:
                 owner_location_id = location.id
+                # Find or create a storage location at this world location
+                storage_location_id = self._get_or_create_ground_storage(location)
 
         item = Item(
             session_id=self.session_id,
@@ -586,6 +589,7 @@ class EmergentItemGenerator:
             item_type=type_map.get(item_state.item_type, ItemType.MISC),
             owner_id=owner_entity_id,
             holder_id=owner_entity_id,  # Initially holder = owner
+            storage_location_id=storage_location_id,  # Physical placement
             owner_location_id=owner_location_id,  # Environmental items owned by location
             condition=CONDITION_TO_ENUM.get(item_state.condition, ItemCondition.GOOD),
             properties={
@@ -599,6 +603,43 @@ class EmergentItemGenerator:
         self.db.add(item)
         self.db.flush()
         return item
+
+    def _get_or_create_ground_storage(self, location: "Location") -> int:
+        """Get or create a ground/surface storage location at a world location.
+
+        Args:
+            location: The world location to find/create storage at.
+
+        Returns:
+            Storage location ID.
+        """
+        from src.database.models.items import StorageLocation, StorageLocationType
+
+        # Try to find an existing ground storage at this location
+        storage_key = f"{location.location_key}_ground"
+        existing = (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.session_id,
+                StorageLocation.location_key == storage_key,
+            )
+            .first()
+        )
+
+        if existing:
+            return existing.id
+
+        # Create a new ground storage location
+        storage = StorageLocation(
+            session_id=self.session_id,
+            location_key=storage_key,
+            location_type=StorageLocationType.GROUND,
+            world_location_id=location.id,
+            is_temporary=False,
+        )
+        self.db.add(storage)
+        self.db.flush()
+        return storage.id
 
     def get_item_state(self, item_key: str) -> ItemFullState | None:
         """Get full state for an existing item."""

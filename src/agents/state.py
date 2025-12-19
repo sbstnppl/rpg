@@ -136,6 +136,13 @@ class GameState(TypedDict, total=False):
     response_mode: str | None  # "info" (skip narrator) or "narrate" (full prose)
     narrative_style: str | None  # "observe", "action", "dialogue", "combat", "emote"
 
+    # Chained subturn fields (multi-action processing)
+    chained_turn_result: dict[str, Any] | None  # ChainedTurnResult dict from subturn processor
+    continuation_status: str | None  # "continue", "offer_choice", "abandon"
+    queued_actions: list[dict[str, Any]] | None  # Remaining actions for player choice
+    is_continuation: bool  # Whether this turn resumes queued actions
+    continuation_prompt: str | None  # Question to ask player (e.g., "Continue to the well?")
+
     # Runtime dependencies (injected by game loop, not persisted)
     _db: Any  # SQLAlchemy Session
     _game_session: Any  # GameSession model
@@ -218,6 +225,12 @@ def create_initial_state(
         # Response mode routing
         response_mode=None,
         narrative_style=None,
+        # Chained subturn fields
+        chained_turn_result=None,
+        continuation_status=None,
+        queued_actions=None,
+        is_continuation=False,
+        continuation_prompt=None,
         # Metadata
         turn_number=turn_number,
         errors=[],

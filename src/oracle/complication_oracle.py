@@ -154,6 +154,8 @@ class ComplicationOracle:
         scene_context: str,
         risk_tags: list[str],
         turns_since_complication: int | None = None,
+        subturn_index: int = 0,
+        location_danger: str = "neutral",
     ) -> OracleResult:
         """Check if a complication should occur and generate it if so.
 
@@ -162,6 +164,8 @@ class ComplicationOracle:
             scene_context: Current scene context.
             risk_tags: Risk tags from action validation.
             turns_since_complication: Turns since last complication.
+            subturn_index: Position in multi-action chain (0-indexed).
+            location_danger: Danger level of current location.
 
         Returns:
             OracleResult with complication (if any) and probability info.
@@ -178,6 +182,8 @@ class ComplicationOracle:
             arc_phase=arc_phase,
             arc_tension=arc_tension,
             turns_since_complication=turns_since_complication,
+            subturn_index=subturn_index,
+            location_danger=location_danger,
         )
 
         # Check if complication triggers
@@ -654,10 +660,80 @@ Respond ONLY with valid JSON:
             reasoning="Parse failure - defaulting to spawn",
         )
 
+    async def evaluate_npc_spawn(
+        self,
+        npc: "ExtractedNPC",
+        player_location: str,
+        scene_context: str,
+    ) -> "NPCSpawnResult":
+        """Evaluate whether to spawn an NPC or defer.
+
+        This method is called when the narrator mentions an NPC that doesn't
+        exist in game state. The oracle decides whether to:
+        - SPAWN: Create the NPC with full generation (named NPCs)
+        - DEFER: Track for later (background NPCs)
+        - PLOT_HOOK_ABSENT: NPC is mysteriously absent (rare)
+
+        Decision logic:
+        - BACKGROUND importance -> always DEFER
+        - CRITICAL importance -> always SPAWN
+        - SUPPORTING + is_named -> SPAWN
+        - SUPPORTING + not is_named -> DEFER
+
+        Args:
+            npc: The extracted NPC to evaluate.
+            player_location: Current player location key.
+            scene_context: Current scene context.
+
+        Returns:
+            NPCSpawnResult with decision and any plot hook details.
+        """
+        from src.narrator.npc_extractor import NPCImportance
+        from src.oracle.complication_types import NPCSpawnDecision, NPCSpawnResult
+
+        # BACKGROUND NPCs -> always DEFER
+        if npc.importance == NPCImportance.BACKGROUND:
+            return NPCSpawnResult(
+                npc_name=npc.name,
+                decision=NPCSpawnDecision.DEFER,
+                reasoning="Background NPC - track for atmosphere, don't spawn individually",
+            )
+
+        # REFERENCE NPCs -> also DEFER (talked about but not present)
+        if npc.importance == NPCImportance.REFERENCE:
+            return NPCSpawnResult(
+                npc_name=npc.name,
+                decision=NPCSpawnDecision.DEFER,
+                reasoning="Reference NPC - mentioned but not present in scene",
+            )
+
+        # CRITICAL NPCs -> always SPAWN
+        if npc.importance == NPCImportance.CRITICAL:
+            return NPCSpawnResult(
+                npc_name=npc.name,
+                decision=NPCSpawnDecision.SPAWN,
+                reasoning="Critical NPC - required for story/interaction",
+            )
+
+        # SUPPORTING NPCs -> SPAWN if named, DEFER if unnamed
+        if npc.is_named:
+            return NPCSpawnResult(
+                npc_name=npc.name,
+                decision=NPCSpawnDecision.SPAWN,
+                reasoning=f"Named supporting NPC '{npc.name}' - spawn for consistency",
+            )
+        else:
+            return NPCSpawnResult(
+                npc_name=npc.name,
+                decision=NPCSpawnDecision.DEFER,
+                reasoning="Unnamed supporting NPC - defer until player interacts",
+            )
+
 
 # Type hint import at module level for runtime use
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.narrator.item_extractor import ExtractedItem
-    from src.oracle.complication_types import ItemSpawnResult
+    from src.narrator.npc_extractor import ExtractedNPC
+    from src.oracle.complication_types import ItemSpawnResult, NPCSpawnResult

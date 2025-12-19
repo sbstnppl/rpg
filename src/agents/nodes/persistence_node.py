@@ -462,6 +462,25 @@ def _create_turn_record(
         .first()
     )
 
+    # Build subturn_metadata from chained_turn_result
+    subturn_metadata = None
+    chained_result = state.get("chained_turn_result")
+    if chained_result:
+        subturn_metadata = {
+            "subturn_count": len(chained_result.get("subturns", [])),
+            "subturns": chained_result.get("subturns", []),
+            "chain_completed": not chained_result.get("remaining_actions"),
+            "interrupted_at": (
+                len(chained_result.get("subturns", [])) - 1
+                if chained_result.get("interrupting_complication")
+                else None
+            ),
+            "continuation_offered": chained_result.get("continuation_offered", False),
+        }
+
+    # Get queued_actions for continuation flow
+    queued_actions = state.get("queued_actions")
+
     if existing:
         # Update with extraction data (turn already has player_input and gm_response)
         # Always set entities_extracted to record that extraction ran
@@ -473,6 +492,15 @@ def _create_turn_record(
         # Persist deferred items (decorative items for on-demand spawning)
         if "deferred_items" in state:
             existing.mentioned_items = state.get("deferred_items") or []
+        # Persist deferred NPCs (background NPCs for on-demand spawning)
+        if "deferred_npcs" in state:
+            existing.mentioned_npcs = state.get("deferred_npcs") or []
+        # Persist subturn metadata for debugging/analytics
+        if subturn_metadata:
+            existing.subturn_metadata = subturn_metadata
+        # Persist queued actions for continuation flow
+        if queued_actions is not None:
+            existing.queued_actions = queued_actions
         db.flush()  # Ensure changes visible before _save_turn_immediately queries
         return existing
 
@@ -485,6 +513,9 @@ def _create_turn_record(
         entities_extracted=state.get("extracted_entities") or [],
         location_at_turn=state.get("player_location"),
         mentioned_items=state.get("deferred_items") or [],
+        mentioned_npcs=state.get("deferred_npcs") or [],
+        subturn_metadata=subturn_metadata,
+        queued_actions=queued_actions,
     )
     db.add(turn)
     db.flush()

@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.narrator.item_extractor import ExtractedItem, ItemExtractor
+    from src.narrator.npc_extractor import ExtractedNPC, NPCExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -32,17 +33,21 @@ class NarrativeValidationResult:
             For LLM-based validation, contains ExtractedItem objects.
             For regex-based validation, contains item name strings.
         hallucinated_npcs: NPCs mentioned that don't exist in state.
+            For LLM-based validation, contains ExtractedNPC objects.
+            For regex-based validation, contains NPC name strings.
         hallucinated_locations: Locations mentioned that don't exist.
         warnings: Non-blocking validation warnings.
         extracted_items: All items extracted from narrative (LLM mode only).
+        extracted_npcs: All NPCs extracted from narrative (LLM mode only).
     """
 
     is_valid: bool = True
     hallucinated_items: list[Any] = field(default_factory=list)  # ExtractedItem or str
-    hallucinated_npcs: list[str] = field(default_factory=list)
+    hallucinated_npcs: list[Any] = field(default_factory=list)  # ExtractedNPC or str
     hallucinated_locations: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     extracted_items: list[Any] = field(default_factory=list)  # All ExtractedItem objects
+    extracted_npcs: list[Any] = field(default_factory=list)  # All ExtractedNPC objects
 
 
 class NarrativeValidator:
@@ -85,7 +90,9 @@ class NarrativeValidator:
         inventory: list[dict[str, Any]] | None = None,
         equipped: list[dict[str, Any]] | None = None,
         item_extractor: "ItemExtractor | None" = None,
+        npc_extractor: "NPCExtractor | None" = None,
         current_location: str = "unknown",
+        player_name: str = "the player",
     ):
         """Initialize validator with known state.
 
@@ -98,7 +105,10 @@ class NarrativeValidator:
             equipped: Items player has equipped.
             item_extractor: Optional LLM-based item extractor for accurate detection.
                 If provided, validate_async() will use it instead of regex.
-            current_location: Current scene location for item extraction context.
+            npc_extractor: Optional LLM-based NPC extractor for accurate detection.
+                If provided, validate_async() will use it to find hallucinated NPCs.
+            current_location: Current scene location for extraction context.
+            player_name: The player character's name (to exclude from NPC extraction).
         """
         self.items_at_location = items_at_location or []
         self.npcs_present = npcs_present or []
@@ -107,7 +117,9 @@ class NarrativeValidator:
         self.inventory = inventory or []
         self.equipped = equipped or []
         self.item_extractor = item_extractor
+        self.npc_extractor = npc_extractor
         self.current_location = current_location
+        self.player_name = player_name
 
         # Build lookup sets for fast validation
         self._item_names = self._build_item_names()
@@ -223,7 +235,7 @@ class NarrativeValidator:
     async def validate_async(self, narrative: str) -> NarrativeValidationResult:
         """Validate narrative against known state (async/LLM-based).
 
-        Uses LLM-based item extraction for accurate detection, avoiding
+        Uses LLM-based item and NPC extraction for accurate detection, avoiding
         false positives like "bewildering" (ends in "ring" but isn't a ring).
 
         Falls back to regex-based validation if no ItemExtractor is configured.
@@ -232,7 +244,7 @@ class NarrativeValidator:
             narrative: The generated narrative text.
 
         Returns:
-            NarrativeValidationResult with validation status and extracted items.
+            NarrativeValidationResult with validation status and extracted entities.
         """
         # Fall back to sync validation if no extractor
         if self.item_extractor is None:
@@ -269,7 +281,79 @@ class NarrativeValidator:
                     f"(importance={item.importance.value}, context={item.context})"
                 )
 
+        # Extract NPCs using LLM if extractor configured
+        if self.npc_extractor is not None:
+            await self._validate_npcs(narrative, result)
+
         return result
+
+    async def _validate_npcs(
+        self,
+        narrative: str,
+        result: NarrativeValidationResult,
+    ) -> None:
+        """Validate NPCs in narrative against known state.
+
+        Extracts NPCs using LLM and checks them against known NPCs.
+
+        Args:
+            narrative: The generated narrative text.
+            result: The validation result to update.
+        """
+        from src.narrator.npc_extractor import NPCImportance
+
+        # Get list of known NPC names for exclusion
+        known_npc_names = [
+            npc.get("name") or npc.get("display_name") or ""
+            for npc in self.npcs_present
+        ]
+
+        npc_result = await self.npc_extractor.extract(
+            narrative,
+            current_location=self.current_location,
+            player_name=self.player_name,
+            known_npcs=known_npc_names,
+        )
+        result.extracted_npcs = npc_result.npcs
+
+        # Check each extracted NPC against known state
+        for npc in npc_result.npcs:
+            # Skip REFERENCE NPCs (talked about but not present)
+            if npc.importance == NPCImportance.REFERENCE:
+                continue
+
+            # Check if NPC exists in known state
+            if not self._is_valid_npc(npc.name):
+                result.hallucinated_npcs.append(npc)
+                # Note: We don't set is_valid=False for NPCs because
+                # we handle them differently - spawning or deferring
+                # rather than re-narrating
+                logger.debug(
+                    f"Hallucinated NPC detected: {npc.name} "
+                    f"(importance={npc.importance.value}, is_named={npc.is_named})"
+                )
+
+    def _is_valid_npc(self, npc_name: str) -> bool:
+        """Check if NPC name matches known NPCs.
+
+        Args:
+            npc_name: The NPC name to validate.
+
+        Returns:
+            True if the NPC exists in known state.
+        """
+        npc_lower = npc_name.lower()
+
+        # Direct match
+        if npc_lower in self._npc_names:
+            return True
+
+        # Partial match (e.g., "Aldric" matches "Master Aldric")
+        for known in self._npc_names:
+            if npc_lower in known or known in npc_lower:
+                return True
+
+        return False
 
     def _extract_item_mentions(self, narrative: str) -> list[str]:
         """Extract potential item mentions from narrative.

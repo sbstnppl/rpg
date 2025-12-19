@@ -101,6 +101,7 @@ from src.agents.nodes.validate_actions_node import validate_actions_node
 from src.agents.nodes.dynamic_planner_node import dynamic_planner_node
 from src.agents.nodes.complication_oracle_node import complication_oracle_node
 from src.agents.nodes.execute_actions_node import execute_actions_node
+from src.agents.nodes.subturn_processor_node import subturn_processor_node
 from src.agents.nodes.state_validator_node import state_validator_node
 from src.agents.nodes.info_formatter_node import info_formatter_node
 from src.agents.nodes.narrator_node import narrator_node
@@ -122,15 +123,20 @@ AGENT_NODES = {
 SYSTEM_AUTHORITY_NODES = {
     "context_compiler": context_compiler_node,
     "parse_intent": parse_intent_node,
-    "validate_actions": validate_actions_node,
-    "dynamic_planner": dynamic_planner_node,
-    "complication_oracle": complication_oracle_node,
-    "execute_actions": execute_actions_node,
+    "subturn_processor": subturn_processor_node,  # Replaces validate->planner->oracle->execute
     "state_validator": state_validator_node,
     "info_formatter": info_formatter_node,
     "narrator": narrator_node,
     "narrative_validator": narrative_validator_node,
     "persistence": persistence_node,
+}
+
+# Legacy nodes kept for reference/fallback (not used in main flow)
+LEGACY_SYSTEM_AUTHORITY_NODES = {
+    "validate_actions": validate_actions_node,
+    "dynamic_planner": dynamic_planner_node,
+    "complication_oracle": complication_oracle_node,
+    "execute_actions": execute_actions_node,
 }
 
 
@@ -263,8 +269,8 @@ def build_system_authority_graph() -> StateGraph:
 
     This is the new pipeline that ensures mechanical consistency:
     - System decides what happens (mechanically)
-    - Dynamic planner transforms CUSTOM actions into structured plans
-    - Oracle adds creative complications (without breaking mechanics)
+    - Subturn processor handles multi-action chains with state updates
+    - Complications are checked between subturns (can interrupt chains)
     - State validator ensures data integrity after execution
     - LLM describes it (narratively)
 
@@ -275,34 +281,28 @@ def build_system_authority_graph() -> StateGraph:
         context_compiler (gather scene context)
           |
           v
-        parse_intent (convert input to actions)
+        parse_intent (convert input to actions, handle continuations)
           |
           v
-        validate_actions (check if actions are possible)
-          |
-          v
-        dynamic_planner (transform CUSTOM actions into execution plans)
-          |
-          v
-        complication_oracle (optionally add narrative complications)
-          |
-          v
-        execute_actions (apply mechanical changes)
+        subturn_processor (validate/execute actions with interrupts)
           |
           v
         state_validator (ensure data integrity, auto-fix issues)
           |
           v
-        narrator (generate prose from facts)
-          |
-          v
-        narrative_validator (check for hallucinations)
-          |
-        [conditional]
+        [route by response mode]
          /        \\
         v          v
-    narrator   persistence
-    (retry)        |
+    info_formatter narrator
+        |          |
+        |          v
+        |    narrative_validator
+        |         /     \\
+        |        v       v
+        |    narrator   persistence
+        |    (retry)       |
+        \\                  |
+         \\________________/
                    v
                   END
 
@@ -319,13 +319,10 @@ def build_system_authority_graph() -> StateGraph:
     # Set entry point
     graph.set_entry_point("context_compiler")
 
-    # Define linear flow
+    # Define simplified linear flow with subturn_processor
     graph.add_edge("context_compiler", "parse_intent")
-    graph.add_edge("parse_intent", "validate_actions")
-    graph.add_edge("validate_actions", "dynamic_planner")
-    graph.add_edge("dynamic_planner", "complication_oracle")
-    graph.add_edge("complication_oracle", "execute_actions")
-    graph.add_edge("execute_actions", "state_validator")
+    graph.add_edge("parse_intent", "subturn_processor")
+    graph.add_edge("subturn_processor", "state_validator")
 
     # Route based on response mode: INFO skips narrator, NARRATE uses narrator
     graph.add_conditional_edges(

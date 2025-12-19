@@ -11,6 +11,11 @@ Item spawn decisions:
 - PLOT_HOOK_MISSING: Don't spawn, item is mysteriously absent (creates intrigue)
 - PLOT_HOOK_RELOCATED: Spawn elsewhere (e.g., bandit camp) (creates quest hook)
 - DEFER: Track but don't spawn yet (decorative items, spawn on-demand later)
+
+NPC spawn decisions:
+- SPAWN: Create NPC with full generation (CRITICAL + named SUPPORTING NPCs)
+- DEFER: Track in mentioned_npcs, don't spawn (BACKGROUND NPCs)
+- PLOT_HOOK_ABSENT: NPC is mysteriously absent (triggers re-narration)
 """
 
 from dataclasses import dataclass, field
@@ -19,6 +24,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.narrator.item_extractor import ExtractedItem
+    from src.narrator.npc_extractor import ExtractedNPC
 
 
 class ItemSpawnDecision(str, Enum):
@@ -73,6 +79,58 @@ class ItemSpawnResult:
             decision=ItemSpawnDecision(data["decision"]),
             reasoning=data["reasoning"],
             spawn_location=data.get("spawn_location"),
+            plot_hook_description=data.get("plot_hook_description"),
+            new_facts=data.get("new_facts", []),
+        )
+
+
+class NPCSpawnDecision(str, Enum):
+    """Decisions oracle can make about NPC spawning.
+
+    When the narrator mentions an NPC that doesn't exist in game state,
+    the oracle decides what to do with them.
+    """
+
+    SPAWN = "spawn"  # Create NPC with full generation (CRITICAL + named SUPPORTING)
+    DEFER = "defer"  # Track in mentioned_npcs, don't spawn (BACKGROUND)
+    PLOT_HOOK_ABSENT = "plot_hook_absent"  # NPC is mysteriously absent (re-narrate)
+
+
+@dataclass
+class NPCSpawnResult:
+    """Result of oracle evaluating an NPC spawn decision.
+
+    Attributes:
+        npc_name: Name of the NPC being evaluated.
+        decision: The oracle's spawn decision.
+        reasoning: Explanation of why this decision was made.
+        plot_hook_description: For PLOT_HOOK_ABSENT, description of the absence.
+        new_facts: Facts to record about this decision.
+    """
+
+    npc_name: str
+    decision: NPCSpawnDecision
+    reasoning: str
+    plot_hook_description: str | None = None
+    new_facts: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "npc_name": self.npc_name,
+            "decision": self.decision.value,
+            "reasoning": self.reasoning,
+            "plot_hook_description": self.plot_hook_description,
+            "new_facts": self.new_facts,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "NPCSpawnResult":
+        """Create from dictionary."""
+        return cls(
+            npc_name=data["npc_name"],
+            decision=NPCSpawnDecision(data["decision"]),
+            reasoning=data["reasoning"],
             plot_hook_description=data.get("plot_hook_description"),
             new_facts=data.get("new_facts", []),
         )
@@ -210,4 +268,23 @@ ARC_PHASE_MODIFIERS: dict[str, float] = {
     "falling_action": 0.05,  # Wrapping up
     "resolution": 0.02,  # Few surprises
     "aftermath": 0.03,  # Mild complications for hooks
+}
+
+# Subturn modifiers - later actions in a chain have higher interrupt chance
+# This creates natural "things can go wrong during longer journeys" feel
+SUBTURN_MODIFIERS: dict[int, float] = {
+    0: 0.0,    # First action - no modifier
+    1: 0.02,   # Second action - slight increase
+    2: 0.05,   # Third action - moderate increase
+    3: 0.08,   # Fourth action - notable increase
+    4: 0.12,   # Fifth+ action - maximum modifier
+}
+
+# Location danger modifiers - some places are inherently riskier
+LOCATION_DANGER_MODIFIERS: dict[str, float] = {
+    "safe": -0.05,      # Home, temple, church - actually reduces chance
+    "neutral": 0.0,     # Town square, market, tavern
+    "risky": 0.08,      # Forest, road at night, wilderness
+    "dangerous": 0.15,  # Dungeon, cave, crypt, monster lair
+    "hostile": 0.25,    # Enemy territory, active combat zone
 }

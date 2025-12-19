@@ -1,6 +1,12 @@
 """Narrator node for the System-Authority architecture.
 
 This node generates narrative prose from mechanical results.
+
+Supports:
+- Scene introductions
+- LOOK action descriptions
+- Chained turn results (multi-action sequences)
+- Continuation prompts (asking player to continue after interrupt)
 """
 
 from typing import Any, Callable, Coroutine
@@ -9,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from src.agents.state import GameState
 from src.database.models.session import GameSession
+from src.executor.subturn_processor import ChainedTurnResult
 from src.llm.factory import get_gm_provider
 from src.llm.message_types import Message, MessageRole
 from src.narrator.narrator import ConstrainedNarrator
@@ -142,7 +149,51 @@ STYLE_CONFIGS = {
         "max_tokens": 50,
         "instruction": "Write just 1 sentence acknowledging the action.",
     },
+    # Chained turns get slightly more tokens for multi-action sequences
+    "chained": {
+        "max_tokens": 250,
+        "instruction": "Write 2-5 sentences describing the sequence of actions naturally, as one flowing narrative.",
+    },
 }
+
+
+def _build_chained_turn_result(chained_result: dict) -> dict:
+    """Build a turn_result dict from chained_turn_result for narrator.
+
+    Converts the subturn-based structure into a format the narrator expects.
+
+    Args:
+        chained_result: ChainedTurnResult.to_dict() output.
+
+    Returns:
+        Dict with executions[] and failed_actions[] for narrator.
+    """
+    executions = []
+    failed_actions = []
+
+    for subturn in chained_result.get("subturns", []):
+        execution = subturn.get("execution")
+        validation = subturn.get("validation", {})
+        action = subturn.get("action", {})
+
+        if execution and execution.get("success"):
+            executions.append({
+                "action": action,
+                "success": True,
+                "outcome": execution.get("outcome", ""),
+                "state_changes": execution.get("state_changes", []),
+                "metadata": execution.get("metadata", {}),
+            })
+        elif not validation.get("valid", True):
+            failed_actions.append({
+                "action": action,
+                "reason": validation.get("reason", "Unknown validation error"),
+            })
+
+    return {
+        "executions": executions,
+        "failed_actions": failed_actions,
+    }
 
 
 async def narrator_node(state: GameState) -> dict[str, Any]:
@@ -151,8 +202,14 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
     Uses the ConstrainedNarrator to generate prose that includes
     all mechanical facts without contradicting them.
 
+    Supports:
+    - Scene introductions
+    - LOOK descriptions
+    - Chained turn results (multi-action sequences)
+    - Continuation prompts (when chain was interrupted with OFFER_CHOICE)
+
     Args:
-        state: Current game state with turn_result.
+        state: Current game state with turn_result or chained_turn_result.
 
     Returns:
         Partial state update with gm_response.
@@ -165,8 +222,18 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
             return {"gm_response": narrative}
         return {"gm_response": "You find yourself in an unfamiliar place..."}
 
+    # Check for chained turn result (multi-action processing)
+    chained_result = state.get("chained_turn_result")
     turn_result = state.get("turn_result")
-    if not turn_result:
+
+    # If we have a chained result, build turn_result from it
+    if chained_result and chained_result.get("subturns"):
+        turn_result = _build_chained_turn_result(chained_result)
+        # Include any interrupting complication
+        if chained_result.get("interrupting_complication"):
+            turn_result["complication"] = chained_result["interrupting_complication"]
+
+    if not turn_result or (not turn_result.get("executions") and not turn_result.get("failed_actions")):
         return {
             "gm_response": "Nothing happens.",
         }
@@ -192,7 +259,10 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
     narrative_constraints = state.get("narrative_constraints", "")
 
     # Get narrative style for verbosity control
+    # Use "chained" style if this was a multi-action turn
     narrative_style = state.get("narrative_style", "action")
+    if chained_result and len(chained_result.get("subturns", [])) > 1:
+        narrative_style = "chained"
     style_config = STYLE_CONFIGS.get(narrative_style, STYLE_CONFIGS["action"])
 
     # Use LLM-powered narrator for proper prose generation
@@ -219,8 +289,16 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
     if result.warnings:
         errors.extend(result.warnings)
 
+    narrative = result.narrative
+
+    # Append continuation prompt if chain was interrupted with OFFER_CHOICE
+    continuation_prompt = state.get("continuation_prompt")
+    if continuation_prompt and state.get("continuation_status") == "offer_choice":
+        # Add the GM's question to the narrative
+        narrative = f"{narrative}\n\n{continuation_prompt}"
+
     return {
-        "gm_response": result.narrative,
+        "gm_response": narrative,
         "errors": errors if errors else [],
     }
 

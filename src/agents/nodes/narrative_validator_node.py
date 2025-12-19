@@ -25,9 +25,15 @@ from src.agents.state import GameState
 from src.database.models.session import GameSession
 from src.narrator.narrative_validator import NarrativeValidator
 from src.narrator.item_extractor import ItemExtractor, ItemImportance, ExtractedItem
+from src.narrator.npc_extractor import NPCExtractor, NPCImportance, ExtractedNPC
 from src.narrator.location_extractor import LocationExtractor
 from src.narrator.hallucination_handler import spawn_hallucinated_items
-from src.oracle.complication_types import ItemSpawnDecision, ItemSpawnResult
+from src.oracle.complication_types import (
+    ItemSpawnDecision,
+    ItemSpawnResult,
+    NPCSpawnDecision,
+    NPCSpawnResult,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -93,13 +99,17 @@ async def narrative_validator_node(state: GameState) -> dict[str, Any]:
                 equipped = relevant_state.get("equipped", [])
                 break
 
-    # Create item extractor with LLM provider
+    # Create item and NPC extractors with LLM provider
     from src.llm.factory import get_extraction_provider
 
     llm_provider = get_extraction_provider()
     item_extractor = ItemExtractor(llm_provider=llm_provider)
+    npc_extractor = NPCExtractor(llm_provider=llm_provider)
 
-    # Build validator with optional LLM-based extraction
+    # Get player name for NPC extraction
+    player_name = state.get("player_name", "the player")
+
+    # Build validator with LLM-based extraction
     validator = NarrativeValidator(
         items_at_location=items_at_location,
         npcs_present=npcs_present,
@@ -108,7 +118,9 @@ async def narrative_validator_node(state: GameState) -> dict[str, Any]:
         inventory=inventory,
         equipped=equipped,
         item_extractor=item_extractor,
+        npc_extractor=npc_extractor,
         current_location=player_location,
+        player_name=player_name,
     )
 
     # Use async validation if extractor available, else fall back to sync
@@ -136,17 +148,43 @@ async def narrative_validator_node(state: GameState) -> dict[str, Any]:
             spawned_items=spawned_items,
         )
 
+    # Item validation passed, now check for hallucinated NPCs
+    npc_result: dict[str, Any] = {}
+    if result.hallucinated_npcs:
+        logger.info(
+            "New NPCs detected in narrative, evaluating spawn decisions: %s",
+            [getattr(n, 'name', str(n)) for n in result.hallucinated_npcs],
+        )
+        npc_result = await _handle_hallucinated_npcs(
+            state=state,
+            hallucinated_npcs=result.hallucinated_npcs,
+            db=db,
+            game_session=game_session,
+            player_location=str(player_location),
+            scene_context=scene_context,
+        )
+
     # Validation passed
     logger.debug("Narrative validation passed")
-    return {
+    base_result = {
         "narrative_validation_result": {
             "is_valid": True,
             "extracted_items": [
                 {"name": i.name, "importance": i.importance.value}
                 for i in result.extracted_items
             ] if result.extracted_items else [],
+            "extracted_npcs": [
+                {"name": n.name, "importance": n.importance.value}
+                for n in result.extracted_npcs
+            ] if result.extracted_npcs else [],
         },
     }
+
+    # Merge NPC handling results
+    if npc_result:
+        base_result.update(npc_result)
+
+    return base_result
 
 
 async def _handle_hallucinated_items(
@@ -502,3 +540,188 @@ async def _handle_plot_hook_missing(
         "narrative_constraints": constraints,
         "_route_to_narrator": True,
     }
+
+
+async def _handle_hallucinated_npcs(
+    state: GameState,
+    hallucinated_npcs: list[Any],
+    db: Session | None,
+    game_session: GameSession | None,
+    player_location: str,
+    scene_context: str,
+) -> dict[str, Any]:
+    """Handle hallucinated NPCs with spawn/defer decisions.
+
+    Named NPCs (CRITICAL/SUPPORTING with proper names) are spawned immediately
+    with full generation. Background NPCs are deferred to mentioned_npcs.
+
+    Args:
+        state: Current game state.
+        hallucinated_npcs: List of ExtractedNPC objects.
+        db: Database session.
+        game_session: Current game session.
+        player_location: Player's current location key.
+        scene_context: Current scene context.
+
+    Returns:
+        State update dict with spawned/deferred NPCs.
+    """
+    from src.oracle.complication_oracle import ComplicationOracle
+    from src.llm.factory import get_extraction_provider
+
+    npcs_to_spawn: list[ExtractedNPC] = []
+    npcs_to_defer: list[ExtractedNPC] = []
+    spawned_npcs: list[dict[str, Any]] = []
+    deferred_npcs: list[dict[str, Any]] = []
+
+    # Get LLM provider for oracle decisions (if needed)
+    llm_provider = get_extraction_provider()
+
+    # Create oracle if we have db and session
+    oracle = None
+    if db and game_session:
+        oracle = ComplicationOracle(
+            db=db,
+            game_session=game_session,
+            llm_provider=llm_provider,
+        )
+
+    # Evaluate each hallucinated NPC
+    for npc in hallucinated_npcs:
+        # Handle both ExtractedNPC objects and plain strings (legacy)
+        if isinstance(npc, str):
+            # Legacy string format - treat as SUPPORTING
+            extracted_npc = ExtractedNPC(
+                name=npc,
+                importance=NPCImportance.SUPPORTING,
+                is_named=True,  # Assume named if it's a string
+            )
+        else:
+            extracted_npc = npc
+
+        # Get oracle decision if available
+        if oracle:
+            spawn_result = await oracle.evaluate_npc_spawn(
+                npc=extracted_npc,
+                player_location=player_location,
+                scene_context=scene_context,
+            )
+
+            logger.debug(
+                f"Oracle NPC decision for '{extracted_npc.name}': "
+                f"{spawn_result.decision.value} - {spawn_result.reasoning}"
+            )
+
+            # Sort NPCs by decision
+            if spawn_result.decision == NPCSpawnDecision.SPAWN:
+                npcs_to_spawn.append(extracted_npc)
+            elif spawn_result.decision == NPCSpawnDecision.DEFER:
+                npcs_to_defer.append(extracted_npc)
+            # PLOT_HOOK_ABSENT would require re-narration (not implemented for NPCs yet)
+        else:
+            # No oracle - default behavior based on importance and is_named
+            if (
+                extracted_npc.importance == NPCImportance.BACKGROUND
+                or not extracted_npc.is_named
+            ):
+                npcs_to_defer.append(extracted_npc)
+            else:
+                npcs_to_spawn.append(extracted_npc)
+
+    # Spawn named NPCs with full generation
+    if npcs_to_spawn and db and game_session:
+        from src.services.emergent_npc_generator import EmergentNPCGenerator
+        from src.managers.entity_manager import EntityManager
+
+        npc_generator = EmergentNPCGenerator(db, game_session)
+        entity_manager = EntityManager(db, game_session)
+
+        for npc in npcs_to_spawn:
+            # Check if NPC already exists
+            existing = entity_manager.get_entity_by_display_name(npc.name)
+            if existing:
+                logger.debug(f"NPC '{npc.name}' already exists, skipping")
+                continue
+
+            try:
+                # Generate entity key from name
+                entity_key = _generate_npc_entity_key(npc.name, npc.role_hint)
+
+                # Generate full NPC
+                npc_state = npc_generator.create_npc(
+                    context=f"{npc.context or 'present in scene'}. {npc.description or ''}",
+                    location_key=player_location,
+                    constraints={
+                        "name": npc.name,
+                        "gender": npc.gender_hint,
+                        "occupation": npc.occupation_hint,
+                        "role": npc.role_hint,
+                    },
+                )
+
+                spawned_npcs.append({
+                    "entity_id": npc_state.entity_id,
+                    "entity_key": npc_state.entity_key,
+                    "display_name": npc_state.display_name,
+                    "role_hint": npc.role_hint,
+                })
+
+                logger.info(
+                    f"Spawned NPC '{npc.name}' at {player_location} "
+                    f"(entity_key={npc_state.entity_key})"
+                )
+            except Exception as e:
+                logger.error(f"Failed to spawn NPC '{npc.name}': {e}")
+                # Fall back to deferring
+                npcs_to_defer.append(npc)
+
+        db.commit()
+
+    # Track deferred NPCs for later on-demand spawning
+    for npc in npcs_to_defer:
+        deferred_npcs.append({
+            "name": npc.name,
+            "description": npc.description,
+            "context": npc.context,
+            "location": player_location,
+            "gender_hint": npc.gender_hint,
+            "occupation_hint": npc.occupation_hint,
+            "role_hint": npc.role_hint,
+        })
+
+    if deferred_npcs:
+        logger.debug(f"Deferred {len(deferred_npcs)} background NPCs for later spawning")
+
+    return {
+        "spawned_npcs": spawned_npcs,
+        "deferred_npcs": deferred_npcs,  # For persistence node
+    }
+
+
+def _generate_npc_entity_key(name: str, role_hint: str | None = None) -> str:
+    """Generate a unique entity key for an NPC.
+
+    Args:
+        name: The NPC's display name.
+        role_hint: Optional role hint (employer, guard, etc.).
+
+    Returns:
+        A unique entity key like "employer_aldric_a1b2" or "npc_marta_c3d4".
+    """
+    import uuid
+
+    # Clean the name - take first word, lowercase
+    name_clean = name.lower().split()[0] if name else "npc"
+    # Remove non-alphanumeric
+    name_clean = "".join(c for c in name_clean if c.isalnum())
+
+    # Use role if provided, else "npc"
+    prefix = "npc"
+    if role_hint:
+        prefix = role_hint.lower().replace(" ", "_")
+        prefix = "".join(c for c in prefix if c.isalnum() or c == "_")
+
+    # Add unique suffix
+    unique_id = uuid.uuid4().hex[:4]
+
+    return f"{prefix}_{name_clean}_{unique_id}"

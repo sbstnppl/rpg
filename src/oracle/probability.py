@@ -10,7 +10,12 @@ The oracle uses multiple factors to determine complication chance:
 
 from dataclasses import dataclass
 
-from src.oracle.complication_types import ARC_PHASE_MODIFIERS, RISK_TAG_MODIFIERS
+from src.oracle.complication_types import (
+    ARC_PHASE_MODIFIERS,
+    LOCATION_DANGER_MODIFIERS,
+    RISK_TAG_MODIFIERS,
+    SUBTURN_MODIFIERS,
+)
 
 
 @dataclass
@@ -23,6 +28,8 @@ class ComplicationProbability:
     cooldown_multiplier: float
     final_chance: float
     breakdown: dict[str, float]  # Detailed breakdown for debugging
+    subturn_modifier: float = 0.0  # Modifier based on subturn index in chain
+    location_modifier: float = 0.0  # Modifier based on location danger
 
 
 class ProbabilityCalculator:
@@ -62,6 +69,8 @@ class ProbabilityCalculator:
         arc_phase: str | None = None,
         arc_tension: int | None = None,
         turns_since_complication: int | None = None,
+        subturn_index: int = 0,
+        location_danger: str = "neutral",
     ) -> ComplicationProbability:
         """Calculate complication probability.
 
@@ -70,6 +79,8 @@ class ProbabilityCalculator:
             arc_phase: Current story arc phase (e.g., "climax")
             arc_tension: Current tension level (0-100)
             turns_since_complication: Turns since last complication
+            subturn_index: 0-indexed position in multi-action chain
+            location_danger: Danger level of current location
 
         Returns:
             ComplicationProbability with calculated chance and breakdown.
@@ -100,10 +111,28 @@ class ProbabilityCalculator:
             risk_modifier += tag_mod
             breakdown[f"risk_{tag}"] = tag_mod
 
-        # Sum modifiers
-        chance += arc_modifier + tension_modifier + risk_modifier
+        # 5. Subturn index modifier (later actions in chain have higher chance)
+        subturn_modifier = SUBTURN_MODIFIERS.get(
+            min(subturn_index, 4), SUBTURN_MODIFIERS[4]
+        )
+        breakdown["subturn_index"] = subturn_modifier
 
-        # 5. Cooldown multiplier
+        # 6. Location danger modifier
+        location_modifier = LOCATION_DANGER_MODIFIERS.get(
+            location_danger.lower(), 0.0
+        )
+        breakdown["location_danger"] = location_modifier
+
+        # Sum modifiers
+        chance += (
+            arc_modifier
+            + tension_modifier
+            + risk_modifier
+            + subturn_modifier
+            + location_modifier
+        )
+
+        # 7. Cooldown multiplier
         cooldown_multiplier = 1.0
         if turns_since_complication is not None:
             if turns_since_complication < self.cooldown_turns:
@@ -121,7 +150,7 @@ class ProbabilityCalculator:
         # Apply cooldown
         chance *= cooldown_multiplier
 
-        # 6. Hard cap
+        # 8. Hard cap
         final_chance = min(chance, self.max_chance)
         breakdown["capped"] = self.max_chance if chance > self.max_chance else 0.0
 
@@ -129,6 +158,8 @@ class ProbabilityCalculator:
             base_chance=self.base_chance,
             arc_modifier=arc_modifier + tension_modifier,
             risk_modifier=risk_modifier,
+            subturn_modifier=subturn_modifier,
+            location_modifier=location_modifier,
             cooldown_multiplier=cooldown_multiplier,
             final_chance=final_chance,
             breakdown=breakdown,

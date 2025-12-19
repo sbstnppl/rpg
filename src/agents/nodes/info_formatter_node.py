@@ -26,6 +26,95 @@ from src.narrator.location_extractor import LocationExtractor
 logger = logging.getLogger(__name__)
 
 
+import re
+
+
+def _convert_to_second_person(fact: str) -> str:
+    """Convert a narrator fact from third-person to second-person.
+
+    Transforms awkward third-person phrasing like:
+    - "Knows their father was imprisoned" -> "You know your father was imprisoned"
+    - "Player's mother is at home" -> "Your mother is at home"
+    - "Their siblings are nearby" -> "Your siblings are nearby"
+
+    Args:
+        fact: Raw narrator fact string.
+
+    Returns:
+        Cleaned fact in second-person voice.
+    """
+    cleaned = fact.strip()
+
+    # Remove "Player " prefix first (e.g., "Player recalls that...")
+    if cleaned.lower().startswith("player "):
+        cleaned = cleaned[7:]
+
+    # Handle verb-leading patterns and convert to "You [verb]..."
+    lower = cleaned.lower()
+
+    # Pattern: "Knows that X" -> "You know X"
+    # Pattern: "Recalls that X" -> "You recall X"
+    verb_patterns = [
+        (r"^knows\s+(?:that\s+)?", "You know "),
+        (r"^recalls?\s+(?:that\s+)?", "You recall "),
+        (r"^remembers?\s+(?:that\s+)?", "You remember "),
+        (r"^sees?\s+(?:that\s+)?", "You see "),
+        (r"^believes?\s+(?:that\s+)?", "You believe "),
+        (r"^thinks?\s+(?:that\s+)?", "You think "),
+        (r"^understands?\s+(?:that\s+)?", "You understand "),
+        (r"^checks?\s+and\s+finds?\s+", "You find "),
+        (r"^is\s+", "You are "),
+        (r"^has\s+", "You have "),
+        (r"^was\s+", "You were "),
+        (r"^were\s+", "You were "),
+        (r"^can\s+", "You can "),
+        (r"^cannot\s+", "You cannot "),
+        (r"^can't\s+", "You can't "),
+        (r"^should\s+", "You should "),
+        (r"^would\s+", "You would "),
+        (r"^could\s+", "You could "),
+        (r"^might\s+", "You might "),
+        (r"^must\s+", "You must "),
+    ]
+
+    for pattern, replacement in verb_patterns:
+        match = re.match(pattern, lower)
+        if match:
+            # Replace pattern preserving the rest of the string
+            cleaned = replacement + cleaned[match.end():]
+            break
+
+    # Replace possessive pronouns throughout the text
+    # "their father" -> "your father", "his mother" -> "your mother"
+    cleaned = re.sub(r"\btheir\b", "your", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bhis\b", "your", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bher\b(?!\s+(?:own|self))", "your", cleaned, flags=re.IGNORECASE)  # "her" but not "her own/herself"
+    cleaned = re.sub(r"\bPlayer'?s?\b", "your", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bthe player'?s?\b", "your", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bhis/her\b", "your", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bhis or her\b", "your", cleaned, flags=re.IGNORECASE)
+
+    # Replace reflexive pronouns
+    cleaned = re.sub(r"\bthemselves\b", "yourself", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bthemself\b", "yourself", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bhimself\b", "yourself", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bherself\b", "yourself", cleaned, flags=re.IGNORECASE)
+
+    # Replace object pronouns
+    cleaned = re.sub(r"\bthem\b", "you", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bhim\b", "you", cleaned, flags=re.IGNORECASE)
+
+    # Capitalize first letter
+    if cleaned:
+        cleaned = cleaned[0].upper() + cleaned[1:]
+
+    # Ensure proper punctuation
+    if cleaned and cleaned[-1] not in ".!?":
+        cleaned += "."
+
+    return cleaned
+
+
 async def info_formatter_node(state: GameState) -> dict[str, Any]:
     """Format INFO mode responses directly from state.
 
@@ -65,40 +154,10 @@ async def info_formatter_node(state: GameState) -> dict[str, Any]:
         return {"gm_response": "You're not sure."}
 
     # Format as concise answer
-    # Remove redundant phrases and clean up
+    # Remove redundant phrases and convert to second person
     formatted_facts = []
     for fact in all_facts:
-        # Remove "Player" prefix if present (e.g., "Player recalls that...")
-        cleaned = fact
-        if cleaned.lower().startswith("player "):
-            # Transform "Player recalls that X" -> "X"
-            cleaned = cleaned[7:]  # Remove "Player "
-
-        # Handle common patterns that need cleanup
-        lower = cleaned.lower()
-        if lower.startswith("recalls that "):
-            cleaned = cleaned[13:]
-        elif lower.startswith("knows that "):
-            cleaned = cleaned[11:]
-        elif lower.startswith("remembers that "):
-            cleaned = cleaned[15:]
-        elif lower.startswith("sees that "):
-            cleaned = cleaned[10:]
-        elif lower.startswith("checks and finds "):
-            cleaned = cleaned[17:]
-        elif lower.startswith("is "):
-            cleaned = "You are " + cleaned[3:]
-        elif lower.startswith("has "):
-            cleaned = "You have " + cleaned[4:]
-        elif lower.startswith("their "):
-            cleaned = "Your " + cleaned[6:]
-        elif lower.startswith("the player's "):
-            cleaned = "Your " + cleaned[12:]
-
-        # Capitalize first letter
-        if cleaned:
-            cleaned = cleaned[0].upper() + cleaned[1:]
-
+        cleaned = _convert_to_second_person(fact)
         formatted_facts.append(cleaned)
 
     # Join facts into a concise response
