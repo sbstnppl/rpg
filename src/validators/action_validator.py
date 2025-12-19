@@ -131,6 +131,15 @@ class ActionValidator:
             self._managers_cache["combat"] = CombatManager(self.db, self.game_session)
         return self._managers_cache["combat"]
 
+    @property
+    def turn_manager(self):
+        """Lazy-load TurnManager."""
+        if "turn" not in self._managers_cache:
+            from src.managers.turn_manager import TurnManager
+
+            self._managers_cache["turn"] = TurnManager(self.db, self.game_session)
+        return self._managers_cache["turn"]
+
     def _get_actor_location(self, actor: "Entity") -> str:
         """Get the actor's current location.
 
@@ -261,7 +270,11 @@ class ActionValidator:
     # =========================================================================
 
     def _validate_take(self, action: Action, actor: "Entity") -> ValidationResult:
-        """Validate taking an item."""
+        """Validate taking an item.
+
+        Also checks for deferred items (decorative items mentioned in narrative
+        but not yet spawned). If found, marks for on-demand spawning.
+        """
         if not action.target:
             return ValidationResult(
                 action=action, valid=False, reason="Take what? Specify an item."
@@ -281,6 +294,19 @@ class ActionValidator:
         ]
 
         if not matching_items:
+            # Check for deferred items (mentioned in narrative but not spawned)
+            deferred = self._find_deferred_item(target_lower, location_key)
+            if deferred:
+                # Valid - will be spawned on-demand during execution
+                return ValidationResult(
+                    action=action,
+                    valid=True,
+                    resolved_target=deferred["name"],
+                    metadata={
+                        "spawn_on_demand": True,
+                        "deferred_item": deferred,
+                    },
+                )
             return ValidationResult(
                 action=action,
                 valid=False,
@@ -579,6 +605,19 @@ class ActionValidator:
                 valid=True,
                 resolved_target=entity.entity_key,
                 metadata={"type": "entity", "entity_id": entity.id},
+            )
+
+        # Check for deferred items (mentioned in narrative but not spawned)
+        deferred = self._find_deferred_item(target_lower, self._get_actor_location(actor))
+        if deferred:
+            return ValidationResult(
+                action=action,
+                valid=True,
+                resolved_target=deferred["name"],
+                metadata={
+                    "type": "deferred_item",
+                    "deferred_item": deferred,
+                },
             )
 
         return ValidationResult(
@@ -1126,3 +1165,33 @@ class ActionValidator:
                 risk_tags.append(RiskTag.SACRED)
 
         return risk_tags
+
+    def _find_deferred_item(
+        self, target_lower: str, location_key: str
+    ) -> dict | None:
+        """Find a deferred item mentioned in recent narrative.
+
+        Deferred items are decorative items mentioned in narrative
+        but not yet spawned. They can be spawned on-demand when
+        the player references them.
+
+        Args:
+            target_lower: Lowercase item name to search for.
+            location_key: Current location to filter by.
+
+        Returns:
+            Deferred item dict if found, None otherwise.
+        """
+        if not location_key:
+            return None
+
+        mentioned_items = self.turn_manager.get_mentioned_items_at_location(
+            location_key, lookback_turns=10
+        )
+
+        for item in mentioned_items:
+            item_name_lower = item.get("name", "").lower()
+            if target_lower in item_name_lower or item_name_lower in target_lower:
+                return item
+
+        return None

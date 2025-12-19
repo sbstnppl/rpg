@@ -2,11 +2,24 @@
 
 This module provides validation to ensure the narrator doesn't invent
 items, NPCs, or locations that don't exist in the game state.
+
+Two validation modes are supported:
+1. LLM-based (async): Uses ItemExtractor for accurate item detection
+2. Regex-based (sync): Legacy fallback using pattern matching
+
+The LLM-based approach eliminates false positives like "bewildering"
+(which ends in "ring" but isn't a ring).
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.narrator.item_extractor import ExtractedItem, ItemExtractor
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -16,16 +29,20 @@ class NarrativeValidationResult:
     Attributes:
         is_valid: Whether the narrative passes validation.
         hallucinated_items: Items mentioned that don't exist in state.
+            For LLM-based validation, contains ExtractedItem objects.
+            For regex-based validation, contains item name strings.
         hallucinated_npcs: NPCs mentioned that don't exist in state.
         hallucinated_locations: Locations mentioned that don't exist.
         warnings: Non-blocking validation warnings.
+        extracted_items: All items extracted from narrative (LLM mode only).
     """
 
     is_valid: bool = True
-    hallucinated_items: list[str] = field(default_factory=list)
+    hallucinated_items: list[Any] = field(default_factory=list)  # ExtractedItem or str
     hallucinated_npcs: list[str] = field(default_factory=list)
     hallucinated_locations: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    extracted_items: list[Any] = field(default_factory=list)  # All ExtractedItem objects
 
 
 class NarrativeValidator:
@@ -67,6 +84,7 @@ class NarrativeValidator:
         spawned_items: list[dict[str, Any]] | None = None,
         inventory: list[dict[str, Any]] | None = None,
         equipped: list[dict[str, Any]] | None = None,
+        item_extractor: "ItemExtractor | None" = None,
     ):
         """Initialize validator with known state.
 
@@ -77,6 +95,8 @@ class NarrativeValidator:
             spawned_items: Items created this turn via SPAWN_ITEM.
             inventory: Items in player's inventory.
             equipped: Items player has equipped.
+            item_extractor: Optional LLM-based item extractor for accurate detection.
+                If provided, validate_async() will use it instead of regex.
         """
         self.items_at_location = items_at_location or []
         self.npcs_present = npcs_present or []
@@ -84,6 +104,7 @@ class NarrativeValidator:
         self.spawned_items = spawned_items or []
         self.inventory = inventory or []
         self.equipped = equipped or []
+        self.item_extractor = item_extractor
 
         # Build lookup sets for fast validation
         self._item_names = self._build_item_names()
@@ -165,11 +186,14 @@ class NarrativeValidator:
         return names
 
     def validate(self, narrative: str) -> NarrativeValidationResult:
-        """Validate narrative against known state.
+        """Validate narrative against known state (sync/regex-based).
 
         Extracts potential item references from the narrative and checks
         if they exist in the known state. Uses pattern matching to find
         item mentions.
+
+        Note: This is the legacy regex-based method. For more accurate
+        validation, use validate_async() with an ItemExtractor.
 
         Args:
             narrative: The generated narrative text.
@@ -190,6 +214,54 @@ class NarrativeValidator:
             if not self._is_valid_item(item):
                 result.hallucinated_items.append(item)
                 result.is_valid = False
+
+        return result
+
+    async def validate_async(self, narrative: str) -> NarrativeValidationResult:
+        """Validate narrative against known state (async/LLM-based).
+
+        Uses LLM-based item extraction for accurate detection, avoiding
+        false positives like "bewildering" (ends in "ring" but isn't a ring).
+
+        Falls back to regex-based validation if no ItemExtractor is configured.
+
+        Args:
+            narrative: The generated narrative text.
+
+        Returns:
+            NarrativeValidationResult with validation status and extracted items.
+        """
+        # Fall back to sync validation if no extractor
+        if self.item_extractor is None:
+            logger.debug("No ItemExtractor configured, falling back to regex validation")
+            return self.validate(narrative)
+
+        result = NarrativeValidationResult(is_valid=True)
+
+        # Skip validation for very short narratives
+        if len(narrative) < 20:
+            return result
+
+        # Extract items using LLM
+        from src.narrator.item_extractor import ItemImportance
+
+        extraction_result = await self.item_extractor.extract(narrative)
+        result.extracted_items = extraction_result.items
+
+        # Check each extracted item against known state
+        for item in extraction_result.items:
+            # Skip REFERENCE items (talked about but not present)
+            if item.importance == ItemImportance.REFERENCE:
+                continue
+
+            # Check if item exists in known state
+            if not self._is_valid_item(item.name):
+                result.hallucinated_items.append(item)
+                result.is_valid = False
+                logger.debug(
+                    f"Hallucinated item detected: {item.name} "
+                    f"(importance={item.importance.value}, context={item.context})"
+                )
 
         return result
 
@@ -215,11 +287,12 @@ class NarrativeValidator:
         matches = re.findall(pattern, narrative_lower)
         items.extend(matches)
 
-        # Also look for standalone item nouns
+        # Also look for standalone item nouns (must END with suffix, not just contain it)
+        # This avoids false positives like "contemplate" matching "plate"
         for suffix in self.ITEM_SUFFIXES:
             if suffix in narrative_lower:
-                # Find the full word containing this suffix
-                word_pattern = rf'\b(\w*{suffix}\w*)\b'
+                # Find words that END with this suffix (not contain it anywhere)
+                word_pattern = rf'\b(\w*{suffix})\b'
                 word_matches = re.findall(word_pattern, narrative_lower)
                 items.extend(word_matches)
 
@@ -274,6 +347,13 @@ class NarrativeValidator:
             # Actions/states/verbs
             "offering", "lingering", "washing", "cleaning",
             "preparing", "searching", "looking", "finding",
+            # Verbs that end with item suffixes (contemplate ends with 'plate', etc.)
+            "contemplate", "template", "update", "create", "separate",
+            "bring", "string", "fling", "swing", "cling", "wring",
+            "think", "shrink", "blink", "drink", "sink", "link",
+            "overlook", "mistook", "undertook", "forsook",
+            "comfortable", "suitable", "notable", "portable", "vegetable",
+            "enable", "disable", "stable", "unstable", "table",
             # Nature/seasons
             "spring", "summer", "autumn", "winter", "morning",
             "evening", "night", "day", "dawn", "dusk",

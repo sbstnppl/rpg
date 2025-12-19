@@ -7,6 +7,8 @@ from src.oracle.complication_types import (
     ComplicationType,
     Effect,
     EffectType,
+    ItemSpawnDecision,
+    ItemSpawnResult,
 )
 
 
@@ -196,3 +198,132 @@ class TestComplication:
         assert roundtrip.interrupts_action == original.interrupts_action
         assert roundtrip.source_arc_key == original.source_arc_key
         assert roundtrip.foreshadowing == original.foreshadowing
+
+
+class TestItemSpawnDecision:
+    """Tests for ItemSpawnDecision enum."""
+
+    def test_all_spawn_decisions_exist(self):
+        """Test that all expected spawn decisions exist."""
+        expected = {"spawn", "plot_hook_missing", "plot_hook_relocated", "defer"}
+        actual = {d.value for d in ItemSpawnDecision}
+        assert expected == actual
+
+    def test_spawn_decision_from_string(self):
+        """Test enum creation from string."""
+        assert ItemSpawnDecision("spawn") == ItemSpawnDecision.SPAWN
+        assert ItemSpawnDecision("plot_hook_missing") == ItemSpawnDecision.PLOT_HOOK_MISSING
+        assert ItemSpawnDecision("plot_hook_relocated") == ItemSpawnDecision.PLOT_HOOK_RELOCATED
+        assert ItemSpawnDecision("defer") == ItemSpawnDecision.DEFER
+
+
+class TestItemSpawnResult:
+    """Tests for ItemSpawnResult dataclass."""
+
+    def test_create_spawn_result(self):
+        """Test creating a simple spawn result."""
+        result = ItemSpawnResult(
+            item_name="bucket",
+            decision=ItemSpawnDecision.SPAWN,
+            reasoning="Common item for location",
+        )
+
+        assert result.item_name == "bucket"
+        assert result.decision == ItemSpawnDecision.SPAWN
+        assert result.reasoning == "Common item for location"
+        assert result.spawn_location is None
+        assert result.plot_hook_description is None
+        assert result.new_facts == []
+
+    def test_create_plot_hook_missing_result(self):
+        """Test creating a plot hook missing result."""
+        result = ItemSpawnResult(
+            item_name="bucket",
+            decision=ItemSpawnDecision.PLOT_HOOK_MISSING,
+            reasoning="Creates mystery - bucket should be here",
+            plot_hook_description="The well bucket is mysteriously absent",
+            new_facts=["bucket is_missing well_behind_farmhouse"],
+        )
+
+        assert result.decision == ItemSpawnDecision.PLOT_HOOK_MISSING
+        assert result.plot_hook_description == "The well bucket is mysteriously absent"
+        assert len(result.new_facts) == 1
+
+    def test_create_plot_hook_relocated_result(self):
+        """Test creating a plot hook relocated result."""
+        result = ItemSpawnResult(
+            item_name="medicine_chest",
+            decision=ItemSpawnDecision.PLOT_HOOK_RELOCATED,
+            reasoning="Valuable item was taken by bandits",
+            spawn_location="bandit_camp",
+            plot_hook_description="The medicine chest was taken to the bandit camp",
+            new_facts=["medicine_chest is_at bandit_camp", "bandits raided farmhouse"],
+        )
+
+        assert result.decision == ItemSpawnDecision.PLOT_HOOK_RELOCATED
+        assert result.spawn_location == "bandit_camp"
+        assert len(result.new_facts) == 2
+
+    def test_create_defer_result(self):
+        """Test creating a defer result for decorative items."""
+        result = ItemSpawnResult(
+            item_name="pebbles",
+            decision=ItemSpawnDecision.DEFER,
+            reasoning="Decorative item - track for later on-demand spawning",
+        )
+
+        assert result.decision == ItemSpawnDecision.DEFER
+        assert result.spawn_location is None
+
+    def test_spawn_result_to_dict(self):
+        """Test serialization to dictionary."""
+        result = ItemSpawnResult(
+            item_name="rope",
+            decision=ItemSpawnDecision.SPAWN,
+            reasoning="Common tool",
+            new_facts=["rope found_at barn"],
+        )
+
+        data = result.to_dict()
+
+        assert data["item_name"] == "rope"
+        assert data["decision"] == "spawn"
+        assert data["reasoning"] == "Common tool"
+        assert data["new_facts"] == ["rope found_at barn"]
+
+    def test_spawn_result_from_dict(self):
+        """Test deserialization from dictionary."""
+        data = {
+            "item_name": "bucket",
+            "decision": "plot_hook_missing",
+            "reasoning": "Creates mystery",
+            "spawn_location": None,
+            "plot_hook_description": "Bucket is gone",
+            "new_facts": ["bucket was_stolen"],
+        }
+
+        result = ItemSpawnResult.from_dict(data)
+
+        assert result.item_name == "bucket"
+        assert result.decision == ItemSpawnDecision.PLOT_HOOK_MISSING
+        assert result.plot_hook_description == "Bucket is gone"
+
+    def test_spawn_result_roundtrip(self):
+        """Test that to_dict and from_dict are inverse operations."""
+        original = ItemSpawnResult(
+            item_name="chest",
+            decision=ItemSpawnDecision.PLOT_HOOK_RELOCATED,
+            reasoning="Valuable item was moved",
+            spawn_location="thief_hideout",
+            plot_hook_description="The chest was taken",
+            new_facts=["chest at_location thief_hideout"],
+        )
+
+        roundtrip = ItemSpawnResult.from_dict(original.to_dict())
+
+        assert roundtrip.item_name == original.item_name
+        assert roundtrip.decision == original.decision
+        assert roundtrip.reasoning == original.reasoning
+        assert roundtrip.spawn_location == original.spawn_location
+        assert roundtrip.plot_hook_description == original.plot_hook_description
+        assert roundtrip.new_facts == original.new_facts

@@ -363,3 +363,173 @@ class TestConsumeValidation:
         result = validator.validate(action, entity)
 
         assert result.valid is True
+
+
+class TestDeferredSpawning:
+    """Tests for deferred item spawning integration."""
+
+    def test_take_deferred_item_succeeds(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify TAKE succeeds for deferred items mentioned in narrative."""
+        from tests.factories import create_turn
+
+        create_location(db_session, game_session, location_key="tavern")
+        entity = create_entity(
+            db_session, game_session,
+            entity_key="player",
+        )
+        # Create turn with mentioned items (deferred)
+        create_turn(
+            db_session, game_session,
+            turn_number=1,
+            mentioned_items=[
+                {"name": "dusty bottle", "context": "on shelf", "location": "tavern"},
+            ],
+        )
+        db_session.flush()
+
+        validator = ActionValidator(db_session, game_session)
+        action = Action(type=ActionType.TAKE, target="dusty bottle")
+
+        result = validator.validate(action, entity, actor_location="tavern")
+
+        assert result.valid is True
+        assert result.metadata.get("spawn_on_demand") is True
+        assert result.metadata.get("deferred_item") is not None
+        assert result.metadata["deferred_item"]["name"] == "dusty bottle"
+
+    def test_take_deferred_item_wrong_location_fails(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify TAKE fails for deferred items at different location."""
+        from tests.factories import create_turn
+
+        create_location(db_session, game_session, location_key="tavern")
+        create_location(db_session, game_session, location_key="forest")
+        entity = create_entity(
+            db_session, game_session,
+            entity_key="player",
+        )
+        # Create turn with mentioned items at tavern
+        create_turn(
+            db_session, game_session,
+            turn_number=1,
+            mentioned_items=[
+                {"name": "dusty bottle", "context": "on shelf", "location": "tavern"},
+            ],
+        )
+        db_session.flush()
+
+        validator = ActionValidator(db_session, game_session)
+        action = Action(type=ActionType.TAKE, target="dusty bottle")
+
+        # Player is in forest, item was mentioned at tavern
+        result = validator.validate(action, entity, actor_location="forest")
+
+        assert result.valid is False
+        assert "no" in result.reason.lower() or "not" in result.reason.lower()
+
+    def test_examine_deferred_item_succeeds(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify EXAMINE succeeds for deferred items."""
+        from tests.factories import create_turn
+
+        create_location(db_session, game_session, location_key="tavern")
+        entity = create_entity(
+            db_session, game_session,
+            entity_key="player",
+        )
+        create_turn(
+            db_session, game_session,
+            turn_number=1,
+            mentioned_items=[
+                {"name": "cobwebs", "context": "in corner", "location": "tavern"},
+            ],
+        )
+        db_session.flush()
+
+        validator = ActionValidator(db_session, game_session)
+        action = Action(type=ActionType.EXAMINE, target="cobwebs")
+
+        result = validator.validate(action, entity, actor_location="tavern")
+
+        assert result.valid is True
+        assert result.metadata.get("type") == "deferred_item"
+        assert result.metadata.get("deferred_item") is not None
+
+    def test_deferred_item_partial_match_succeeds(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify deferred items can be found with partial name match."""
+        from tests.factories import create_turn
+
+        create_location(db_session, game_session, location_key="tavern")
+        entity = create_entity(
+            db_session, game_session,
+            entity_key="player",
+        )
+        create_turn(
+            db_session, game_session,
+            turn_number=1,
+            mentioned_items=[
+                {"name": "dusty old bottle", "context": "on shelf", "location": "tavern"},
+            ],
+        )
+        db_session.flush()
+
+        validator = ActionValidator(db_session, game_session)
+        action = Action(type=ActionType.TAKE, target="bottle")
+
+        result = validator.validate(action, entity, actor_location="tavern")
+
+        assert result.valid is True
+        assert result.metadata.get("spawn_on_demand") is True
+
+    def test_real_item_takes_precedence_over_deferred(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify real items are found before checking deferred items."""
+        from src.database.models.enums import StorageLocationType
+        from tests.factories import create_storage_location, create_turn
+
+        # Create location
+        location = create_location(db_session, game_session, location_key="tavern")
+        entity = create_entity(
+            db_session, game_session,
+            entity_key="player",
+        )
+        # Create storage at the location
+        storage = create_storage_location(
+            db_session, game_session,
+            location_key="tavern_floor",
+            location_type=StorageLocationType.PLACE,
+            world_location_id=location.id,
+        )
+        # Create a real item at the storage
+        real_item = create_item(
+            db_session, game_session,
+            item_key="bottle",
+            display_name="Wine Bottle",
+            storage_location_id=storage.id,
+        )
+        # Also have a deferred item with similar name
+        create_turn(
+            db_session, game_session,
+            turn_number=1,
+            mentioned_items=[
+                {"name": "dusty bottle", "context": "on shelf", "location": "tavern"},
+            ],
+        )
+        db_session.flush()
+
+        validator = ActionValidator(db_session, game_session)
+        action = Action(type=ActionType.TAKE, target="bottle")
+
+        result = validator.validate(action, entity, actor_location="tavern")
+
+        assert result.valid is True
+        # Should be the real item, not the deferred one
+        assert result.metadata.get("spawn_on_demand") is None
+        assert result.metadata.get("item_id") == real_item.id

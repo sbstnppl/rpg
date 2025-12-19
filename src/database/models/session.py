@@ -211,6 +211,14 @@ class Turn(Base):
         comment="World events generated this turn",
     )
 
+    # Deferred items (mentioned in narrative but not spawned yet)
+    # For on-demand spawning when player references them later
+    mentioned_items: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="[{name, context, location}] - decorative items for deferred spawn",
+    )
+
     # Timestamp (immutable)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

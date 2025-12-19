@@ -5,10 +5,77 @@ Complications add narrative interest without breaking mechanics:
 - INTERRUPTION: Situation changes (NPC arrives, weather shifts, timer starts)
 - COST: Success with a price (resource consumed, attention drawn)
 - TWIST: Story revelation (foreshadowing pays off, hidden truth revealed)
+
+Item spawn decisions:
+- SPAWN: Create item normally in game state
+- PLOT_HOOK_MISSING: Don't spawn, item is mysteriously absent (creates intrigue)
+- PLOT_HOOK_RELOCATED: Spawn elsewhere (e.g., bandit camp) (creates quest hook)
+- DEFER: Track but don't spawn yet (decorative items, spawn on-demand later)
 """
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.narrator.item_extractor import ExtractedItem
+
+
+class ItemSpawnDecision(str, Enum):
+    """Decisions oracle can make about item spawning.
+
+    When the narrator mentions an item that doesn't exist in game state,
+    the oracle decides what to do with it.
+    """
+
+    SPAWN = "spawn"  # Create item normally
+    PLOT_HOOK_MISSING = "plot_hook_missing"  # Don't spawn, create mystery (item is absent)
+    PLOT_HOOK_RELOCATED = "plot_hook_relocated"  # Spawn elsewhere (creates quest hook)
+    DEFER = "defer"  # Track but don't spawn yet (for decorative items)
+
+
+@dataclass
+class ItemSpawnResult:
+    """Result of oracle evaluating an item spawn decision.
+
+    Attributes:
+        item_name: Name of the item being evaluated.
+        decision: The oracle's spawn decision.
+        reasoning: Explanation of why this decision was made.
+        spawn_location: For RELOCATED, where the item should be spawned.
+        plot_hook_description: For PLOT_HOOK variants, description of the hook.
+        new_facts: Facts to record about this decision (e.g., "bucket was stolen").
+    """
+
+    item_name: str
+    decision: ItemSpawnDecision
+    reasoning: str
+    spawn_location: str | None = None
+    plot_hook_description: str | None = None
+    new_facts: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary for serialization."""
+        return {
+            "item_name": self.item_name,
+            "decision": self.decision.value,
+            "reasoning": self.reasoning,
+            "spawn_location": self.spawn_location,
+            "plot_hook_description": self.plot_hook_description,
+            "new_facts": self.new_facts,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ItemSpawnResult":
+        """Create from dictionary."""
+        return cls(
+            item_name=data["item_name"],
+            decision=ItemSpawnDecision(data["decision"]),
+            reasoning=data["reasoning"],
+            spawn_location=data.get("spawn_location"),
+            plot_hook_description=data.get("plot_hook_description"),
+            new_facts=data.get("new_facts", []),
+        )
 
 
 class ComplicationType(str, Enum):

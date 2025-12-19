@@ -8,6 +8,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **LLM-Based Item Extraction** - Replaces regex-based hallucination detection with LLM
+  - New `ItemExtractor` class (`src/narrator/item_extractor.py`) using Claude Haiku
+  - Classifies items by importance: IMPORTANT (bucket, washbasin), DECORATIVE (pebbles, dust), REFERENCE (talked about)
+  - Eliminates false positives like "bewildering" being flagged as "ring"
+  - Uses Pydantic models for structured LLM output
+
+- **Story-Aware Spawn Decisions** - Complication Oracle now evaluates item spawning
+  - New `ItemSpawnDecision` enum: SPAWN, DEFER, PLOT_HOOK_MISSING, PLOT_HOOK_RELOCATED
+  - New `ItemSpawnResult` dataclass with reasoning, spawn_location, plot hooks
+  - `ComplicationOracle.evaluate_item_spawn()` for intelligent spawn decisions
+  - Creates narrative opportunities: missing items become mysteries, relocated items become quests
+
+- **Deferred Item Spawning** - Decorative items tracked for on-demand spawning
+  - New `Turn.mentioned_items` field stores deferred items per turn
+  - New `TurnManager` class with `get_mentioned_items_at_location()` method
+  - `ActionValidator` checks deferred items when real item not found
+  - Player can reference decorative items mentioned in narrative → spawned on demand
+
+- **Plot Hook System** - Missing/relocated items create narrative hooks
+  - PLOT_HOOK_MISSING: Item mysteriously absent → triggers re-narration with constraints
+  - PLOT_HOOK_RELOCATED: Item spawned at alternate location → creates quest hook
+  - New facts recorded for world state consistency
+
+- **Intelligent Hallucination Handler** (DEPRECATED categorization) - Smart handling of narrator hallucinations
+  - New `HallucinationHandler` module (`src/narrator/hallucination_handler.py`)
+  - Categorizes hallucinated items: SPAWN_ALLOWED (washbasin, bucket) vs SPAWN_FORBIDDEN (dragon, gold)
+  - Reasonable environmental items are spawned to make narrative valid (no re-narration needed!)
+  - Dangerous items (threats, valuables, NPCs) trigger re-narration with constraints
+  - Philosophy: Like a GM who says "actually yeah, there would be a washbasin there"
+  - Note: `categorize_item()` and `analyze_hallucinations()` deprecated in favor of ItemExtractor
+
 - **Unified Detail Enrichment System** - Players can ask about any missing details and get consistent answers
   - `ENRICH` pattern in planner prompts for generating + persisting missing details
   - Supports item properties (color, material, texture), location details (floor, lighting, smells),
@@ -30,6 +61,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Falls back to establishing reasonable defaults if no history found
 
 ### Changed
+- **Narrative Validator Redesign** - Complete rewrite using LLM-based detection
+  - Replaced regex-based item detection with LLM extraction (no more false positives)
+  - New async `validate_async()` method in `NarrativeValidator` class
+  - `narrative_validator_node` now uses `ItemExtractor` and `ComplicationOracle`
+  - Story-aware spawn decisions replace simple spawn/reject binary
+
 - **Stricter Narrator Constraints** - Reduced hallucination in narrative output
   - Enhanced `NARRATOR_TEMPLATE` with explicit "DO NOT HALLUCINATE" rules
   - Updated `LOOK_PROMPT` and `LOOK_SYSTEM` to only reference provided context
@@ -49,11 +86,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Extracts the actual plan content from the wrapper to prevent validation errors
 
 - **Narrative Validator False Positives** - Common words no longer flagged as hallucinations
+  - Fixed regex to only match words ENDING with item suffixes (not containing them)
+  - "contemplate" no longer flagged as "plate", "dragon" no longer matches "rag"
+  - Added verbs ending with item suffixes: "contemplate", "bring", "think", "overlook", etc.
   - Added clothes, rooms, and adjectives to common words list
   - Added seasons/time words: "spring", "summer", "morning", "evening", etc.
   - Added action verbs: "preparing", "searching", "looking", "finding"
   - Added descriptors: "somewhat", "refreshing", "clear", "cold", "warm"
-  - "clothes", "bedrooms", "proper", "lingering", "offering" no longer flagged
 
 - **Autonomous World Generation & Narrative Validation** - Two-layer system for grounded narratives
   - `SPAWN_ITEM` state change type in `DynamicActionPlanner` for autonomous item creation

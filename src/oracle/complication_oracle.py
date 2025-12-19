@@ -481,3 +481,180 @@ Stakes: {arc.stakes or 'Unknown'}"""
                 )
 
         self.db.flush()
+
+    async def evaluate_item_spawn(
+        self,
+        item: "ExtractedItem",
+        player_location: str,
+        scene_context: str,
+        is_player_present: bool,
+    ) -> "ItemSpawnResult":
+        """Evaluate whether to spawn an item or create a plot hook.
+
+        This method is called when the narrator mentions an item that doesn't
+        exist in game state. The oracle decides whether to:
+        - SPAWN: Create the item normally (most common)
+        - PLOT_HOOK_MISSING: Don't spawn, create mystery (item is absent)
+        - PLOT_HOOK_RELOCATED: Spawn elsewhere (creates quest hook)
+        - DEFER: Track but don't spawn yet (decorative items)
+
+        Args:
+            item: The extracted item to evaluate.
+            player_location: Current player location key.
+            scene_context: Current scene context.
+            is_player_present: True if player is AT the location (not hearing about it).
+                Plot hooks only make sense if player would perceive them.
+
+        Returns:
+            ItemSpawnResult with decision and any plot hook details.
+        """
+        from src.narrator.item_extractor import ItemImportance
+        from src.oracle.complication_types import ItemSpawnDecision, ItemSpawnResult
+
+        # Decorative items -> always DEFER
+        if item.importance == ItemImportance.DECORATIVE:
+            return ItemSpawnResult(
+                item_name=item.name,
+                decision=ItemSpawnDecision.DEFER,
+                reasoning="Decorative item - track for later on-demand spawning",
+            )
+
+        # If player not present, they can't perceive plot hooks
+        # So just spawn the item normally
+        if not is_player_present:
+            return ItemSpawnResult(
+                item_name=item.name,
+                decision=ItemSpawnDecision.SPAWN,
+                reasoning="Player not present at location - no plot hook opportunity",
+            )
+
+        # For IMPORTANT items when player IS present:
+        # Use LLM to decide if this is a plot hook opportunity
+        if self.llm_provider is not None:
+            return await self._evaluate_item_with_llm(
+                item, player_location, scene_context
+            )
+
+        # Without LLM, default to spawning
+        return ItemSpawnResult(
+            item_name=item.name,
+            decision=ItemSpawnDecision.SPAWN,
+            reasoning="No LLM available - defaulting to spawn",
+        )
+
+    async def _evaluate_item_with_llm(
+        self,
+        item: "ExtractedItem",
+        player_location: str,
+        scene_context: str,
+    ) -> "ItemSpawnResult":
+        """Evaluate item spawn decision using LLM.
+
+        Args:
+            item: The extracted item.
+            player_location: Current location key.
+            scene_context: Scene context.
+
+        Returns:
+            ItemSpawnResult with LLM-informed decision.
+        """
+        from src.oracle.complication_types import ItemSpawnDecision, ItemSpawnResult
+
+        # Get story arc context
+        active_arc = self._get_active_arc()
+        arc_context = ""
+        if active_arc:
+            arc_context = f"""STORY ARC: {active_arc.title}
+Phase: {active_arc.current_phase.value}
+Tension: {active_arc.tension_level}/100
+Stakes: {active_arc.stakes or 'Unknown'}"""
+
+        prompt = f"""You are deciding how to handle an item mentioned by the narrator.
+
+ITEM: {item.name}
+CONTEXT: {item.context}
+LOCATION: {player_location}
+SCENE: {scene_context}
+{arc_context}
+
+The narrator mentioned this item, but it doesn't exist in game state yet.
+Decide what to do:
+
+1. SPAWN - Create the item normally (DEFAULT - use 80%+ of the time)
+   Use when: It's a reasonable item for this location
+
+2. PLOT_HOOK_MISSING - Item is mysteriously absent (creates intrigue)
+   Use when: High tension, item SHOULD be there but isn't, creates mystery
+   Example: "The well bucket is gone... strange, your family always kept one here"
+
+3. PLOT_HOOK_RELOCATED - Item exists but somewhere else (creates quest hook)
+   Use when: Valuable/important item, could lead to discovery
+   Example: "The medicine chest was taken to the bandit camp"
+
+GUIDELINES:
+- SPAWN is the safe default for most items
+- Only use PLOT_HOOK when it genuinely adds narrative interest
+- Higher arc tension = more appropriate for plot hooks
+- MISSING works for: everyday items that SHOULD be present
+- RELOCATED works for: valuable items that someone might take
+
+Respond ONLY with valid JSON:
+{{
+  "decision": "spawn|plot_hook_missing|plot_hook_relocated",
+  "reasoning": "Brief explanation",
+  "spawn_location": "location_key (only for plot_hook_relocated)",
+  "plot_hook_description": "Description of the mystery/hook",
+  "new_facts": ["Fact about the situation"]
+}}
+"""
+
+        try:
+            response = await self.llm_provider.complete(
+                messages=[Message.user(prompt)],
+                temperature=0.7,
+                max_tokens=300,
+            )
+
+            content = response.text if hasattr(response, "text") else str(response)
+
+            # Parse JSON
+            json_start = content.find("{")
+            json_end = content.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                json_str = content[json_start:json_end]
+                data = json.loads(json_str)
+
+                decision_str = data.get("decision", "spawn").lower()
+                if decision_str == "plot_hook_missing":
+                    decision = ItemSpawnDecision.PLOT_HOOK_MISSING
+                elif decision_str == "plot_hook_relocated":
+                    decision = ItemSpawnDecision.PLOT_HOOK_RELOCATED
+                else:
+                    decision = ItemSpawnDecision.SPAWN
+
+                return ItemSpawnResult(
+                    item_name=item.name,
+                    decision=decision,
+                    reasoning=data.get("reasoning", "LLM decision"),
+                    spawn_location=data.get("spawn_location"),
+                    plot_hook_description=data.get("plot_hook_description"),
+                    new_facts=data.get("new_facts", []),
+                )
+
+        except (json.JSONDecodeError, KeyError, ValueError) as e:
+            logger.warning(f"Failed to parse item spawn decision: {e}")
+
+        # Default to spawn on parse failure
+        return ItemSpawnResult(
+            item_name=item.name,
+            decision=ItemSpawnDecision.SPAWN,
+            reasoning="Parse failure - defaulting to spawn",
+        )
+
+
+# Type hint import at module level for runtime use
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.narrator.item_extractor import ExtractedItem
+    from src.oracle.complication_types import ItemSpawnResult
