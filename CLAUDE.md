@@ -42,6 +42,17 @@ An agentic console-based RPG using LangGraph for multi-agent orchestration. The 
 - **Typer + Rich** - CLI
 - **Anthropic + OpenAI** - Dual LLM support
 
+## Database Access
+
+**Before any database work, read `.claude/docs/database-reference.md`** for connection details and table schemas.
+
+Quick connect (from `.env`):
+```bash
+PGPASSWORD=bRXAKO0T8t23Wz3l9tyB psql -h 138.199.236.25 -U langgraphrpg -d langgraphrpg
+```
+
+**Always run `\dt` and `\d table_name` first** - never guess table/column names.
+
 ## Quick Commands
 
 ```bash
@@ -86,6 +97,7 @@ rpg/
 - `.claude/docs/coding-standards.md` - Code style guide
 - `.claude/docs/agent-prompts.md` - LLM prompt templates
 - `.claude/docs/database-conventions.md` - DB patterns
+- `.claude/docs/database-reference.md` - **DB connection, tables, common queries** (READ FIRST for DB work)
 - `.claude/docs/gameplay-testing-guide.md` - How to observe/debug gameplay
 
 ## Core Patterns

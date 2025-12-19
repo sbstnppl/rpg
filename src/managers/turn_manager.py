@@ -92,6 +92,46 @@ class TurnManager(BaseManager):
 
         return mentioned_items
 
+    def get_all_mentioned_items(
+        self,
+        lookback_turns: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Get all decorative items mentioned in recent turns (any location).
+
+        This is a fallback for when location-specific lookup fails. Useful
+        for INFO responses that mention items at locations the player hasn't
+        visited yet (e.g., "you usually wash at the well with a bucket").
+
+        Args:
+            lookback_turns: How many recent turns to search
+
+        Returns:
+            List of dicts with keys: name, context, location, turn_number
+        """
+        recent_turns = (
+            self.db.query(Turn)
+            .filter(Turn.session_id == self.session_id)
+            .order_by(desc(Turn.turn_number))
+            .limit(lookback_turns)
+            .all()
+        )
+
+        mentioned_items: list[dict[str, Any]] = []
+
+        for turn in recent_turns:
+            if not turn.mentioned_items:
+                continue
+
+            for item in turn.mentioned_items:
+                mentioned_items.append({
+                    "name": item.get("name", ""),
+                    "context": item.get("context", ""),
+                    "location": item.get("location", ""),
+                    "turn_number": turn.turn_number,
+                })
+
+        return mentioned_items
+
     def get_turn_by_number(self, turn_number: int) -> Turn | None:
         """Get a specific turn by number.
 

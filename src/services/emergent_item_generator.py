@@ -545,7 +545,13 @@ class EmergentItemGenerator:
         owner_entity_id: int | None,
         location_key: str,
     ) -> Item:
-        """Persist item to database."""
+        """Persist item to database.
+
+        If no owner_entity_id is provided, the item is treated as an environmental
+        item owned by the location (e.g., a bucket at a well).
+        """
+        from src.database.models.world import Location
+
         # Map item type string to enum
         type_map = {
             "weapon": ItemType.WEAPON,
@@ -558,6 +564,20 @@ class EmergentItemGenerator:
             "misc": ItemType.MISC,
         }
 
+        # Look up location ID for environmental items (no entity owner)
+        owner_location_id = None
+        if owner_entity_id is None and location_key:
+            location = (
+                self.db.query(Location)
+                .filter(
+                    Location.session_id == self.session_id,
+                    Location.location_key == location_key,
+                )
+                .first()
+            )
+            if location:
+                owner_location_id = location.id
+
         item = Item(
             session_id=self.session_id,
             item_key=item_state.item_key,
@@ -566,6 +586,7 @@ class EmergentItemGenerator:
             item_type=type_map.get(item_state.item_type, ItemType.MISC),
             owner_id=owner_entity_id,
             holder_id=owner_entity_id,  # Initially holder = owner
+            owner_location_id=owner_location_id,  # Environmental items owned by location
             condition=CONDITION_TO_ENUM.get(item_state.condition, ItemCondition.GOOD),
             properties={
                 **item_state.properties,

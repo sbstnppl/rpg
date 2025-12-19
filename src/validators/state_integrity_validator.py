@@ -251,10 +251,15 @@ class StateIntegrityValidator:
     # =========================================================================
 
     def _check_item_ownership(self, report: ValidationReport) -> None:
-        """Check that all items have owner_id OR holder_id OR storage_location_id.
+        """Check that all items have valid ownership/location.
 
-        Auto-fix: If item has body_slot, it was equipped - assign to player.
-        Otherwise, mark as dropped at 'unknown'.
+        Valid states:
+        - owner_id: Entity owns this item
+        - holder_id: Entity currently holds this item
+        - storage_location_id: Item is in storage
+        - owner_location_id: Environmental item owned by a location
+
+        Auto-fix: Assign orphaned items to player as holder.
         """
         items = (
             self.db.query(Item)
@@ -279,20 +284,17 @@ class StateIntegrityValidator:
                 item.owner_id is not None
                 or item.holder_id is not None
                 or item.storage_location_id is not None
+                or item.owner_location_id is not None  # Environmental items
             )
 
             if not has_location:
                 if self.auto_fix and player:
+                    # Assign orphaned items to player as holder
+                    item.holder_id = player.id
                     if item.body_slot:
-                        # Was equipped - assign to player as holder
-                        item.holder_id = player.id
                         fix_action = f"Assigned to player as holder (was equipped in {item.body_slot})"
                     else:
-                        # Drop at unknown location
-                        item.storage_location_id = "unknown"
-                        item.holder_id = None
-                        item.owner_id = None
-                        fix_action = "Set storage_location to 'unknown'"
+                        fix_action = "Assigned to player as holder (orphaned item)"
 
                     violation = IntegrityViolation(
                         category="item",

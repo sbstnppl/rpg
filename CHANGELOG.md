@@ -90,6 +90,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Narrator now only mentions items that appear in mechanical facts
 
 ### Fixed
+- **StateIntegrityValidator Type Error** - Fixed crash when auto-fixing orphaned items
+  - `_check_item_ownership()` tried to set `storage_location_id = "unknown"` (a string)
+  - But `storage_location_id` is an integer foreign key, causing `InvalidTextRepresentation` error
+  - Now assigns orphaned items to player as holder instead of invalid storage location
+
+- **Environmental Items Missing Ownership** - Items spawned from narrative had no owner
+  - `EmergentItemGenerator._persist_item()` didn't set `owner_location_id` for environmental items
+  - Items at locations (e.g., bucket at well) now properly owned by the Location
+  - `StateIntegrityValidator` now also checks `owner_location_id` as valid ownership
+
+- **INFO Responses Not Deferring Items** - Items mentioned in INFO responses were never spawnable
+  - INFO mode bypassed `narrative_validator_node` entirely, so items weren't extracted
+  - Added item extraction to `info_formatter_node` with deferred item registration
+  - Items like "bucket and washbasin" mentioned in INFO responses now get deferred
+  - Added `TurnManager.get_all_mentioned_items()` fallback for cross-location lookup
+  - `ActionValidator._find_deferred_item()` now checks ALL deferred items as fallback
+
 - **Deferred Items Not Persisted** - Fixed `Turn.mentioned_items` never being saved
   - `persistence_node._create_turn_record()` now persists `deferred_items` from state to `Turn.mentioned_items`
   - Decorative items marked for on-demand spawning (like "wooden bucket") are now properly stored

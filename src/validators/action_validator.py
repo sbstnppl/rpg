@@ -1175,6 +1175,10 @@ class ActionValidator:
         but not yet spawned. They can be spawned on-demand when
         the player references them.
 
+        First checks items at the current location, then falls back to
+        checking ALL deferred items (for INFO responses that mention
+        items at other locations, like "the bucket at the well").
+
         Args:
             target_lower: Lowercase item name to search for.
             location_key: Current location to filter by.
@@ -1182,14 +1186,23 @@ class ActionValidator:
         Returns:
             Deferred item dict if found, None otherwise.
         """
-        if not location_key:
-            return None
+        # First try location-specific lookup
+        if location_key:
+            mentioned_items = self.turn_manager.get_mentioned_items_at_location(
+                location_key, lookback_turns=10
+            )
 
-        mentioned_items = self.turn_manager.get_mentioned_items_at_location(
-            location_key, lookback_turns=10
-        )
+            for item in mentioned_items:
+                item_name_lower = item.get("name", "").lower()
+                if target_lower in item_name_lower or item_name_lower in target_lower:
+                    return item
 
-        for item in mentioned_items:
+        # Fallback: check ALL deferred items regardless of location
+        # This handles INFO responses that mention items at other locations
+        # (e.g., "you wash at the well with a bucket" while player is in kitchen)
+        all_items = self.turn_manager.get_all_mentioned_items(lookback_turns=10)
+
+        for item in all_items:
             item_name_lower = item.get("name", "").lower()
             if target_lower in item_name_lower or item_name_lower in target_lower:
                 return item

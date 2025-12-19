@@ -125,6 +125,7 @@ class GameState(TypedDict, total=False):
 
     # World generation fields (autonomous item spawning)
     spawned_items: list[dict[str, Any]] | None  # Items created this turn via SPAWN_ITEM
+    deferred_items: list[dict[str, Any]] | None  # Items for on-demand spawning (from INFO mode)
 
     # Narrative validation fields
     narrative_retry_count: int  # Counter for re-narration attempts (max 2)
@@ -209,6 +210,7 @@ def create_initial_state(
         turn_result=None,
         # World generation
         spawned_items=None,
+        deferred_items=None,
         # Narrative validation
         narrative_retry_count=0,
         narrative_validation_result=None,
