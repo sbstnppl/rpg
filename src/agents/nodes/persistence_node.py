@@ -470,6 +470,9 @@ def _create_turn_record(
             existing.entities_extracted = state.get("extracted_entities") or []
         if state.get("player_location"):
             existing.location_at_turn = state.get("player_location")
+        # Persist deferred items (decorative items for on-demand spawning)
+        if "deferred_items" in state:
+            existing.mentioned_items = state.get("deferred_items") or []
         db.flush()  # Ensure changes visible before _save_turn_immediately queries
         return existing
 
@@ -481,6 +484,7 @@ def _create_turn_record(
         gm_response=state.get("gm_response", ""),
         entities_extracted=state.get("extracted_entities") or [],
         location_at_turn=state.get("player_location"),
+        mentioned_items=state.get("deferred_items") or [],
     )
     db.add(turn)
     db.flush()

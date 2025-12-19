@@ -92,9 +92,11 @@ async def narrative_validator_node(state: GameState) -> dict[str, Any]:
                 equipped = relevant_state.get("equipped", [])
                 break
 
-    # Create item extractor with LLM provider if available
-    llm_provider = state.get("_llm_provider")
-    item_extractor = ItemExtractor(llm_provider=llm_provider) if llm_provider else None
+    # Create item extractor with LLM provider
+    from src.llm.factory import get_extraction_provider
+
+    llm_provider = get_extraction_provider()
+    item_extractor = ItemExtractor(llm_provider=llm_provider)
 
     # Build validator with optional LLM-based extraction
     validator = NarrativeValidator(
@@ -188,7 +190,9 @@ async def _handle_hallucinated_items(
     new_facts: list[str] = []
 
     # Get LLM provider for oracle decisions
-    llm_provider = state.get("_llm_provider")
+    from src.llm.factory import get_extraction_provider
+
+    llm_provider = get_extraction_provider()
 
     # Create oracle if we have db and session
     oracle = None

@@ -73,6 +73,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Narrator now only mentions items that appear in mechanical facts
 
 ### Fixed
+- **Deferred Items Not Persisted** - Fixed `Turn.mentioned_items` never being saved
+  - `persistence_node._create_turn_record()` now persists `deferred_items` from state to `Turn.mentioned_items`
+  - Decorative items marked for on-demand spawning (like "wooden bucket") are now properly stored
+  - Players can now reference items mentioned in narrative that were deferred for later spawning
+
+- **LLM-Based Item Extraction Never Used** - Fixed `narrative_validator_node` falling back to regex
+  - The node expected `_llm_provider` from state but it was never set
+  - Changed to use `get_extraction_provider()` directly (like other nodes)
+  - LLM-based `ItemExtractor` now properly used to avoid false positives
+  - Prevents regex from incorrectly flagging verbs ("mirror") and body parts ("chest") as items
+
 - **Narrator Fact Extraction for Dynamic Plans** - Fixed "Fact may be missing" errors for enrichment queries
   - `_extract_facts()` now distinguishes between dynamic plans (with narrator_facts) and regular actions
   - For dynamic plans, only `narrator_facts` from metadata are used for validation, not raw state_changes
