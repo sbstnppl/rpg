@@ -208,7 +208,8 @@ class ItemExtractor:
         )
 
         # Extract text from response
-        content = response.text if hasattr(response, "text") else str(response)
+        # LLMResponse uses 'content' attribute for text
+        content = response.content if hasattr(response, "content") else str(response)
 
         # Parse JSON from response
         return self._parse_response(content)

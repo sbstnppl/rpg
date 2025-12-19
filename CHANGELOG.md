@@ -84,6 +84,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - LLM-based `ItemExtractor` now properly used to avoid false positives
   - Prevents regex from incorrectly flagging verbs ("mirror") and body parts ("chest") as items
 
+- **ItemExtractor Response Parsing** - Fixed JSON parse error in item extraction
+  - `ItemExtractor` used `response.text` but `LLMResponse` has `content` attribute
+  - Changed to use `response.content` for correct text extraction
+
 - **Narrator Fact Extraction for Dynamic Plans** - Fixed "Fact may be missing" errors for enrichment queries
   - `_extract_facts()` now distinguishes between dynamic plans (with narrator_facts) and regular actions
   - For dynamic plans, only `narrator_facts` from metadata are used for validation, not raw state_changes

@@ -111,7 +111,7 @@ class TestItemExtractor:
     async def test_parses_valid_json_response(self) -> None:
         """Test parsing valid JSON response from LLM."""
         mock_response = MagicMock()
-        mock_response.text = '''
+        mock_response.content = '''
         {
             "items": [
                 {
@@ -148,7 +148,7 @@ class TestItemExtractor:
     async def test_parses_empty_items_response(self) -> None:
         """Test parsing response with no items."""
         mock_response = MagicMock()
-        mock_response.text = '{"items": [], "reasoning": "No physical items mentioned"}'
+        mock_response.content = '{"items": [], "reasoning": "No physical items mentioned"}'
 
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(return_value=mock_response)
@@ -163,7 +163,7 @@ class TestItemExtractor:
     async def test_handles_json_with_extra_text(self) -> None:
         """Test parsing JSON even when surrounded by extra text."""
         mock_response = MagicMock()
-        mock_response.text = '''Here's my analysis:
+        mock_response.content = '''Here's my analysis:
         {
             "items": [{"name": "rope", "importance": "important", "context": "coiled", "is_new": true}],
             "reasoning": "One item found"
@@ -183,7 +183,7 @@ class TestItemExtractor:
     async def test_handles_invalid_json(self) -> None:
         """Test graceful handling of invalid JSON."""
         mock_response = MagicMock()
-        mock_response.text = "This is not JSON at all"
+        mock_response.content = "This is not JSON at all"
 
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(return_value=mock_response)
@@ -198,7 +198,7 @@ class TestItemExtractor:
     async def test_handles_malformed_items(self) -> None:
         """Test graceful handling of malformed item data."""
         mock_response = MagicMock()
-        mock_response.text = '''
+        mock_response.content = '''
         {
             "items": [
                 {"name": "", "importance": "important"},
@@ -238,7 +238,7 @@ class TestItemExtractor:
     async def test_uses_configured_model(self) -> None:
         """Test that the configured model is used."""
         mock_response = MagicMock()
-        mock_response.text = '{"items": [], "reasoning": "None"}'
+        mock_response.content = '{"items": [], "reasoning": "None"}'
 
         mock_provider = MagicMock()
         mock_provider.complete = AsyncMock(return_value=mock_response)
@@ -269,7 +269,7 @@ class TestItemExtractorFalsePositives:
         """Test that 'bewildering' is not extracted as 'ring'."""
         # Simulate LLM correctly not extracting bewildering
         mock_response = MagicMock()
-        mock_response.text = '''
+        mock_response.content = '''
         {
             "items": [],
             "reasoning": "No physical items - 'bewildering' is an adjective, not a ring"
@@ -288,7 +288,7 @@ class TestItemExtractorFalsePositives:
     async def test_offering_not_extracted(self) -> None:
         """Test that 'offering' is not extracted as 'ring'."""
         mock_response = MagicMock()
-        mock_response.text = '''
+        mock_response.content = '''
         {
             "items": [],
             "reasoning": "No physical items - 'offering' is a verb form"
@@ -307,7 +307,7 @@ class TestItemExtractorFalsePositives:
     async def test_contemplate_not_extracted(self) -> None:
         """Test that 'contemplate' is not extracted as 'plate'."""
         mock_response = MagicMock()
-        mock_response.text = '''
+        mock_response.content = '''
         {
             "items": [],
             "reasoning": "No physical items - 'contemplate' is a verb"
