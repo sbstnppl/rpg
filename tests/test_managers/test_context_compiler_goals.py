@@ -97,7 +97,7 @@ def npc_with_goal(
         entity_id=entity.id,
         hunger=50,
         thirst=50,
-        energy=50,
+        stamina=50,
         social_connection=50,
         intimacy=50,
         morale=50,
@@ -155,7 +155,7 @@ def npc_with_urgent_need(
         entity_id=entity.id,
         hunger=20,  # 80% urgency
         thirst=50,
-        energy=50,
+        stamina=50,
         social_connection=50,
         intimacy=50,
         morale=50,
@@ -299,7 +299,7 @@ class TestUrgentNeeds:
             entity_id=entity.id,
             hunger=80,  # Only 20% urgency
             thirst=80,
-            energy=80,
+            stamina=80,
             social_connection=80,
             intimacy=80,
             morale=80,

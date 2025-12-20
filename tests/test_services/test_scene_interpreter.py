@@ -65,12 +65,17 @@ class TestSceneInterpreterNeedStimuli:
         assert len(thirst_reactions) == 1
         assert thirst_reactions[0].craving_boost > 0
 
-    def test_energy_stimulus_from_rest_keywords(
+    def test_stamina_no_craving_from_rest_keywords(
         self, db_session: Session, game_session
     ) -> None:
-        """Test energy craving triggered by rest-related words."""
+        """Test that stamina (physical capacity) does NOT trigger cravings.
+
+        Unlike hunger/thirst which have psychological cravings, stamina
+        and sleep_pressure are physical states that don't get triggered
+        by environmental stimuli.
+        """
         entity = create_entity(db_session, game_session)
-        needs = create_character_needs(db_session, game_session, entity, energy=20)
+        needs = create_character_needs(db_session, game_session, entity, stamina=20)
 
         interpreter = SceneInterpreter(db_session, game_session)
         reactions = interpreter.analyze_scene(
@@ -78,13 +83,12 @@ class TestSceneInterpreterNeedStimuli:
             character_needs=needs,
         )
 
-        energy_reactions = [
+        # Stamina is a physical state - no psychological cravings
+        stamina_reactions = [
             r for r in reactions
-            if r.reaction_type == ReactionType.CRAVING and r.need_affected == "energy"
+            if r.reaction_type == ReactionType.CRAVING and r.need_affected == "stamina"
         ]
-        assert len(energy_reactions) == 1
-        assert energy_reactions[0].craving_boost > 0
-        assert "fatigue" in energy_reactions[0].narrative_hint.lower()
+        assert len(stamina_reactions) == 0
 
     def test_social_stimulus_from_gathering(
         self, db_session: Session, game_session
@@ -199,7 +203,7 @@ class TestSceneInterpreterNeedStimuli:
             db_session, game_session, entity,
             hunger=20,
             thirst=20,
-            energy=20,
+            stamina=20,
         )
 
         interpreter = SceneInterpreter(db_session, game_session)
@@ -208,11 +212,11 @@ class TestSceneInterpreterNeedStimuli:
             character_needs=needs,
         )
 
-        # Should detect all three stimuli
+        # Should detect hunger and thirst stimuli (stamina is physical, no cravings)
         needs_affected = {r.need_affected for r in reactions if r.need_affected}
         assert "hunger" in needs_affected
         assert "thirst" in needs_affected
-        assert "energy" in needs_affected
+        # stamina is NOT expected - it's a physical state without cravings
 
 
 class TestSceneInterpreterMemoryTriggers:

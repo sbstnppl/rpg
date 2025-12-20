@@ -293,7 +293,7 @@ class TestSleepExecution:
         )
         needs = create_character_needs(
             db_session, game_session, entity,
-            energy=30  # Low energy
+            stamina=30  # Low energy
         )
 
         executor = ActionExecutor(db_session, game_session)

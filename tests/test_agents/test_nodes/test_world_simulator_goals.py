@@ -68,7 +68,7 @@ def player_entity(db_session: Session, game_session: GameSession) -> Entity:
         entity_id=entity.id,
         hunger=50,
         thirst=50,
-        energy=50,
+        stamina=50,
         social_connection=50,
         intimacy=50,
         morale=50,
@@ -106,7 +106,7 @@ def npc_with_urgent_hunger(db_session: Session, game_session: GameSession) -> En
         entity_id=entity.id,
         hunger=15,  # Low value = urgent hunger (urgency = 85)
         thirst=50,
-        energy=50,
+        stamina=50,
         social_connection=50,
         intimacy=50,
         morale=50,
@@ -146,7 +146,7 @@ def npc_with_goal(
         entity_id=entity.id,
         hunger=50,
         thirst=50,
-        energy=50,
+        stamina=50,
         social_connection=50,
         intimacy=50,
         morale=50,
@@ -248,7 +248,7 @@ class TestNeedDrivenGoalCreation:
             entity_id=npc.id,
             hunger=60,  # Below 75 threshold
             thirst=50,
-            energy=50,
+            stamina=50,
             social_connection=50,
             intimacy=50,
             morale=50,
@@ -385,7 +385,7 @@ class TestGoalProcessing:
             needs = CharacterNeeds(
                 session_id=game_session.id,
                 entity_id=npc.id,
-                hunger=50, thirst=50, energy=50,
+                hunger=50, thirst=50, stamina=50,
                 social_connection=50, intimacy=50, morale=50,
             )
             db_session.add(needs)
@@ -460,7 +460,7 @@ class TestGoalProcessing:
             entity_id=npc.id,
             hunger=50,
             thirst=50,
-            energy=50,
+            stamina=50,
             social_connection=50,
             intimacy=50,
             morale=50,

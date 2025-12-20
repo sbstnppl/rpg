@@ -272,7 +272,7 @@ class TestNPCGeneratorService:
         initial_needs = NPCInitialNeeds(
             hunger=60,
             thirst=70,
-            energy=50,
+            stamina=50,
             hygiene=80,
             comfort=70,
             wellness=100,
@@ -294,7 +294,7 @@ class TestNPCGeneratorService:
         assert needs is not None
         assert needs.hunger == 60
         assert needs.thirst == 70
-        assert needs.energy == 50
+        assert needs.stamina == 50
         assert needs.hygiene == 80
         assert needs.comfort == 70
         assert needs.wellness == 100
@@ -317,7 +317,7 @@ class TestNPCInitialNeedsInference:
 
         # Morning: lower hunger (needs breakfast), higher energy (just woke)
         assert needs["hunger"] <= 65  # Needs breakfast
-        assert needs["energy"] >= 60  # Just woke up
+        assert needs["stamina"] >= 60  # Just woke up
 
     def test_midday_needs(self):
         """Midday NPCs should have lunch-appropriate hunger."""
@@ -339,7 +339,7 @@ class TestNPCInitialNeedsInference:
         )
 
         # Evening: lower energy (tired after day)
-        assert needs["energy"] <= 60
+        assert needs["stamina"] <= 60
 
     def test_night_needs(self):
         """Night NPCs should be very tired."""
@@ -350,7 +350,7 @@ class TestNPCInitialNeedsInference:
         )
 
         # Night: very low energy
-        assert needs["energy"] <= 45
+        assert needs["stamina"] <= 45
 
     def test_occupation_affects_needs(self):
         """Occupation should influence starting needs."""
@@ -379,7 +379,7 @@ class TestNPCInitialNeedsInference:
         assert innkeeper["hunger"] >= farmer["hunger"]
 
         # Farmer should have lower energy from labor
-        assert farmer["energy"] <= scholar["energy"]
+        assert farmer["stamina"] <= scholar["stamina"]
 
 
 class TestOccupationTemplates:
@@ -473,7 +473,7 @@ class TestNPCGeneratorServiceIntegration:
             initial_needs=NPCInitialNeeds(
                 hunger=70,
                 thirst=75,
-                energy=65,
+                stamina=65,
             ),
         )
 

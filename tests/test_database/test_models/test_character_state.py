@@ -55,7 +55,7 @@ class TestCharacterNeeds:
         db_session.flush()
 
         assert needs.hunger == 50  # Satisfied
-        assert needs.energy == 80  # Energized
+        assert needs.stamina == 80  # Physical capacity
 
     def test_needs_tier2_comfort_defaults(
         self, db_session: Session, game_session: GameSession
@@ -100,14 +100,14 @@ class TestCharacterNeeds:
             game_session,
             entity,
             hunger=20,  # Hungry
-            energy=20,  # Very tired
+            stamina=20,  # Very tired
             morale=30,  # Low morale
         )
 
         db_session.refresh(needs)
 
         assert needs.hunger == 20
-        assert needs.energy == 20
+        assert needs.stamina == 20
         assert needs.morale == 30
 
     def test_needs_timestamps(
@@ -171,12 +171,12 @@ class TestCharacterNeeds:
             game_session,
             entity,
             hunger=40,
-            energy=60,
+            stamina=60,
             morale=75,
         )
 
         repr_str = repr(needs)
         assert "CharacterNeeds" in repr_str
         assert "H:40" in repr_str
-        assert "E:60" in repr_str
+        assert "S:60" in repr_str  # Stamina
         assert "M:75" in repr_str

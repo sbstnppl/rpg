@@ -193,6 +193,20 @@ async def subturn_processor_node(state: GameState) -> dict[str, Any]:
         player_location=state.get("player_location", ""),
     )
 
+    # INFO mode: Skip action execution entirely - pure knowledge query
+    # No mechanical execution, no time advancement, just return gathered facts
+    if response_mode == "info":
+        return {
+            "chained_turn_result": ChainedTurnResult().to_dict(),
+            "response_mode": response_mode,
+            "narrative_style": narrative_style,
+            "dynamic_plans": dynamic_plans,
+            "turn_result": None,
+            "time_advance_minutes": 0,  # No time passes for INFO queries
+            "continuation_status": None,
+            "queued_actions": None,
+        }
+
     # Build initial state snapshot
     initial_state = {
         "player_location": state.get("player_location", ""),

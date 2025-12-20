@@ -830,7 +830,7 @@ class TestNeedsDescription:
         create_character_needs(
             db_session, game_session, player_entity,
             hunger=90,  # High hunger = well-fed
-            energy=50,  # Neutral
+            stamina=50,  # Neutral
             hygiene=50,
             morale=50,
         )
@@ -848,7 +848,7 @@ class TestNeedsDescription:
         create_character_needs(
             db_session, game_session, player_entity,
             hunger=50,
-            energy=85,  # High energy = well-rested
+            stamina=85,  # High energy = well-rested
             hygiene=50,
             morale=50,
         )
@@ -866,7 +866,7 @@ class TestNeedsDescription:
         create_character_needs(
             db_session, game_session, player_entity,
             hunger=50,
-            energy=50,
+            stamina=50,
             hygiene=85,  # High hygiene = clean
             morale=50,
         )
@@ -884,7 +884,7 @@ class TestNeedsDescription:
         create_character_needs(
             db_session, game_session, player_entity,
             hunger=50,
-            energy=50,
+            stamina=50,
             hygiene=50,
             morale=85,  # High morale = in good spirits
         )
@@ -902,7 +902,7 @@ class TestNeedsDescription:
         create_character_needs(
             db_session, game_session, player_entity,
             hunger=25,  # Low hunger = hungry
-            energy=50,
+            stamina=50,
             hygiene=50,
             morale=50,
         )
@@ -920,7 +920,7 @@ class TestNeedsDescription:
         create_character_needs(
             db_session, game_session, player_entity,
             hunger=60,  # Neutral - not hungry, not full
-            energy=60,  # Neutral - not tired, not rested
+            stamina=60,  # Neutral - not tired, not rested
             hygiene=60,  # Neutral
             morale=60,  # Neutral
         )
@@ -942,7 +942,7 @@ class TestNeedsDescription:
         create_character_needs(
             db_session, game_session, player_entity,
             hunger=90,
-            energy=85,
+            stamina=85,
             hygiene=85,
             morale=85,
             comfort=85,

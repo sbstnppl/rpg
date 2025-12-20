@@ -21,7 +21,8 @@ class TestInferInitialNeedsDefaults:
         # Check reasonable defaults
         assert needs["hunger"] == 80
         assert needs["thirst"] == 80
-        assert needs["energy"] == 80
+        assert needs["stamina"] == 80
+        assert needs["sleep_pressure"] == 20  # Well-rested
         assert needs["hygiene"] == 80
         assert needs["comfort"] == 70
         assert needs["wellness"] == 100
@@ -35,7 +36,7 @@ class TestInferInitialNeedsDefaults:
         needs = _infer_initial_needs()
 
         required_needs = [
-            "hunger", "thirst", "energy", "hygiene", "comfort",
+            "hunger", "thirst", "stamina", "sleep_pressure", "hygiene", "comfort",
             "wellness", "social_connection", "morale", "sense_of_purpose",
             "intimacy",
         ]
@@ -201,11 +202,11 @@ class TestInferInitialNeedsComfort:
 class TestInferInitialNeedsAge:
     """Tests for age-based adjustments."""
 
-    def test_young_age_boosts_energy(self) -> None:
-        """Test young age boosts energy."""
+    def test_young_age_boosts_stamina(self) -> None:
+        """Test young age boosts stamina."""
         needs = _infer_initial_needs(age=16)
 
-        assert needs["energy"] > 80
+        assert needs["stamina"] > 80
 
     def test_young_age_boosts_social(self) -> None:
         """Test young age boosts social needs."""
@@ -213,11 +214,11 @@ class TestInferInitialNeedsAge:
 
         assert needs["social_connection"] > 50
 
-    def test_elderly_reduces_energy(self) -> None:
-        """Test elderly age reduces energy."""
+    def test_elderly_reduces_stamina(self) -> None:
+        """Test elderly age reduces stamina."""
         needs = _infer_initial_needs(age=65)
 
-        assert needs["energy"] < 80
+        assert needs["stamina"] < 80
 
     def test_elderly_adjusts_intimacy(self) -> None:
         """Test elderly age adjusts intimacy."""
@@ -231,7 +232,7 @@ class TestInferInitialNeedsAge:
         default_needs = _infer_initial_needs()
         middle_age_needs = _infer_initial_needs(age=35)
 
-        assert middle_age_needs["energy"] == default_needs["energy"]
+        assert middle_age_needs["stamina"] == default_needs["stamina"]
 
 
 class TestInferInitialNeedsOccupation:
@@ -251,17 +252,17 @@ class TestInferInitialNeedsOccupation:
         assert needs["hunger"] > 80
         assert needs["thirst"] > 80
 
-    def test_scholar_lower_energy(self) -> None:
-        """Test scholar occupation reduces energy."""
+    def test_scholar_lower_stamina(self) -> None:
+        """Test scholar occupation reduces stamina."""
         needs = _infer_initial_needs(occupation="scholar")
 
-        assert needs["energy"] < 80
+        assert needs["stamina"] < 80
 
-    def test_wizard_lower_energy(self) -> None:
-        """Test wizard occupation reduces energy."""
+    def test_wizard_lower_stamina(self) -> None:
+        """Test wizard occupation reduces stamina."""
         needs = _infer_initial_needs(occupation="wizard")
 
-        assert needs["energy"] < 80
+        assert needs["stamina"] < 80
 
     def test_merchant_higher_social(self) -> None:
         """Test merchant occupation boosts social."""
@@ -302,8 +303,8 @@ class TestInferInitialNeedsCombined:
         """Test young age with soldier occupation."""
         needs = _infer_initial_needs(age=17, occupation="soldier")
 
-        # Young boosts energy
-        assert needs["energy"] > 80
+        # Young boosts stamina
+        assert needs["stamina"] > 80
         # Soldier boosts hunger/thirst
         assert needs["hunger"] > 80
 
@@ -311,8 +312,8 @@ class TestInferInitialNeedsCombined:
         """Test elderly age with scholar occupation."""
         needs = _infer_initial_needs(age=70, occupation="scholar")
 
-        # Both reduce energy - check it's still in valid range
-        assert 0 <= needs["energy"] <= 100
+        # Both reduce stamina - check it's still in valid range
+        assert 0 <= needs["stamina"] <= 100
 
     def test_traumatic_mission_combined(self) -> None:
         """Test traumatic backstory with purpose."""
@@ -365,12 +366,12 @@ class TestInferInitialNeedsScene:
         assert needs["hygiene"] < 80
         assert needs["comfort"] < 70
 
-    def test_cold_scene_lowers_comfort_energy(self) -> None:
-        """Test cold scene lowers comfort and energy."""
+    def test_cold_scene_lowers_comfort_stamina(self) -> None:
+        """Test cold scene lowers comfort and stamina."""
         needs = _infer_initial_needs(starting_scene="Snow falls around you in the frozen wasteland.")
 
         assert needs["comfort"] < 70
-        assert needs["energy"] < 80
+        assert needs["stamina"] < 80
 
     def test_dirty_scene_lowers_hygiene(self) -> None:
         """Test dirty environment lowers hygiene."""

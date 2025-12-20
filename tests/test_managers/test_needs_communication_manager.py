@@ -177,7 +177,7 @@ class TestGetNeedsAlerts:
             entity_id=entity.id,
             session_id=game_session.id,
             hunger=25,  # hungry state
-            energy=80,
+            stamina=80,
         )
         db_session.add(needs)
         db_session.flush()
@@ -297,7 +297,7 @@ class TestGetNeedsAlerts:
             entity_id=entity.id,
             session_id=game_session.id,
             hunger=10,  # starving
-            energy=15,  # exhausted
+            stamina=15,  # exhausted
         )
         db_session.add(needs)
         db_session.flush()
