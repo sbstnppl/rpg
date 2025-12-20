@@ -517,6 +517,212 @@ def list_games(
         console.print(table)
 
 
+@app.command("history")
+def history(
+    session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID (default: most recent)"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Number of turns to show"),
+    order: str = typer.Option("asc", "--order", "-o", help="Sort order: asc or desc"),
+    full: bool = typer.Option(False, "--full", "-f", help="Show full text in panel view"),
+) -> None:
+    """Show turn history for a game session."""
+    from rich.panel import Panel
+    from rich.table import Table
+
+    with get_db_session() as db:
+        # Get session
+        if session_id:
+            game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
+        else:
+            game_session = db.query(GameSession).order_by(GameSession.id.desc()).first()
+
+        if not game_session:
+            display_error("No game session found")
+            raise typer.Exit(1)
+
+        # Query turns
+        query = db.query(Turn).filter(Turn.session_id == game_session.id)
+        if order.lower() == "desc":
+            query = query.order_by(Turn.turn_number.desc())
+        else:
+            query = query.order_by(Turn.turn_number.asc())
+        turns = query.limit(limit).all()
+
+        if not turns:
+            display_info(f"No turns found for session '{game_session.session_name}'")
+            return
+
+        console.print()
+
+        if full:
+            # Panel view - show full text for each turn
+            console.print(f"[bold]Turn History - {game_session.session_name}[/bold]")
+            console.print()
+
+            for turn in turns:
+                # Build header with context
+                header_parts = [f"Turn {turn.turn_number}"]
+                if turn.game_day_at_turn:
+                    header_parts.append(f"Day {turn.game_day_at_turn}")
+                if turn.game_time_at_turn:
+                    header_parts.append(turn.game_time_at_turn)
+                if turn.location_at_turn and turn.location_at_turn not in ("starting_location", "unknown"):
+                    location_name = turn.location_at_turn.replace("_", " ").title()
+                    header_parts.append(location_name)
+
+                header = " │ ".join(header_parts)
+
+                # Build panel content
+                content_lines = [f"[cyan]> {turn.player_input}[/cyan]", ""]
+                if turn.gm_response:
+                    content_lines.append(turn.gm_response)
+
+                console.print(Panel(
+                    "\n".join(content_lines),
+                    title=header,
+                    border_style="dim",
+                ))
+                console.print()
+        else:
+            # Table view - compact with truncation
+            table = Table(title=f"Turn History - {game_session.session_name}")
+            table.add_column("#", style="cyan", justify="right", width=4)
+            table.add_column("Day", style="dim", justify="right", width=4)
+            table.add_column("Time", style="dim", width=5)
+            table.add_column("Location", style="green", max_width=15)
+            table.add_column("Input", style="white", max_width=30)
+            table.add_column("Response", style="dim", max_width=50)
+
+            for turn in turns:
+                # Truncate text
+                input_text = turn.player_input or ""
+                if len(input_text) > 28:
+                    input_text = input_text[:28] + "..."
+
+                response_text = turn.gm_response or ""
+                if len(response_text) > 48:
+                    response_text = response_text[:48] + "..."
+
+                # Format location
+                location = turn.location_at_turn or ""
+                if location in ("starting_location", "unknown"):
+                    location = "-"
+                elif len(location) > 13:
+                    location = location[:13] + "..."
+                else:
+                    location = location.replace("_", " ").title()
+
+                table.add_row(
+                    str(turn.turn_number),
+                    str(turn.game_day_at_turn or "-"),
+                    turn.game_time_at_turn or "-",
+                    location,
+                    input_text,
+                    response_text,
+                )
+
+            console.print(table)
+
+        console.print(f"[dim]Showing {len(turns)} of {game_session.total_turns} turns[/dim]")
+
+
+@app.command("reset")
+def reset_to_turn(
+    turn_number: int = typer.Argument(..., help="Turn number to reset to"),
+    session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID (default: most recent)"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+) -> None:
+    """Reset game to a specific turn, restoring exact state from snapshot."""
+    from rich.panel import Panel
+
+    from src.managers.snapshot_manager import SnapshotManager
+
+    with get_db_session() as db:
+        # Get session
+        if session_id:
+            game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
+        else:
+            game_session = db.query(GameSession).order_by(GameSession.id.desc()).first()
+
+        if not game_session:
+            display_error("No game session found")
+            raise typer.Exit(1)
+
+        # Check if snapshot exists
+        snapshot_mgr = SnapshotManager(db, game_session)
+        snapshot = snapshot_mgr.get_snapshot(turn_number)
+
+        if not snapshot:
+            available = snapshot_mgr.get_available_snapshots()
+            if available:
+                display_error(f"No snapshot for turn {turn_number}")
+                display_info(f"Available snapshots: {', '.join(str(t) for t in available)}")
+            else:
+                display_error("No snapshots available for this session")
+                display_info("Snapshots are created during gameplay. Play a few turns first.")
+            raise typer.Exit(1)
+
+        if turn_number >= game_session.total_turns:
+            display_error(f"Turn {turn_number} is not in the past (current: {game_session.total_turns})")
+            raise typer.Exit(1)
+
+        # Get the turn for preview
+        turn = db.query(Turn).filter(
+            Turn.session_id == game_session.id,
+            Turn.turn_number == turn_number
+        ).first()
+
+        turns_to_delete = game_session.total_turns - turn_number
+
+        if not force:
+            # Show preview
+            console.print()
+            console.print(f"[bold]Reset to turn {turn_number}?[/bold]")
+            console.print()
+
+            if turn:
+                # Build header
+                header_parts = [f"Turn {turn.turn_number}"]
+                if turn.game_day_at_turn:
+                    header_parts.append(f"Day {turn.game_day_at_turn}")
+                if turn.game_time_at_turn:
+                    header_parts.append(turn.game_time_at_turn)
+                if turn.location_at_turn and turn.location_at_turn not in ("starting_location", "unknown"):
+                    location_name = turn.location_at_turn.replace("_", " ").title()
+                    header_parts.append(location_name)
+
+                header = " │ ".join(header_parts)
+
+                # Show turn preview
+                input_preview = turn.player_input[:60] + "..." if len(turn.player_input) > 60 else turn.player_input
+                response_preview = (turn.gm_response or "")[:80]
+                if len(turn.gm_response or "") > 80:
+                    response_preview += "..."
+
+                console.print(Panel(
+                    f"[cyan]> {input_preview}[/cyan]\n\n[dim]{response_preview}[/dim]",
+                    title=header,
+                    border_style="dim",
+                ))
+
+            console.print()
+            console.print(f"[yellow]{turns_to_delete} turns will be deleted.[/yellow]")
+            console.print()
+
+            if not typer.confirm("Continue?"):
+                display_info("Cancelled")
+                return
+
+        # Perform reset
+        try:
+            snapshot_mgr.restore_snapshot(turn_number)
+            db.commit()
+            display_success(f"Reset complete. Session now at turn {turn_number}.")
+        except Exception as e:
+            db.rollback()
+            display_error(f"Reset failed: {e}")
+            raise typer.Exit(1)
+
+
 @app.command()
 def delete(
     game_id: int = typer.Argument(..., help="Game ID to delete"),
@@ -898,6 +1104,12 @@ async def _game_loop(
         if validation_error:
             display_error(validation_error)
             continue  # Don't invoke graph, immediate feedback
+
+        # Capture snapshot before processing turn (for reset functionality)
+        from src.managers.snapshot_manager import SnapshotManager
+        snapshot_mgr = SnapshotManager(db, game_session)
+        snapshot_mgr.capture_snapshot(game_session.total_turns + 1)
+        snapshot_mgr.prune_snapshots()
 
         # Process player input through the agent graph
         game_session.total_turns += 1

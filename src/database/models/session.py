@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from src.database.models.magic import EntityMagicProfile, SpellCastRecord, SpellDefinition
     from src.database.models.narrative import Conflict, Mystery, StoryArc
     from src.database.models.progression import Achievement
+    from src.database.models.snapshots import SessionSnapshot
     from src.database.models.tasks import Appointment, Quest, Task
 
 
@@ -162,6 +163,10 @@ class GameSession(Base, TimestampMixin):
     )
     destiny_elements: Mapped[list["DestinyElement"]] = relationship(
         back_populates="game_session",
+        cascade="all, delete-orphan",
+    )
+    snapshots: Mapped[list["SessionSnapshot"]] = relationship(
+        back_populates="session",
         cascade="all, delete-orphan",
     )
 

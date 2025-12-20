@@ -185,6 +185,9 @@ from src.database.models.context_summary import (
     SummaryType,
 )
 
+# Session snapshots for state restoration
+from src.database.models.snapshots import SessionSnapshot
+
 __all__ = [
     # Base
     "Base",
@@ -357,4 +360,6 @@ __all__ = [
     "Milestone",
     "ContextSummary",
     "NarrativeMentionLog",
+    # Session snapshots
+    "SessionSnapshot",
 ]
