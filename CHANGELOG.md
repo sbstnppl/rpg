@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Realism Validation System** - Ensures game mechanics match real-world behavior
+  - New `realism-principles.md` with conceptual principles across 4 domains
+  - Domain-specific validators: physiology, temporal, social, physics
+  - Unified `realism-validator` orchestrator for cross-domain checks
+  - Mandatory validation during planning mode for game mechanics
+  - Common realism pitfalls documented (merged needs, fixed durations, etc.)
+  - Key files: `.claude/agents/*-validator.md`, `.claude/docs/realism-principles.md`
+
 - **Dynamic Fatigue System** - Replaces single `energy` field with two-resource system
   - **Stamina** (0-100): Physical capacity, recovered by rest
     - Depleted by activity (combat -25/hr, running -40/hr, walking -8/hr)

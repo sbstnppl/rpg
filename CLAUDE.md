@@ -11,6 +11,11 @@ This project has specialized subagents in `.claude/agents/`. **Proactively use t
 | `game-designer` | Designing dice mechanics, attribute systems, combat balance, skill checks |
 | `prompt-engineer` | Writing LLM prompts, entity extraction, structured output parsing |
 | `storyteller` | Creating NPCs, quests, locations, narrative content, world-building |
+| `realism-validator` | **Required in planning mode** for game mechanics - cross-domain realism check |
+| `physiology-validator` | Validating body mechanics: sleep, fatigue, hunger, thirst, health |
+| `temporal-validator` | Validating time/duration accuracy for activities |
+| `social-validator` | Validating NPC behavior and relationship dynamics |
+| `physics-validator` | Validating environmental effects and object physics |
 
 ### When to Use Subagents
 
@@ -20,6 +25,45 @@ This project has specialized subagents in `.claude/agents/`. **Proactively use t
 - **Code review**: Have relevant expert review implementation
 
 **Example**: "Building the CombatResolver agent" → spawn both `langgraph-expert` (for the agent structure) and `game-designer` (for combat mechanics)
+
+### Realism Validation (REQUIRED)
+
+This game prioritizes real-world accuracy in its mechanics. **When proposing game mechanics during planning mode, realism validation is mandatory.**
+
+#### Reference Document
+Read `.claude/docs/realism-principles.md` for the principles that guide realistic mechanics across four domains:
+- **Physiology**: How bodies work (sleep, fatigue, hunger, thirst)
+- **Temporal**: How long things take (activity durations, travel times)
+- **Social**: How people interact (conversations, relationships, trust)
+- **Physical**: How the world behaves (weather, objects, environment)
+
+#### When Validation is Required
+
+**During Planning Mode** (MANDATORY):
+- Proposing new game mechanics (needs, combat, crafting, etc.)
+- Modifying existing mechanics that affect player experience
+- Designing NPC behavior systems
+- Any feature touching physiology, time, social dynamics, or physics
+
+**During Implementation** (Recommended):
+- When writing code that implements game mechanics
+- When tests reveal unexpected behavior
+
+#### Validation Process
+
+1. **Identify domains**: Which of the 4 domains does this mechanic touch?
+2. **Invoke `realism-validator`**: For cross-domain quick check
+3. **Invoke domain-specific validators**: For deep review on complex mechanics
+4. **Address issues**: Fix any unrealistic abstractions before presenting plan
+
+#### Common Realism Mistakes to Avoid
+
+| Mistake | Reality |
+|---------|---------|
+| Merging distinct needs (e.g., "energy" for both sleep and stamina) | Sleep and stamina are separate systems with different recovery mechanisms |
+| Fixed durations (e.g., "sleep always takes 8 hours") | Duration depends on fatigue level, conditions, interruptions |
+| Instant relationships (e.g., "one quest = trusted ally") | Trust builds gradually through multiple interactions |
+| Ignoring environment (e.g., "rain has no effect") | Weather affects comfort, speed, visibility, equipment |
 
 ---
 
@@ -111,6 +155,7 @@ rpg/
 - `.claude/docs/database-conventions.md` - DB patterns
 - `.claude/docs/database-reference.md` - **DB connection, tables, common queries** (READ FIRST for DB work)
 - `.claude/docs/gameplay-testing-guide.md` - How to observe/debug gameplay
+- `.claude/docs/realism-principles.md` - **Realism validation principles** (READ for game mechanics)
 
 ## Core Patterns
 
