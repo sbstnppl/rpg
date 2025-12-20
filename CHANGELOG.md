@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Snapshot Duplicate Key Error** - Prevent UniqueViolation when resuming game sessions
+  - `capture_snapshot()` now checks for existing snapshot before insertion
+  - Returns `None` if snapshot already exists for turn, avoiding duplicate key error
+  - Key file: `src/managers/snapshot_manager.py`
+
 ### Added
 - **Realism Validation System** - Ensures game mechanics match real-world behavior
   - New `realism-principles.md` with conceptual principles across 4 domains

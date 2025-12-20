@@ -190,15 +190,25 @@ class SnapshotManager(BaseManager):
     - Prune old snapshots based on retention policy
     """
 
-    def capture_snapshot(self, turn_number: int) -> SessionSnapshot:
+    def capture_snapshot(self, turn_number: int) -> SessionSnapshot | None:
         """Capture complete session state at the start of a turn.
 
         Args:
             turn_number: The turn number this snapshot is for.
 
         Returns:
-            The created SessionSnapshot record.
+            The created SessionSnapshot record, or None if snapshot already exists.
         """
+        # Check if snapshot already exists for this turn
+        existing = self.db.query(SessionSnapshot).filter(
+            SessionSnapshot.session_id == self.session_id,
+            SessionSnapshot.turn_number == turn_number,
+        ).first()
+
+        if existing:
+            # Snapshot already exists, skip creation
+            return None
+
         data = {}
 
         for model in SESSION_SCOPED_MODELS:
