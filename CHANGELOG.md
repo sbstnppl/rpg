@@ -163,6 +163,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Narrator now only mentions items that appear in mechanical facts
 
 ### Fixed
+- **Snapshot Restore FK Ordering** - Fixed `rpg game reset` failing with foreign key violations
+  - `SESSION_SCOPED_MODELS` ordering was incorrect: `Item` and `StorageLocation` were listed after `Location`
+  - When reversed for insert, this caused `Item.owner_location_id` to reference non-existent `Location` rows
+  - Reordered to: `Item`, `StorageLocation`, `Location`, `Entity`, `TimeState` (children before parents)
+  - Added per-model-type `flush()` to enforce insertion order (SQLAlchemy was reordering inserts)
+  - Key file: `src/managers/snapshot_manager.py`
+
 - **Turn Timestamps Not Populated** - Turns now record game day and time
   - `Turn.game_day_at_turn` and `Turn.game_time_at_turn` were always NULL
   - Now populated from `TimeState` when turns are saved

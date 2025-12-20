@@ -154,7 +154,9 @@ SESSION_SCOPED_MODELS = [
     EntityReputation,
     FactionRelationship,
     EntityMagicProfile,
-    # Parent tables
+    # Parent tables (ordered for FK-safe deletion: children first)
+    # Delete order: RelationshipArc → ... → Item → StorageLocation → Location → Entity → TimeState
+    # Insert order (reversed): TimeState → Entity → Location → StorageLocation → Item → ...
     RelationshipArc,
     Relationship,
     StoryArc,
@@ -165,9 +167,12 @@ SESSION_SCOPED_MODELS = [
     MarketPrice,
     TradeRoute,
     TerrainZone,
-    Location,
-    StorageLocation,
+    # Item before StorageLocation (Item.storage_location_id → StorageLocation)
+    # Both before Location (Item.owner_location_id → Location, StorageLocation.world_location_id → Location)
+    # Note: StorageLocation.container_item_id → Item is nullable; handled by insert order
     Item,
+    StorageLocation,
+    Location,
     Entity,
     TimeState,
 ]
@@ -274,17 +279,16 @@ class SnapshotManager(BaseManager):
         self.db.flush()
 
         # 2. Insert snapshot data (reverse order - parents first)
+        # Flush after each model type to enforce insertion order and avoid FK violations
         for model in reversed(SESSION_SCOPED_MODELS):
             table_name = model.__tablename__
             records_data = snapshot.snapshot_data.get(table_name, [])
 
-            for record_data in records_data:
-                # Remove the id to let the DB generate a new one
-                # But we need to preserve relationships, so we track old->new id mapping
-                record = self._dict_to_model(model, record_data)
-                self.db.add(record)
-
-        self.db.flush()
+            if records_data:
+                for record_data in records_data:
+                    record = self._dict_to_model(model, record_data)
+                    self.db.add(record)
+                self.db.flush()  # Flush each model type before moving to dependents
 
         # 3. Delete turns after target
         self.db.query(Turn).filter(
