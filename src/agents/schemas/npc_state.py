@@ -229,7 +229,7 @@ class NPCPreferences(BaseModel):
     # Sleep/stamina preferences
     has_high_stamina: bool = Field(
         default=False,
-        description="Whether they have above-average energy"
+        description="Whether they have above-average stamina"
     )
     has_low_stamina: bool = Field(
         default=False,

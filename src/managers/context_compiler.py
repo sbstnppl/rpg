@@ -776,13 +776,18 @@ class ContextCompiler(BaseManager):
         descriptions = []
 
         # Visible conditions (someone else could observe)
-        # All needs: 0 = bad, 100 = good
-        # Include both negative AND positive states so GM has full awareness
-        if needs.energy < 20:
-            descriptions.append("exhausted")
-        elif needs.energy < 40:
+        # stamina: 0 = collapsed, 100 = fresh
+        # sleep_pressure: 0 = well-rested, 100 = desperately sleepy
+        if needs.stamina < 20:
+            descriptions.append("physically exhausted")
+        elif needs.stamina < 40:
+            descriptions.append("winded")
+
+        if needs.sleep_pressure > 80:
+            descriptions.append("desperately sleepy")
+        elif needs.sleep_pressure > 60:
             descriptions.append("tired")
-        elif needs.energy > 80:
+        elif needs.sleep_pressure < 20:
             descriptions.append("well-rested")
 
         if needs.hunger < 15:
@@ -1397,13 +1402,16 @@ class ContextCompiler(BaseManager):
             return ""
 
         urgent = []
-        # All needs: 0 = bad, 100 = good. Urgency = 100 - value
+        # Most needs: 0 = bad, 100 = good. Urgency = 100 - value
+        # Exception: sleep_pressure: 0 = good, 100 = bad. Urgency = value directly.
         if needs.hunger < 40:
             urgent.append(f"hunger ({100 - needs.hunger}%)")
         if needs.thirst < 40:
             urgent.append(f"thirst ({100 - needs.thirst}%)")
-        if needs.energy < 30:
-            urgent.append(f"fatigue ({100 - needs.energy}%)")
+        if needs.stamina < 30:
+            urgent.append(f"physical exhaustion ({100 - needs.stamina}%)")
+        if needs.sleep_pressure > 60:
+            urgent.append(f"sleepiness ({needs.sleep_pressure}%)")
         if needs.social_connection < 30:
             urgent.append(f"loneliness ({100 - needs.social_connection}%)")
         if needs.intimacy < 25:

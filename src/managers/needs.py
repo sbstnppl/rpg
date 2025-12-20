@@ -58,8 +58,13 @@ DECAY_RATES: dict[str, NeedDecayRates] = {
     "hunger": NeedDecayRates(active=-6, resting=-3, sleeping=-1, combat=-6),
     # Thirst: 0=dehydrated, 100=well-hydrated. Decays faster than hunger (vital).
     "thirst": NeedDecayRates(active=-10, resting=-5, sleeping=-2, combat=-15),
-    # Energy: 0=exhausted, 100=energized. Decreases with activity.
-    "energy": NeedDecayRates(active=-12, resting=5, sleeping=15, combat=-20),
+    # Stamina: 0=collapsed, 100=fresh. Physical capacity.
+    # Decreases with activity, recovers with rest.
+    "stamina": NeedDecayRates(active=-8, resting=15, sleeping=50, combat=-25),
+    # Sleep Pressure: 0=well-rested, 100=desperately sleepy.
+    # ALWAYS INCREASES while awake (positive rates), only clears during sleep (negative).
+    # Note: This is inverted from other needs - higher = worse
+    "sleep_pressure": NeedDecayRates(active=4.5, resting=4.5, sleeping=-12, combat=6),
     # Hygiene: 0=filthy, 100=clean. Decreases over time.
     "hygiene": NeedDecayRates(active=-3, resting=-1, sleeping=0, combat=-8),
     # Comfort: 0=miserable, 100=luxurious. Environmental, doesn't decay automatically.
@@ -107,11 +112,13 @@ ACTION_SATISFACTION_CATALOG: dict[str, dict[str, int]] = {
         "vomit": -25, "diarrhea": -30,
         "sweating": -15, "heavy_exertion": -20,
     },
-    "energy": {
-        "quick_nap": 15, "nap": 15, "doze": 15,
-        "short_rest": 28, "rest": 28, "break": 20,
-        "full_sleep": 75, "sleep": 75, "night_sleep": 75,
-        "long_sleep": 90, "extended_rest": 90,
+    "stamina": {
+        "quick_rest": 10, "catch_breath": 10, "pause": 8,
+        "short_rest": 20, "rest": 20, "break": 15,
+        "long_rest": 40, "extended_rest": 40, "relax": 35,
+        "full_rest": 60, "recuperate": 60,
+        # Sleep also restores stamina fully
+        "sleep": 100, "full_sleep": 100, "night_sleep": 100,
     },
     "hygiene": {
         "quick_wash": 15, "rinse": 15, "wipe": 10,
@@ -259,20 +266,20 @@ def get_preference_multiplier(
             elif quality == "poor":
                 multiplier *= 0.5  # Barely tolerates low-quality
 
-    # === ENERGY MODIFIERS ===
-    elif need_name == "energy":
+    # === STAMINA MODIFIERS ===
+    elif need_name == "stamina":
         # Stamina traits affect recovery
         if prefs.has_high_stamina:
             multiplier *= 1.2
         elif prefs.has_low_stamina:
             multiplier *= 0.8
 
-        # Sleep-specific modifiers
+        # Rest-specific modifiers (sleep also restores stamina)
         if "sleep" in action_lower or "rest" in action_lower:
-            if prefs.is_insomniac:
-                multiplier *= 0.6  # Struggles to recover from sleep
-            elif prefs.is_heavy_sleeper:
+            if prefs.is_heavy_sleeper:
                 multiplier *= 1.3  # Recovers well from sleep
+            if prefs.is_insomniac:
+                multiplier *= 0.6  # Poor quality rest/sleep
 
     # === SOCIAL CONNECTION MODIFIERS ===
     elif need_name == "social_connection":
@@ -447,10 +454,16 @@ class NeedsManager(BaseManager):
         elif needs.thirst < 30:
             morale_modifier -= 5
 
-        # Energy effects on morale (low energy = exhausted)
-        if needs.energy < 20:
+        # Stamina effects on morale (low stamina = physically exhausted)
+        if needs.stamina < 20:
+            morale_modifier -= 10
+        elif needs.stamina < 40:
+            morale_modifier -= 5
+
+        # Sleep pressure effects on morale (high pressure = desperately tired)
+        if needs.sleep_pressure > 80:
             morale_modifier -= 15
-        elif needs.energy < 40:
+        elif needs.sleep_pressure > 60:
             morale_modifier -= 8
 
         # Wellness effects on morale (low wellness = pain)
@@ -494,7 +507,7 @@ class NeedsManager(BaseManager):
 
         All needs follow the same semantics: higher value = better state.
         Satisfying a need increases its value (e.g., eating increases hunger,
-        resting increases energy, healing increases wellness).
+        resting increases stamina, healing increases wellness).
 
         Args:
             entity_id: Entity to update
@@ -525,7 +538,7 @@ class NeedsManager(BaseManager):
         turn_tracking = {
             "hunger": "last_meal_turn",
             "thirst": "last_drink_turn",
-            "energy": "last_sleep_turn",
+            "stamina": "last_sleep_turn",  # Track when last rested/slept
             "hygiene": "last_bath_turn",
             "social_connection": "last_social_turn",
             "intimacy": "last_intimate_turn",
@@ -534,10 +547,10 @@ class NeedsManager(BaseManager):
             setattr(needs, turn_tracking[need_name], turn)
 
         # Reset craving when need is satisfied
+        # Note: stamina and sleep_pressure don't have cravings
         craving_map = {
             "hunger": "hunger_craving",
             "thirst": "thirst_craving",
-            "energy": "energy_craving",
             "social_connection": "social_craving",
             "intimacy": "intimacy_craving",
         }
@@ -614,25 +627,88 @@ class NeedsManager(BaseManager):
                 )
             )
 
-        # Energy effects (low energy = exhausted)
-        if needs.energy < 20:
+        # Stamina effects (low stamina = physically exhausted)
+        if needs.stamina < 10:
             effects.append(
                 NeedEffect(
-                    need_name="energy",
-                    threshold_name="exhausted",
-                    description="Exhausted - barely able to stand",
-                    stat_penalties={"STR": -3, "DEX": -3, "INT": -3, "WIS": -3},
-                    morale_modifier=-15,
-                    special_effects={"hallucination_chance": 0.20},
+                    need_name="stamina",
+                    threshold_name="collapsed",
+                    description="Physically collapsed - cannot take physical actions",
+                    stat_penalties={"STR": -4, "DEX": -4, "CON": -2},
+                    morale_modifier=-10,
+                    special_effects={"cannot_run": 1.0, "movement_halved": 1.0},
                 )
             )
-        elif needs.energy < 40:
+        elif needs.stamina < 30:
             effects.append(
                 NeedEffect(
-                    need_name="energy",
-                    threshold_name="very_tired",
-                    description="Very tired - struggling to focus",
-                    stat_penalties={"INT": -2, "WIS": -2, "DEX": -1},
+                    need_name="stamina",
+                    threshold_name="exhausted",
+                    description="Physically exhausted - movement halved",
+                    stat_penalties={"STR": -3, "DEX": -3, "CON": -1},
+                    special_effects={"cannot_run": 1.0},
+                )
+            )
+        elif needs.stamina < 50:
+            effects.append(
+                NeedEffect(
+                    need_name="stamina",
+                    threshold_name="winded",
+                    description="Winded - cannot run or sprint",
+                    stat_penalties={"STR": -2, "DEX": -2},
+                    special_effects={"cannot_run": 1.0},
+                )
+            )
+        elif needs.stamina < 70:
+            effects.append(
+                NeedEffect(
+                    need_name="stamina",
+                    threshold_name="fatigued",
+                    description="Physically fatigued",
+                    stat_penalties={"DEX": -1},
+                )
+            )
+
+        # Sleep pressure effects (high pressure = desperately sleepy)
+        if needs.sleep_pressure >= 96:
+            effects.append(
+                NeedEffect(
+                    need_name="sleep_pressure",
+                    threshold_name="collapse_imminent",
+                    description="About to collapse from exhaustion - forced sleep saves required",
+                    stat_penalties={"INT": -4, "WIS": -4, "CHA": -3},
+                    morale_modifier=-20,
+                    special_effects={"forced_sleep_save": 1.0, "hallucination_chance": 0.20},
+                )
+            )
+        elif needs.sleep_pressure > 80:
+            effects.append(
+                NeedEffect(
+                    need_name="sleep_pressure",
+                    threshold_name="delirious",
+                    description="Delirious from lack of sleep - hallucination risk",
+                    stat_penalties={"INT": -3, "WIS": -3, "CHA": -2},
+                    morale_modifier=-15,
+                    special_effects={"hallucination_chance": 0.10, "microsleep_risk": 0.15},
+                )
+            )
+        elif needs.sleep_pressure > 60:
+            effects.append(
+                NeedEffect(
+                    need_name="sleep_pressure",
+                    threshold_name="sleep_exhausted",
+                    description="Exhausted from lack of sleep - struggling to concentrate",
+                    stat_penalties={"INT": -2, "WIS": -2, "CHA": -1},
+                    special_effects={"microsleep_risk": 0.05},
+                )
+            )
+        elif needs.sleep_pressure > 40:
+            effects.append(
+                NeedEffect(
+                    need_name="sleep_pressure",
+                    threshold_name="tired",
+                    description="Tired - mental focus reduced",
+                    stat_penalties={"INT": -1, "WIS": -1},
                 )
             )
 
@@ -742,7 +818,8 @@ class NeedsManager(BaseManager):
             "has_needs": True,
             "hunger": needs.hunger,
             "thirst": needs.thirst,
-            "energy": needs.energy,
+            "stamina": needs.stamina,
+            "sleep_pressure": needs.sleep_pressure,
             "hygiene": needs.hygiene,
             "comfort": needs.comfort,
             "wellness": needs.wellness,
@@ -753,7 +830,7 @@ class NeedsManager(BaseManager):
             # Include effective needs (accounting for cravings)
             "effective_hunger": needs.get_effective_need("hunger"),
             "effective_thirst": needs.get_effective_need("thirst"),
-            "effective_energy": needs.get_effective_need("energy"),
+            # Note: stamina and sleep_pressure don't have cravings
             "critical_states": [e.threshold_name for e in effects],
             "stat_modifiers": self.calculate_stat_modifiers(entity_id),
             "check_penalty": self.calculate_check_penalty(entity_id),
@@ -763,20 +840,20 @@ class NeedsManager(BaseManager):
         """Get the most urgent need for NPC behavior decisions.
 
         Returns (need_name, urgency_level) where urgency > 70 overrides schedule.
-        All needs now follow the same pattern: 0 = bad, 100 = good.
-        Urgency is calculated as 100 - value (lower value = higher urgency).
+        Most needs: 0 = bad, 100 = good. Urgency = 100 - value.
+        Exception: sleep_pressure: 0 = good, 100 = bad. Urgency = value directly.
         """
         needs = self.get_needs(entity_id)
         if needs is None:
             return None, 0
 
         # Calculate urgency for each need (0-100)
-        # All needs: 0 = bad state, so urgency = 100 - value
         # Use effective needs (accounting for cravings) for urgency calculation
         urgencies: dict[str, int] = {
             "hunger": max(0, 100 - needs.get_effective_need("hunger")),
             "thirst": max(0, 100 - needs.get_effective_need("thirst")),
-            "energy": max(0, 100 - needs.get_effective_need("energy")),
+            "stamina": max(0, 100 - needs.stamina),  # Low stamina = high urgency
+            "sleep_pressure": needs.sleep_pressure,  # High pressure = high urgency (inverted)
             "social_connection": max(0, 100 - needs.get_effective_need("social_connection")),
             "intimacy": max(0, 100 - needs.get_effective_need("intimacy")),
         }
@@ -968,7 +1045,7 @@ class NeedsManager(BaseManager):
     ) -> list[dict]:
         """Check if vital needs are critically low and require death saves.
 
-        Vital needs: thirst, hunger, energy (in priority order)
+        Vital needs: thirst, hunger, stamina (in priority order)
         Scaling frequency:
         - Need < 5: check every hour
         - Need < 3: check every 30 minutes
@@ -987,11 +1064,11 @@ class NeedsManager(BaseManager):
 
         death_saves_required: list[dict] = []
 
-        # Check in priority order: thirst (fastest killer), hunger, energy
+        # Check in priority order: thirst (fastest killer), hunger, stamina
         vital_needs = [
             ("thirst", needs.thirst, "dehydration"),
             ("hunger", needs.hunger, "starvation"),
-            ("energy", needs.energy, "exhaustion"),
+            ("stamina", needs.stamina, "physical_exhaustion"),
         ]
 
         for need_name, value, cause in vital_needs:
@@ -1042,7 +1119,7 @@ class NeedsManager(BaseManager):
 
         Args:
             entity_id: Entity to apply craving to.
-            need_name: Name of need (hunger, thirst, energy, social_connection, intimacy).
+            need_name: Name of need (hunger, thirst, social_connection, intimacy).
             relevance: How relevant the stimulus is to preferences (0.0-1.0).
             attention: How prominent the stimulus is (0.3=background, 0.6=described, 1.0=offered).
 
@@ -1052,10 +1129,10 @@ class NeedsManager(BaseManager):
         needs = self.get_or_create_needs(entity_id)
 
         # Map need names to craving fields
+        # Note: stamina and sleep_pressure don't have cravings - they're physical states
         craving_map = {
             "hunger": "hunger_craving",
             "thirst": "thirst_craving",
-            "energy": "energy_craving",
             "social_connection": "social_craving",
             "intimacy": "intimacy_craving",
         }
@@ -1099,10 +1176,10 @@ class NeedsManager(BaseManager):
         # Calculate decay amount: -20 per 30 minutes
         decay_amount = int((minutes_passed / 30) * 20)
 
+        # Note: stamina and sleep_pressure don't have cravings
         craving_fields = [
             "hunger_craving",
             "thirst_craving",
-            "energy_craving",
             "social_craving",
             "intimacy_craving",
         ]
@@ -1114,6 +1191,113 @@ class NeedsManager(BaseManager):
                 setattr(needs, field, new_value)
 
         self.db.flush()
+
+    # =========================================================================
+    # Sleep Pressure Methods
+    # =========================================================================
+
+    def can_sleep(self, entity_id: int) -> tuple[bool, str]:
+        """Check if entity has enough sleep pressure to fall asleep.
+
+        Requires sleep_pressure >= 30 to sleep. Below that, the character
+        is too alert to fall asleep.
+
+        Args:
+            entity_id: Entity to check.
+
+        Returns:
+            Tuple of (can_sleep, reason). If can_sleep is False, reason explains why.
+        """
+        needs = self.get_needs(entity_id)
+        if needs is None:
+            return True, ""  # No needs tracked, allow sleep
+
+        if needs.sleep_pressure < 30:
+            return False, "You're not tired enough to sleep."
+
+        return True, ""
+
+    def get_sleep_duration(self, entity_id: int) -> float:
+        """Calculate natural sleep duration based on sleep pressure.
+
+        Higher sleep pressure results in longer sleep:
+        - 30-40 pressure: 1-2 hours (power nap)
+        - 41-55 pressure: 2-4 hours (short sleep)
+        - 56-70 pressure: 4-6 hours (normal sleep)
+        - 71-85 pressure: 6-8 hours (good sleep)
+        - 86-100 pressure: 8-10 hours (recovery sleep)
+
+        Formula: hours = clamp((pressure - 30) / 10 + 1, 1, 10)
+
+        Args:
+            entity_id: Entity to calculate duration for.
+
+        Returns:
+            Sleep duration in hours (1.0 to 10.0).
+        """
+        needs = self.get_needs(entity_id)
+        if needs is None:
+            return 6.0  # Default reasonable sleep
+
+        pressure = needs.sleep_pressure
+
+        # Can't sleep with low pressure (but if called, return minimum)
+        if pressure < 30:
+            return 0.0
+
+        # Calculate hours based on pressure
+        hours = (pressure - 30) / 10 + 1
+        return max(1.0, min(10.0, hours))
+
+    def reduce_sleep_pressure(self, entity_id: int, hours_slept: float) -> int:
+        """Reduce sleep pressure after sleeping.
+
+        Sleep clears pressure at a rate of 12 points per hour slept.
+        Also fully restores stamina.
+
+        Args:
+            entity_id: Entity that slept.
+            hours_slept: Number of hours slept.
+
+        Returns:
+            New sleep pressure value after reduction.
+        """
+        needs = self.get_or_create_needs(entity_id)
+
+        # Clear sleep pressure: 12 points per hour
+        pressure_cleared = int(hours_slept * 12)
+        new_pressure = max(0, needs.sleep_pressure - pressure_cleared)
+        needs.sleep_pressure = new_pressure
+
+        # Full stamina recovery from sleep
+        needs.stamina = 100
+
+        # Track last sleep turn
+        if self.current_turn is not None:
+            needs.last_sleep_turn = self.current_turn
+
+        self.db.flush()
+        return new_pressure
+
+    def check_forced_sleep(self, entity_id: int) -> tuple[bool, int]:
+        """Check if sleep pressure is so high it requires a forced sleep save.
+
+        At pressure >= 96, the character must make a CON save or collapse.
+
+        Args:
+            entity_id: Entity to check.
+
+        Returns:
+            Tuple of (save_required, dc). If save_required is False, dc is 0.
+        """
+        needs = self.get_needs(entity_id)
+        if needs is None:
+            return False, 0
+
+        if needs.sleep_pressure >= 96:
+            return True, 15  # DC 15 CON save to stay awake
+
+        return False, 0
 
     # =========================================================================
     # Accumulation Methods (Non-Vital Needs)
@@ -1186,7 +1370,7 @@ class NeedsManager(BaseManager):
                     "value": needs.comfort,
                     "chance": chance * 100,
                     "description": "Miserable conditions have taken their toll",
-                    "effect": "energy_penalty",
+                    "effect": "stamina_penalty",
                     "severity": -10,
                 })
 

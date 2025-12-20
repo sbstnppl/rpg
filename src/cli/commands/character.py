@@ -538,7 +538,8 @@ def status(
         if needs_state:
             needs = {
                 "Hunger": int(needs_state.hunger),
-                "Energy": int(needs_state.energy),
+                "Stamina": int(needs_state.stamina),
+                "Sleepiness": int(needs_state.sleep_pressure),
                 "Hygiene": int(needs_state.hygiene),
                 "Comfort": int(needs_state.comfort),
                 "Wellness": int(needs_state.wellness),
@@ -1050,10 +1051,13 @@ def _infer_initial_needs(
         Dictionary of need_name -> initial_value (0-100).
     """
     # Start with reasonable defaults
+    # stamina: 0=collapsed, 100=fresh
+    # sleep_pressure: 0=well-rested, 100=desperately sleepy
     needs = {
         "hunger": 80,
         "thirst": 80,
-        "energy": 80,
+        "stamina": 80,
+        "sleep_pressure": 20,  # Start well-rested
         "hygiene": 80,
         "comfort": 70,
         "wellness": 100,
@@ -1106,12 +1110,12 @@ def _infer_initial_needs(
     # Age-based adjustments
     if age:
         if age < 18:
-            # Young -> more energy, higher social needs
-            needs["energy"] = min(95, needs["energy"] + 10)
+            # Young -> more stamina, higher social needs
+            needs["stamina"] = min(95, needs["stamina"] + 10)
             needs["social_connection"] = min(70, needs["social_connection"] + 10)
         elif age > 60:
-            # Elderly -> less energy, potentially lower intimacy drive
-            needs["energy"] = max(60, needs["energy"] - 15)
+            # Elderly -> less stamina, potentially lower intimacy drive
+            needs["stamina"] = max(60, needs["stamina"] - 15)
             needs["intimacy"] = min(90, needs["intimacy"] + 10)  # More content
 
     # Occupation-based adjustments
@@ -1121,9 +1125,9 @@ def _infer_initial_needs(
         if occupation_lower in ["farmer", "smith", "soldier", "miner", "laborer"]:
             needs["hunger"] = min(90, needs["hunger"] + 5)
             needs["thirst"] = min(90, needs["thirst"] + 5)
-        # Scholarly/indoor jobs -> potentially lower energy
+        # Scholarly/indoor jobs -> potentially lower stamina (sedentary)
         if occupation_lower in ["scholar", "scribe", "wizard", "librarian"]:
-            needs["energy"] = max(70, needs["energy"] - 5)
+            needs["stamina"] = max(70, needs["stamina"] - 5)
         # Social jobs -> higher social satisfaction
         if occupation_lower in ["merchant", "innkeeper", "bard", "diplomat"]:
             needs["social_connection"] = min(75, needs["social_connection"] + 15)
@@ -1135,11 +1139,11 @@ def _infer_initial_needs(
         needs["hygiene"] = max(40, needs["hygiene"] - 30)
         needs["comfort"] = max(30, needs["comfort"] - 25)
 
-    # Cold indicators -> lower comfort, lower energy
+    # Cold indicators -> lower comfort, lower stamina
     cold_words = ["cold", "freezing", "frozen", "snow", "ice", "winter", "blizzard"]
     if any(word in combined_text for word in cold_words):
         needs["comfort"] = max(20, needs["comfort"] - 35)
-        needs["energy"] = max(50, needs["energy"] - 15)
+        needs["stamina"] = max(50, needs["stamina"] - 15)
 
     # Dirty indicators -> lower hygiene
     dirty_words = ["dirty", "filthy", "mud", "sewer", "dungeon", "prison", "mine"]
@@ -1452,7 +1456,8 @@ def _create_character_records(
         entity_id=entity.id,
         hunger=initial_needs.get("hunger", 80),
         thirst=initial_needs.get("thirst", 80),
-        energy=initial_needs.get("energy", 80),
+        stamina=initial_needs.get("stamina", 80),
+        sleep_pressure=initial_needs.get("sleep_pressure", 20),
         hygiene=initial_needs.get("hygiene", 80),
         comfort=initial_needs.get("comfort", 70),
         wellness=initial_needs.get("wellness", 100),

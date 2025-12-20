@@ -116,7 +116,7 @@ def dump_portrait(
         False, "--no-equipment", help="Exclude visible clothing/gear"
     ),
     no_condition: bool = typer.Option(
-        False, "--no-condition", help="Exclude hygiene/energy/hunger effects"
+        False, "--no-condition", help="Exclude hygiene/stamina/hunger effects"
     ),
     no_injuries: bool = typer.Option(
         False, "--no-injuries", help="Exclude visible injuries"

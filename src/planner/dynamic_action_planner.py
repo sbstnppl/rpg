@@ -568,13 +568,14 @@ class DynamicActionPlanner:
     # ===========================================
 
     def _get_character_needs(self, actor: Entity) -> dict[str, int]:
-        """Get character needs (hunger, thirst, energy, etc.).
+        """Get character needs (hunger, thirst, stamina, sleep_pressure, etc.).
 
         Args:
             actor: Entity to get needs for.
 
         Returns:
-            Dict with need values (0=critical, 100=satisfied).
+            Dict with need values. Most needs: 0=critical, 100=satisfied.
+            Exception: sleep_pressure: 0=well-rested, 100=desperately sleepy.
         """
         try:
             needs = self.needs_manager.get_needs(actor.id)
@@ -582,7 +583,8 @@ class DynamicActionPlanner:
                 return {
                     "hunger": needs.hunger,
                     "thirst": needs.thirst,
-                    "energy": needs.energy,
+                    "stamina": needs.stamina,
+                    "sleep_pressure": needs.sleep_pressure,
                     "wellness": needs.wellness,
                     "hygiene": needs.hygiene,
                     "comfort": needs.comfort,

@@ -161,10 +161,13 @@ def infer_npc_initial_needs(
         hour = 12  # Default to midday
 
     # Base values
+    # stamina: 0=collapsed, 100=fresh
+    # sleep_pressure: 0=well-rested, 100=desperately sleepy
     needs = {
         "hunger": 70,
         "thirst": 70,
-        "energy": 70,
+        "stamina": 80,
+        "sleep_pressure": 20,  # Slightly awake
         "hygiene": 70,
         "comfort": 70,
         "wellness": 100,
@@ -175,24 +178,30 @@ def infer_npc_initial_needs(
     }
 
     # Time-based adjustments
+    # Sleep pressure builds throughout the day (~4.5/hr awake)
     if 6 <= hour < 9:
-        # Early morning: needs breakfast
+        # Early morning: just woke up, fresh
         needs["hunger"] = 55
-        needs["energy"] = 70
+        needs["stamina"] = 90
+        needs["sleep_pressure"] = 10
     elif 11 <= hour < 14:
-        # Midday: needs lunch
+        # Midday: needs lunch, been awake 5-8 hours
         needs["hunger"] = 55
-        needs["energy"] = 65
+        needs["stamina"] = 75
+        needs["sleep_pressure"] = 30
     elif 17 <= hour < 20:
-        # Evening: needs dinner, getting tired
+        # Evening: needs dinner, been awake 11-14 hours
         needs["hunger"] = 55
-        needs["energy"] = 55
+        needs["stamina"] = 60
+        needs["sleep_pressure"] = 55
     elif 20 <= hour < 23:
-        # Late evening: tired
-        needs["energy"] = 45
+        # Late evening: tired, been awake 14-17 hours
+        needs["stamina"] = 50
+        needs["sleep_pressure"] = 70
     elif hour >= 23 or hour < 6:
-        # Night: very tired
-        needs["energy"] = 35
+        # Night: very tired, should be sleeping
+        needs["stamina"] = 40
+        needs["sleep_pressure"] = 85
         needs["hunger"] = 50
 
     # Occupation-based adjustments
@@ -203,15 +212,15 @@ def infer_npc_initial_needs(
         needs["hunger"] = min(needs["hunger"] + 15, 85)
         needs["thirst"] = min(needs["thirst"] + 15, 85)
 
-    # Physical labor occupations
+    # Physical labor occupations - lower stamina from work
     if occupation_lower in ("farmer", "blacksmith", "miner", "laborer", "soldier"):
-        needs["energy"] = max(needs["energy"] - 10, 40)
+        needs["stamina"] = max(needs["stamina"] - 15, 40)
         needs["hunger"] = max(needs["hunger"] - 5, 50)
         needs["thirst"] = max(needs["thirst"] - 5, 50)
 
-    # Scholarly/sedentary occupations
+    # Scholarly/sedentary occupations - less physical drain
     if occupation_lower in ("scholar", "scribe", "merchant", "noble"):
-        needs["energy"] = min(needs["energy"] + 5, 80)
+        needs["stamina"] = min(needs["stamina"] + 5, 90)
 
     # Social occupations
     if occupation_lower in ("bard", "innkeeper", "merchant", "noble"):
@@ -636,7 +645,8 @@ class NPCGeneratorService:
             entity_id=entity_id,
             hunger=initial_needs.hunger,
             thirst=initial_needs.thirst,
-            energy=initial_needs.energy,
+            stamina=initial_needs.stamina,
+            sleep_pressure=initial_needs.sleep_pressure,
             hygiene=initial_needs.hygiene,
             comfort=initial_needs.comfort,
             wellness=initial_needs.wellness,
@@ -644,10 +654,9 @@ class NPCGeneratorService:
             morale=initial_needs.morale,
             sense_of_purpose=initial_needs.sense_of_purpose,
             intimacy=initial_needs.intimacy,
-            # Cravings default to 0
+            # Cravings default to 0 (note: stamina/sleep_pressure don't have cravings)
             hunger_craving=0,
             thirst_craving=0,
-            energy_craving=0,
             social_craving=0,
             intimacy_craving=0,
         )

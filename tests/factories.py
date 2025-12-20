@@ -544,7 +544,8 @@ def create_character_needs(
         "entity_id": entity.id,
         "hunger": 80,
         "thirst": 80,
-        "energy": 80,
+        "stamina": 80,
+        "sleep_pressure": 20,
         "hygiene": 80,
         "comfort": 70,
         "wellness": 100,
@@ -553,9 +554,9 @@ def create_character_needs(
         "sense_of_purpose": 60,
         "intimacy": 80,
         # Craving modifiers (default to 0)
+        # Note: stamina and sleep_pressure don't have cravings
         "hunger_craving": 0,
         "thirst_craving": 0,
-        "energy_craving": 0,
         "social_craving": 0,
         "intimacy_craving": 0,
     }

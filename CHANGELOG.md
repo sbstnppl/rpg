@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Dynamic Fatigue System** - Replaces single `energy` field with two-resource system
+  - **Stamina** (0-100): Physical capacity, recovered by rest
+    - Depleted by activity (combat -25/hr, running -40/hr, walking -8/hr)
+    - Recovered by rest (+15/hr sitting, +25/hr lying, +50/hr sleeping)
+    - Thresholds: Fresh (70+), Fatigued (50-69), Winded (30-49), Exhausted (10-29), Collapsed (0-9)
+  - **Sleep Pressure** (0-100): Sleepiness, only cleared by sleep
+    - Builds at +4.5/hr while awake (even during rest!)
+    - Combat/stress increases to +6/hr
+    - Only sleeping clears it (-12/hr)
+    - Thresholds: Well-Rested (0-20), Alert (21-40), Tired (41-60), Exhausted (61-80), Delirious (81-95), Collapse (96+)
+  - **Sleep Gating**: Can't sleep if pressure < 30 ("You're not tired enough to sleep")
+  - **Dynamic Sleep Duration**: Hours = clamp((pressure - 30) / 10 + 1, 1, 10)
+  - New `NeedsManager` methods: `can_sleep()`, `get_sleep_duration()`, `reduce_sleep_pressure()`, `check_forced_sleep()`
+  - Updated REST action: Recovers stamina but sleep pressure still builds
+  - Updated SLEEP action: Checks sleep gating, calculates duration, clears pressure
+  - Database migration: `alembic/versions/40abf4bc66f1_replace_energy_with_stamina_sleep_.py`
+  - Removes `energy` and `energy_craving` fields entirely
+
 - **Response Mode Routing** - Two output pipelines for different player intents
   - **INFO mode** for factual queries (bypasses narrator, 5-20 words)
     - "What color is my shirt?" → "Light purple with brown stitching."

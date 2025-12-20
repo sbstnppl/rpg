@@ -204,7 +204,7 @@ class RelevantState(BaseModel):
     # NEW - Character State
     character_needs: dict[str, int] = Field(
         default_factory=dict,
-        description="Needs: hunger/thirst/energy/wellness (0=critical, 100=satisfied)"
+        description="Needs: hunger/thirst/stamina/wellness (0=critical, 100=satisfied). sleep_pressure is inverted (0=rested, 100=exhausted)"
     )
     visible_injuries: list[dict[str, Any]] = Field(
         default_factory=list,

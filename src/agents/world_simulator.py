@@ -94,7 +94,7 @@ class WorldSimulator(BaseManager):
     """Simulates world changes due to time passage and location changes.
 
     Integrates with:
-    - NeedsManager for hunger/energy/etc decay
+    - NeedsManager for hunger/stamina/sleep_pressure/etc decay
     - RelationshipManager for mood modifier expiration
     - ConsistencyValidator for temporal effects
     - Schedule system for NPC movements
@@ -287,8 +287,10 @@ class WorldSimulator(BaseManager):
             # Urgent need overrides schedule and location
             if need_name == "hunger":
                 return ActivityType.ACTIVE  # Seeking food
-            elif need_name == "energy":
+            elif need_name == "stamina":
                 return ActivityType.RESTING  # Trying to rest
+            elif need_name == "sleep_pressure":
+                return ActivityType.SLEEPING  # Trying to sleep
             elif need_name == "social_connection":
                 return ActivityType.SOCIALIZING
             elif need_name == "intimacy":
@@ -886,7 +888,8 @@ class WorldSimulator(BaseManager):
             need_to_goal_type = {
                 "hunger": GoalType.SURVIVE,
                 "thirst": GoalType.SURVIVE,
-                "energy": GoalType.SURVIVE,
+                "stamina": GoalType.SURVIVE,
+                "sleep_pressure": GoalType.SURVIVE,
                 "social_connection": GoalType.SOCIAL,
                 "intimacy": GoalType.ROMANCE,
             }
@@ -913,7 +916,8 @@ class WorldSimulator(BaseManager):
             target_map = {
                 "hunger": "food",
                 "thirst": "drink",
-                "energy": "rest",
+                "stamina": "rest",
+                "sleep_pressure": "sleep",
                 "social_connection": "companionship",
                 "intimacy": "intimate_partner",
             }
@@ -921,7 +925,8 @@ class WorldSimulator(BaseManager):
             description_map = {
                 "hunger": "Find something to eat",
                 "thirst": "Find something to drink",
-                "energy": "Find a place to rest",
+                "stamina": "Find a place to rest",
+                "sleep_pressure": "Find a place to sleep",
                 "social_connection": "Find someone to talk to",
                 "intimacy": "Seek intimate companionship",
             }

@@ -354,12 +354,20 @@ def _get_need_description(need_name: str, value: int) -> tuple[str, str]:
             (85, "full", "green"),
             (100, "stuffed", "yellow"),
         ],
-        "energy": [
-            (20, "exhausted", "red"),
-            (40, "very tired", "red"),
-            (60, "tired", "yellow"),
+        "stamina": [
+            (20, "collapsed", "red"),
+            (40, "winded", "red"),
+            (60, "fatigued", "yellow"),
             (80, "rested", "green"),
-            (100, "energized", "green"),
+            (100, "fresh", "green"),
+        ],
+        # Note: sleep_pressure is inverted (higher = worse)
+        "sleep_pressure": [
+            (20, "well-rested", "green"),
+            (40, "alert", "green"),
+            (60, "tired", "yellow"),
+            (80, "exhausted", "red"),
+            (100, "delirious", "red"),
         ],
         "hygiene": [
             (20, "filthy", "red"),

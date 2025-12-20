@@ -48,10 +48,15 @@ class CharacterNeeds(Base, TimestampMixin):
         nullable=False,
         comment="0=dehydrated, 50=satisfied, 100=well-hydrated. Optimal: 40-80",
     )
-    energy: Mapped[int] = mapped_column(
+    stamina: Mapped[int] = mapped_column(
         default=80,
         nullable=False,
-        comment="0=exhausted, 50=tired, 100=energized. Optimal: 60-100",
+        comment="0=collapsed, 50=fatigued, 100=fresh. Physical capacity.",
+    )
+    sleep_pressure: Mapped[int] = mapped_column(
+        default=0,
+        nullable=False,
+        comment="0=well-rested, 50=tired, 100=desperately sleepy. Homeostatic sleep debt.",
     )
 
     # === TIER 2: Comfort (normal mode) ===
@@ -106,11 +111,8 @@ class CharacterNeeds(Base, TimestampMixin):
         nullable=False,
         comment="Temporary thirst urgency boost from stimuli (0-100)",
     )
-    energy_craving: Mapped[int] = mapped_column(
-        default=0,
-        nullable=False,
-        comment="Temporary fatigue urgency boost from stimuli (0-100)",
-    )
+    # Note: No stamina_craving or sleep_pressure_craving - these are physical states
+    # that don't have psychological "craving" modifiers like hunger/thirst do
     social_craving: Mapped[int] = mapped_column(
         default=0,
         nullable=False,
@@ -141,7 +143,7 @@ class CharacterNeeds(Base, TimestampMixin):
     def __repr__(self) -> str:
         return (
             f"<CharacterNeeds entity={self.entity_id} "
-            f"H:{self.hunger} T:{self.thirst} E:{self.energy} M:{self.morale}>"
+            f"H:{self.hunger} T:{self.thirst} S:{self.stamina} SP:{self.sleep_pressure} M:{self.morale}>"
         )
 
     def get_effective_need(self, need_name: str) -> int:
@@ -150,8 +152,12 @@ class CharacterNeeds(Base, TimestampMixin):
         The effective need is the perceived urgency, which may be higher
         than the actual physiological state due to cravings triggered by stimuli.
 
+        Note: stamina and sleep_pressure don't have craving modifiers since
+        they represent physical states rather than psychological urges.
+
         Args:
-            need_name: Name of the need (hunger, thirst, energy, social_connection, intimacy)
+            need_name: Name of the need (hunger, thirst, stamina, sleep_pressure,
+                       social_connection, intimacy)
 
         Returns:
             Effective need value (0-100), where lower = more urgent
@@ -159,10 +165,10 @@ class CharacterNeeds(Base, TimestampMixin):
         need_value = getattr(self, need_name, 0)
 
         # Map need names to their craving fields
+        # Note: stamina and sleep_pressure don't have cravings
         craving_map = {
             "hunger": "hunger_craving",
             "thirst": "thirst_craving",
-            "energy": "energy_craving",
             "social_connection": "social_craving",
             "intimacy": "intimacy_craving",
         }
@@ -205,7 +211,7 @@ class NeedsCommunicationLog(Base, TimestampMixin):
     )
     need_name: Mapped[str] = mapped_column(
         nullable=False,
-        comment="Need being tracked (hunger, energy, hygiene, etc.)",
+        comment="Need being tracked (hunger, stamina, sleep_pressure, hygiene, etc.)",
     )
 
     # When was this need last communicated to the player?

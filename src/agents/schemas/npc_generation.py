@@ -228,11 +228,17 @@ class NPCInitialNeeds(BaseModel):
         le=100,
         description="0=dehydrated, 100=well-hydrated",
     )
-    energy: int = Field(
-        default=70,
+    stamina: int = Field(
+        default=80,
         ge=0,
         le=100,
-        description="0=exhausted, 100=energized",
+        description="0=collapsed, 100=fresh. Physical capacity.",
+    )
+    sleep_pressure: int = Field(
+        default=20,
+        ge=0,
+        le=100,
+        description="0=well-rested, 100=desperately sleepy. Higher = more tired.",
     )
     hygiene: int = Field(
         default=70,

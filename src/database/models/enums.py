@@ -195,7 +195,7 @@ class GriefStage(str, Enum):
     DENIAL = "denial"  # 3-7 days: -15 morale
     ANGER = "anger"  # 1-2 weeks: irritable, +10 to aggressive actions
     BARGAINING = "bargaining"  # Variable
-    DEPRESSION = "depression"  # 2-4 weeks: -25 morale, low energy
+    DEPRESSION = "depression"  # 2-4 weeks: -25 morale, low stamina
     ACCEPTANCE = "acceptance"  # Gradual recovery
 
 
@@ -253,7 +253,7 @@ class SocialTendency(str, Enum):
 
     INTROVERT = "introvert"  # Prefers solitude, drains from social
     AMBIVERT = "ambivert"  # Balanced
-    EXTROVERT = "extrovert"  # Gains energy from social
+    EXTROVERT = "extrovert"  # Gains fulfillment from social
 
 
 class ModifierSource(str, Enum):

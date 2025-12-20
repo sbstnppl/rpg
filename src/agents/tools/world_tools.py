@@ -143,7 +143,7 @@ UPDATE_NPC_NEED_TOOL = ToolDefinition(
             name="need",
             param_type="string",
             description="Which need to update",
-            enum=["hunger", "energy", "hygiene", "comfort", "morale", "wellness"],
+            enum=["hunger", "stamina", "sleep_pressure", "hygiene", "comfort", "morale", "wellness"],
         ),
         ToolParameter(
             name="delta",

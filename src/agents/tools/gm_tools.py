@@ -267,7 +267,7 @@ SATISFY_NEED_TOOL = ToolDefinition(
             enum=[
                 "hunger",
                 "thirst",
-                "energy",
+                "stamina",
                 "hygiene",
                 "comfort",
                 "wellness",
@@ -282,7 +282,7 @@ SATISFY_NEED_TOOL = ToolDefinition(
             param_type="string",
             description=(
                 "Type of action. Positive: hunger (snack/light_meal/full_meal/feast), "
-                "energy (quick_nap/short_rest/full_sleep), "
+                "stamina (quick_rest/short_rest/long_rest/full_rest/sleep), "
                 "hygiene (quick_wash/partial_bath/full_bath), "
                 "social (chat/conversation/group_activity/bonding), "
                 "comfort (change_clothes/shelter/luxury), "
@@ -338,7 +338,8 @@ MARK_NEED_COMMUNICATED_TOOL = ToolDefinition(
             enum=[
                 "hunger",
                 "thirst",
-                "energy",
+                "stamina",
+                "sleep_pressure",
                 "hygiene",
                 "comfort",
                 "wellness",

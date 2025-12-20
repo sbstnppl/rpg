@@ -1086,93 +1086,189 @@ class ActionExecutor:
     async def _execute_rest(
         self, validation: ValidationResult, actor: "Entity"
     ) -> ExecutionResult:
-        """Execute resting."""
+        """Execute resting.
+
+        Resting recovers stamina but does NOT reduce sleep pressure.
+        Sleep pressure continues to build even while resting - you cannot
+        rest your way out of needing sleep.
+        """
         action = validation.action
         rest_minutes = 30  # Short rest is 30 minutes
+        hours = rest_minutes / 60
+
+        # Apply need changes via time decay (resting activity)
+        from src.managers.needs import ActivityType
+
+        state_changes = []
+        stamina_gained = 0
+        pressure_gained = 0
+
+        try:
+            # Get current needs before
+            needs_before = self.needs_manager.get_needs(actor.id)
+            stamina_before = needs_before.stamina if needs_before else 80
+            pressure_before = needs_before.sleep_pressure if needs_before else 0
+
+            # Apply resting decay (stamina recovers, pressure still builds)
+            needs = self.needs_manager.apply_time_decay(
+                entity_id=actor.id,
+                hours=hours,
+                activity=ActivityType.RESTING,
+            )
+
+            stamina_gained = needs.stamina - stamina_before
+            pressure_gained = needs.sleep_pressure - pressure_before
+
+            state_changes.append(f"Stamina recovered: +{stamina_gained} (now {needs.stamina})")
+            if pressure_gained > 0:
+                state_changes.append(
+                    f"Sleep pressure increased: +{pressure_gained} (now {needs.sleep_pressure})"
+                )
+        except Exception:
+            # Entity might not have needs tracking
+            pass
 
         # Advance time
         time_state = self.time_manager.advance_time(rest_minutes)
+        state_changes.extend([
+            f"Time advanced: {rest_minutes} minutes",
+            f"Current time: {time_state.current_time}",
+        ])
 
         return ExecutionResult(
             action=action,
             success=True,
             outcome=f"Rested for {rest_minutes} minutes",
-            state_changes=[
-                f"Time advanced: {rest_minutes} minutes",
-                f"Current time: {time_state.current_time}",
-            ],
+            state_changes=state_changes,
             metadata={
                 "rest_type": "short",
                 "minutes": rest_minutes,
                 "new_time": time_state.current_time,
+                "stamina_gained": stamina_gained,
+                "pressure_gained": pressure_gained,
             },
         )
 
     async def _execute_wait(
         self, validation: ValidationResult, actor: "Entity"
     ) -> ExecutionResult:
-        """Execute waiting."""
+        """Execute waiting.
+
+        Waiting is passive - stamina drains slowly and sleep pressure builds.
+        This is similar to 'active' time passing, not resting.
+        """
         action = validation.action
         minutes = int(action.target) if action.target and action.target.isdigit() else 10
+        hours = minutes / 60
+
+        # Apply need changes (active, since waiting isn't resting)
+        from src.managers.needs import ActivityType
+
+        state_changes = []
+
+        try:
+            self.needs_manager.apply_time_decay(
+                entity_id=actor.id,
+                hours=hours,
+                activity=ActivityType.ACTIVE,
+            )
+        except Exception:
+            # Entity might not have needs tracking
+            pass
 
         # Advance time
         time_state = self.time_manager.advance_time(minutes)
+        state_changes.extend([
+            f"Time advanced: {minutes} minutes",
+            f"Current time: {time_state.current_time}",
+        ])
 
         return ExecutionResult(
             action=action,
             success=True,
             outcome=f"Waited for {minutes} minutes",
-            state_changes=[
-                f"Time advanced: {minutes} minutes",
-                f"Current time: {time_state.current_time}",
-            ],
+            state_changes=state_changes,
             metadata={
                 "minutes": minutes,
                 "new_time": time_state.current_time,
+                "wait_target": action.target,
             },
         )
 
     async def _execute_sleep(
         self, validation: ValidationResult, actor: "Entity"
     ) -> ExecutionResult:
-        """Execute sleeping."""
+        """Execute sleeping.
+
+        Sleep duration is determined by sleep pressure:
+        - Low pressure (30-40): 1-2 hour nap
+        - Medium pressure (41-70): 4-6 hours normal sleep
+        - High pressure (71-100): 6-10 hours recovery sleep
+
+        Requires sleep_pressure >= 30 to fall asleep.
+        Sleep fully restores stamina and clears sleep pressure.
+        """
         action = validation.action
-        sleep_hours = 8  # Default sleep is 8 hours
 
-        # Advance time (convert hours to minutes)
-        time_state = self.time_manager.advance_time(sleep_hours * 60)
+        # Check if entity can sleep (needs enough sleep pressure)
+        can_sleep, reason = self.needs_manager.can_sleep(actor.id)
+        if not can_sleep:
+            return ExecutionResult(
+                action=action,
+                success=False,
+                outcome=reason,
+                state_changes=[],
+                metadata={"cannot_sleep_reason": reason},
+            )
 
-        state_changes = [
-            f"Time advanced: {sleep_hours} hours",
+        # Calculate sleep duration based on pressure
+        sleep_hours = self.needs_manager.get_sleep_duration(actor.id)
+        sleep_minutes = int(sleep_hours * 60)
+
+        state_changes = []
+
+        # Get current needs for reporting
+        needs_before = self.needs_manager.get_needs(actor.id)
+        pressure_before = needs_before.sleep_pressure if needs_before else 0
+
+        # Apply sleep effects (clears pressure, restores stamina)
+        new_pressure = self.needs_manager.reduce_sleep_pressure(actor.id, sleep_hours)
+        pressure_cleared = pressure_before - new_pressure
+
+        state_changes.append(f"Stamina fully restored: 100")
+        state_changes.append(
+            f"Sleep pressure cleared: -{pressure_cleared} (now {new_pressure})"
+        )
+
+        # Advance time
+        time_state = self.time_manager.advance_time(sleep_minutes)
+        state_changes.extend([
+            f"Time advanced: {sleep_hours:.1f} hours",
             f"Current time: {time_state.current_time}",
             f"Day: {time_state.current_day}",
-        ]
+        ])
 
-        # Restore energy via NeedsManager (sleep fully restores energy)
-        energy_restored = 0
-        try:
-            needs = self.needs_manager.satisfy_need(
-                entity_id=actor.id,
-                need_name="energy",
-                amount=100,  # Full restoration
-            )
-            energy_restored = needs.energy
-            state_changes.append(f"Energy fully restored: {energy_restored}")
-        except ValueError:
-            # Entity might not have needs tracking
-            pass
+        # Determine outcome description based on pressure cleared
+        if pressure_before >= 80:
+            outcome = f"Slept for {sleep_hours:.1f} hours of deep, restorative sleep"
+        elif pressure_before >= 50:
+            outcome = f"Slept for {sleep_hours:.1f} hours and feel refreshed"
+        else:
+            outcome = f"Took a {sleep_hours:.1f} hour nap"
 
         return ExecutionResult(
             action=action,
             success=True,
-            outcome=f"Slept for {sleep_hours} hours and feel refreshed",
+            outcome=outcome,
             state_changes=state_changes,
             metadata={
                 "rest_type": "sleep",
                 "hours": sleep_hours,
                 "new_time": time_state.current_time,
                 "new_day": time_state.current_day,
-                "energy_restored": energy_restored,
+                "stamina_restored": 100,
+                "pressure_cleared": pressure_cleared,
+                "pressure_remaining": new_pressure,
             },
         )
 

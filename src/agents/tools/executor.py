@@ -590,10 +590,12 @@ class GMToolExecutor:
         relevance = intensity_map.get(intensity, 0.6)
 
         # Map stimulus type to need
+        # Note: rest_opportunity doesn't affect a craving since stamina/sleep_pressure
+        # are physical states without psychological cravings
         stimulus_to_need = {
             "food_sight": "hunger",
             "drink_sight": "thirst",
-            "rest_opportunity": "energy",
+            "rest_opportunity": None,  # Stamina/sleep are physical, no cravings
             "social_atmosphere": "social_connection",
             "intimacy_trigger": "intimacy",
             "memory_trigger": None,  # Affects morale, not a specific need

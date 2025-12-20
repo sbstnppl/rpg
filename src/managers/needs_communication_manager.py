@@ -15,12 +15,20 @@ from src.managers.base import BaseManager
 REMINDER_INTERVAL_HOURS = 2
 
 # Need state definitions: (threshold, label, is_negative)
-# All needs: 0 = bad, 100 = good
+# Most needs: 0 = bad, 100 = good (threshold = "below this")
+# Exception: sleep_pressure: 0 = good, 100 = bad (threshold = "above this")
 NEED_STATE_THRESHOLDS: dict[str, list[tuple[int, str, bool]]] = {
-    "energy": [
-        (20, "exhausted", True),
-        (40, "tired", True),
-        (80, "well-rested", False),
+    "stamina": [
+        (20, "physically exhausted", True),
+        (40, "winded", True),
+        (80, "fresh", False),
+    ],
+    # Note: sleep_pressure thresholds are inverted (higher = worse)
+    # The get_need_state method handles this inversion
+    "sleep_pressure": [
+        (80, "desperately sleepy", True),  # Above 80 = desperately sleepy
+        (60, "tired", True),  # Above 60 = tired
+        (20, "well-rested", False),  # Below 20 = well-rested
     ],
     "hunger": [
         (15, "starving", True),
@@ -92,7 +100,7 @@ class NeedsCommunicationManager(BaseManager):
         """Get the state label and negativity for a need value.
 
         Args:
-            need_name: Name of the need (hunger, energy, etc.)
+            need_name: Name of the need (hunger, stamina, sleep_pressure, etc.)
             value: Current need value (0-100)
 
         Returns:
@@ -101,12 +109,23 @@ class NeedsCommunicationManager(BaseManager):
         """
         thresholds = NEED_STATE_THRESHOLDS.get(need_name, [])
 
-        # Check thresholds in order (lowest first)
+        # sleep_pressure is inverted: higher value = worse state
+        is_inverted = need_name == "sleep_pressure"
+
+        # Check thresholds in order
         for threshold, label, is_negative in thresholds:
-            if is_negative and value < threshold:
-                return label, True
-            elif not is_negative and value > threshold:
-                return label, False
+            if is_inverted:
+                # For sleep_pressure: high value is bad, low is good
+                if is_negative and value > threshold:
+                    return label, True
+                elif not is_negative and value < threshold:
+                    return label, False
+            else:
+                # Normal needs: low value is bad, high is good
+                if is_negative and value < threshold:
+                    return label, True
+                elif not is_negative and value > threshold:
+                    return label, False
 
         # Default neutral state
         return "normal", False
@@ -143,7 +162,7 @@ class NeedsCommunicationManager(BaseManager):
 
         Args:
             entity_id: Entity whose need was communicated
-            need_name: Name of the need (hunger, energy, etc.)
+            need_name: Name of the need (hunger, stamina, sleep_pressure, etc.)
             value: Current need value at time of communication
             state_label: State label (hungry, tired, etc.)
             game_time: In-game datetime when communicated
@@ -209,7 +228,8 @@ class NeedsCommunicationManager(BaseManager):
 
         # Check all trackable needs
         need_values = {
-            "energy": needs.energy,
+            "stamina": needs.stamina,
+            "sleep_pressure": needs.sleep_pressure,
             "hunger": needs.hunger,
             "thirst": needs.thirst,
             "hygiene": needs.hygiene,

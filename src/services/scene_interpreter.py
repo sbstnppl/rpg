@@ -99,7 +99,8 @@ class SceneInterpreter:
         "pour", "sip", "gulp", "tavern", "inn", "bar",
     }
 
-    # Rest-related keywords that trigger energy craving
+    # Rest-related keywords (for scene detection, not cravings)
+    # Note: stamina/sleep_pressure are physical states without psychological cravings
     REST_KEYWORDS = {
         "bed", "sleep", "rest", "tired", "exhausted", "fatigue", "weary", "drowsy",
         "yawn", "pillow", "blanket", "mattress", "inn", "bedroom", "chamber",
@@ -282,22 +283,8 @@ class SceneInterpreter:
                     narrative_hint=self._get_craving_hint("thirst", boost),
                 ))
 
-        # Check energy/rest stimuli
-        rest_matches = self._count_keyword_matches(text, self.REST_KEYWORDS)
-        if rest_matches > 0:
-            base_craving = 100 - needs.energy
-            relevance = min(1.0, rest_matches / 3)
-            boost = self._calculate_craving_boost(base_craving, relevance)
-
-            if boost >= 5:
-                reactions.append(SceneReaction(
-                    trigger="rest opportunity in scene",
-                    reaction_type=ReactionType.CRAVING,
-                    need_affected="energy",
-                    craving_boost=boost,
-                    intensity=min(10, boost // 5),
-                    narrative_hint=self._get_craving_hint("energy", boost),
-                ))
+        # Note: stamina/sleep_pressure are physical states without psychological cravings,
+        # so we don't check for rest stimuli like we do for hunger/thirst.
 
         # Check social stimuli
         social_matches = self._count_keyword_matches(text, self.SOCIAL_KEYWORDS)
@@ -384,7 +371,6 @@ class SceneInterpreter:
         hints = {
             "hunger": f"The sight/smell of food {intensity} whets the appetite.",
             "thirst": f"The presence of drinks {intensity} makes the mouth feel dry.",
-            "energy": f"The comfortable resting spot {intensity} reminds of fatigue.",
             "social": f"The social atmosphere {intensity} draws attention.",
             "intimacy": f"The romantic atmosphere {intensity} stirs feelings.",
         }

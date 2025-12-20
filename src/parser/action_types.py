@@ -47,7 +47,7 @@ class ActionType(str, Enum):
 
     # World Interaction
     SEARCH = "search"  # Search area for hidden things
-    REST = "rest"  # Rest to recover energy
+    REST = "rest"  # Rest to recover stamina
     WAIT = "wait"  # Wait/pass time
     SLEEP = "sleep"  # Sleep (longer rest)
 

@@ -1093,10 +1093,11 @@ class EmergentNPCGenerator:
         # Note: CharacterNeeds uses "high = good" (e.g., hunger 90 = well-fed)
         # NPCNeeds schema uses "high = urgent" (e.g., hunger 90 = very hungry)
         # So we invert all values: urgency = 100 - satisfaction
+        # Exception: sleep_pressure is already urgency-based (higher = worse)
         current_needs = NPCNeeds(
             hunger=100 - (needs_record.hunger if needs_record else 70),
             thirst=100 - (needs_record.thirst if needs_record else 70),
-            fatigue=100 - (needs_record.energy if needs_record else 70),
+            fatigue=needs_record.sleep_pressure if needs_record else 20,  # sleep_pressure already urgency-based
             social=100 - (needs_record.social_connection if needs_record else 60),
             comfort=100 - (needs_record.comfort if needs_record else 70),
             hygiene=100 - (needs_record.hygiene if needs_record else 70),
@@ -2792,7 +2793,8 @@ Generate occupation details that fit naturally in this setting."""
             entity_id=entity_id,
             hunger=100 - current_needs.hunger,
             thirst=100 - current_needs.thirst,
-            energy=100 - current_needs.fatigue,
+            stamina=80,  # Default fresh stamina
+            sleep_pressure=current_needs.fatigue,  # fatigue is already urgency-based
             hygiene=100 - current_needs.hygiene,
             comfort=100 - current_needs.comfort,
             wellness=100,

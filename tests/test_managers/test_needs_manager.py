@@ -116,44 +116,57 @@ class TestNeedsDecay:
         # hunger decay rate for active is -6 per hour
         assert result.hunger == 44
 
-    def test_apply_time_decay_energy_active(
+    def test_apply_time_decay_stamina_active(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify energy decreases during active time."""
+        """Verify stamina decreases during active time."""
         entity = create_entity(db_session, game_session)
-        create_character_needs(db_session, game_session, entity, energy=80)
+        create_character_needs(db_session, game_session, entity, stamina=80)
         manager = NeedsManager(db_session, game_session)
 
         result = manager.apply_time_decay(entity.id, hours=1, activity=ActivityType.ACTIVE)
 
-        # energy decay rate for active is -12 per hour
-        assert result.energy == 68
+        # stamina decay rate for active is -8 per hour
+        assert result.stamina == 72
 
-    def test_apply_time_decay_sleeping_recovers_energy(
+    def test_apply_time_decay_sleep_pressure_builds(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify sleeping increases energy."""
+        """Verify sleep_pressure builds during active time (higher = worse)."""
         entity = create_entity(db_session, game_session)
-        create_character_needs(db_session, game_session, entity, energy=40)
+        create_character_needs(db_session, game_session, entity, sleep_pressure=20)
+        manager = NeedsManager(db_session, game_session)
+
+        result = manager.apply_time_decay(entity.id, hours=1, activity=ActivityType.ACTIVE)
+
+        # sleep_pressure builds at 4.5 per hour while awake
+        assert result.sleep_pressure == 24  # 20 + 4 (rounded)
+
+    def test_apply_time_decay_sleeping_clears_pressure(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify sleeping clears sleep_pressure."""
+        entity = create_entity(db_session, game_session)
+        create_character_needs(db_session, game_session, entity, sleep_pressure=60)
         manager = NeedsManager(db_session, game_session)
 
         result = manager.apply_time_decay(entity.id, hours=1, activity=ActivityType.SLEEPING)
 
-        # energy recovery rate for sleeping is +15 per hour
-        assert result.energy == 55
+        # sleep_pressure clears at -12 per hour while sleeping
+        assert result.sleep_pressure == 48  # 60 - 12
 
-    def test_apply_time_decay_combat_drains_energy(
+    def test_apply_time_decay_combat_drains_stamina(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify combat causes rapid energy decrease."""
+        """Verify combat causes rapid stamina decrease."""
         entity = create_entity(db_session, game_session)
-        create_character_needs(db_session, game_session, entity, energy=70)
+        create_character_needs(db_session, game_session, entity, stamina=70)
         manager = NeedsManager(db_session, game_session)
 
         result = manager.apply_time_decay(entity.id, hours=1, activity=ActivityType.COMBAT)
 
-        # energy decay rate for combat is -20 per hour
-        assert result.energy == 50
+        # stamina decay rate for combat is -25 per hour
+        assert result.stamina == 45
 
     def test_apply_time_decay_social_connection_when_alone(
         self, db_session: Session, game_session: GameSession
@@ -193,17 +206,17 @@ class TestNeedsDecay:
 
         assert result.hunger == 0
 
-    def test_apply_time_decay_clamps_to_zero(
+    def test_apply_time_decay_stamina_clamps_to_zero(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify energy doesn't go below 0."""
+        """Verify stamina doesn't go below 0."""
         entity = create_entity(db_session, game_session)
-        create_character_needs(db_session, game_session, entity, energy=5)
+        create_character_needs(db_session, game_session, entity, stamina=5)
         manager = NeedsManager(db_session, game_session)
 
         result = manager.apply_time_decay(entity.id, hours=1, activity=ActivityType.COMBAT)
 
-        assert result.energy == 0
+        assert result.stamina == 0
 
     def test_apply_time_decay_intimacy_with_high_drive(
         self, db_session: Session, game_session: GameSession
@@ -237,17 +250,17 @@ class TestNeedsSatisfaction:
 
         assert result.hunger == 70
 
-    def test_satisfy_need_energy_increases(
+    def test_satisfy_need_stamina_increases(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify satisfying energy increases value (higher is better)."""
+        """Verify satisfying stamina increases value (higher is better)."""
         entity = create_entity(db_session, game_session)
-        create_character_needs(db_session, game_session, entity, energy=30)
+        create_character_needs(db_session, game_session, entity, stamina=30)
         manager = NeedsManager(db_session, game_session)
 
-        result = manager.satisfy_need(entity.id, "energy", 50)
+        result = manager.satisfy_need(entity.id, "stamina", 50)
 
-        assert result.energy == 80
+        assert result.stamina == 80
 
     def test_satisfy_need_wellness_increases(
         self, db_session: Session, game_session: GameSession
@@ -314,19 +327,20 @@ class TestNeedsEffects:
         assert hunger_effect.threshold_name == "starving"
         assert hunger_effect.stat_penalties["STR"] == -3
 
-    def test_get_active_effects_exhausted(
+    def test_get_active_effects_desperately_sleepy(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify exhausted effect when energy < 20."""
+        """Verify desperately sleepy effect when sleep_pressure > 95."""
         entity = create_entity(db_session, game_session)
-        create_character_needs(db_session, game_session, entity, energy=15)
+        create_character_needs(db_session, game_session, entity, sleep_pressure=97)
         manager = NeedsManager(db_session, game_session)
 
         effects = manager.get_active_effects(entity.id)
 
-        energy_effect = next(e for e in effects if e.need_name == "energy")
-        assert energy_effect.threshold_name == "exhausted"
-        assert energy_effect.special_effects.get("hallucination_chance") == 0.20
+        sleep_effect = next(e for e in effects if e.need_name == "sleep_pressure")
+        assert sleep_effect.threshold_name == "collapse_imminent"
+        # Collapse imminent threshold has forced_sleep_save effect
+        assert sleep_effect.special_effects.get("forced_sleep_save") == 1.0
 
     def test_get_active_effects_severe_pain(
         self, db_session: Session, game_session: GameSession
@@ -349,7 +363,7 @@ class TestNeedsEffects:
         entity = create_entity(db_session, game_session)
         create_character_needs(
             db_session, game_session, entity,
-            hunger=50, energy=80, hygiene=80, comfort=70,
+            hunger=50, stamina=80, sleep_pressure=20, hygiene=80, comfort=70,
             wellness=100, morale=70, social_connection=60, intimacy=70
         )
         manager = NeedsManager(db_session, game_session)
@@ -409,7 +423,7 @@ class TestNeedsSummary:
         entity = create_entity(db_session, game_session)
         create_character_needs(
             db_session, game_session, entity,
-            hunger=30, energy=40, morale=50
+            hunger=30, stamina=40, sleep_pressure=50, morale=50
         )
         manager = NeedsManager(db_session, game_session)
 
@@ -417,7 +431,8 @@ class TestNeedsSummary:
 
         assert summary["has_needs"] is True
         assert summary["hunger"] == 30
-        assert summary["energy"] == 40
+        assert summary["stamina"] == 40
+        assert summary["sleep_pressure"] == 50
         assert summary["morale"] == 50
 
 
@@ -444,7 +459,8 @@ class TestNPCUrgency:
         create_character_needs(
             db_session, game_session, entity,
             hunger=10,  # Very hungry - urgency = 90
-            energy=70,  # Good energy - urgency = 30
+            stamina=70,  # Good stamina - urgency = 30
+            sleep_pressure=30,  # Alert - urgency = 30
         )
         manager = NeedsManager(db_session, game_session)
 
@@ -453,22 +469,23 @@ class TestNPCUrgency:
         assert need_name == "hunger"
         assert urgency == 90  # 100 - 10
 
-    def test_get_npc_urgency_energy_most_urgent(
+    def test_get_npc_urgency_sleep_pressure_most_urgent(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify energy is most urgent when very low."""
+        """Verify sleep_pressure is most urgent when very high."""
         entity = create_entity(db_session, game_session)
         create_character_needs(
             db_session, game_session, entity,
             hunger=80,  # Not hungry - urgency = 20
-            energy=5,  # Exhausted - urgency = 95
+            stamina=70,  # Good stamina - urgency = 30
+            sleep_pressure=95,  # Desperately sleepy - urgency = 95 (value directly)
         )
         manager = NeedsManager(db_session, game_session)
 
         need_name, urgency = manager.get_npc_urgency(entity.id)
 
-        assert need_name == "energy"
-        assert urgency == 95  # 100 - 5
+        assert need_name == "sleep_pressure"
+        assert urgency == 95  # sleep_pressure is directly the urgency
 
 
 class TestModifierMethods:
@@ -509,20 +526,20 @@ class TestModifierMethods:
         entity = create_entity(db_session, game_session)
         create_need_modifier(
             db_session, game_session, entity,
-            need_name="energy",
+            need_name="stamina",
             modifier_source=ModifierSource.TRAIT,
             decay_rate_multiplier=0.8,
         )
         create_need_modifier(
             db_session, game_session, entity,
-            need_name="energy",
+            need_name="stamina",
             modifier_source=ModifierSource.AGE,
             source_detail="age_25",
             decay_rate_multiplier=0.7,
         )
         manager = NeedsManager(db_session, game_session)
 
-        result = manager.get_decay_multiplier(entity.id, "energy")
+        result = manager.get_decay_multiplier(entity.id, "stamina")
 
         # 0.8 * 0.7 = 0.56
         assert abs(result - 0.56) < 0.001
@@ -776,27 +793,27 @@ class TestDecayWithModifiers:
         # intimacy should be capped at 20, not increase beyond
         assert result.intimacy <= 20
 
-    def test_apply_time_decay_reduces_energy_drain_with_high_stamina(
+    def test_apply_time_decay_reduces_stamina_drain_with_trait(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify high stamina trait reduces energy drain."""
+        """Verify trait modifier reduces stamina drain."""
         entity = create_entity(db_session, game_session)
-        create_character_needs(db_session, game_session, entity, energy=80)
-        # High stamina - 0.7x energy decay
+        create_character_needs(db_session, game_session, entity, stamina=80)
+        # Endurance trait - 0.7x stamina decay
         create_need_modifier(
             db_session, game_session, entity,
-            need_name="energy",
+            need_name="stamina",
             modifier_source=ModifierSource.TRAIT,
-            source_detail="high_stamina",
+            source_detail="endurance",
             decay_rate_multiplier=0.7,
         )
         manager = NeedsManager(db_session, game_session)
 
         result = manager.apply_time_decay(entity.id, hours=1, activity=ActivityType.ACTIVE)
 
-        # Base decay is -12 per hour, with 0.7x = -8.4
-        # 80 - 8.4 = 71.6, rounds to 71
-        assert result.energy == 71  # Instead of 68 without modifier
+        # Base decay is -8 per hour, with 0.7x = -5.6
+        # 80 - 5.6 = 74.4, rounds to 74
+        assert result.stamina == 74  # Instead of 72 without modifier
 
 
 class TestEstimateBaseSatisfaction:
@@ -812,8 +829,8 @@ class TestEstimateBaseSatisfaction:
         result = estimate_base_satisfaction("hunger", "full_meal", "basic")
         assert result == 40
 
-        result = estimate_base_satisfaction("energy", "full_sleep", "basic")
-        assert result == 75
+        result = estimate_base_satisfaction("stamina", "full_rest", "basic")
+        assert result == 60
 
     def test_applies_quality_multiplier(self):
         """Verify quality affects satisfaction amount."""
@@ -944,10 +961,10 @@ class TestGetPreferenceMultiplier:
         result = get_preference_multiplier(prefs, "hunger", "full_meal", "poor")
         assert result == 0.5
 
-    def test_insomniac_reduces_sleep_satisfaction(
+    def test_insomniac_reduces_stamina_satisfaction(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify insomniac gets reduced sleep satisfaction."""
+        """Verify insomniac gets reduced stamina satisfaction from sleep/rest."""
         from src.database.models.character_preferences import CharacterPreferences
         from src.managers.needs import get_preference_multiplier
 
@@ -960,7 +977,7 @@ class TestGetPreferenceMultiplier:
         db_session.add(prefs)
         db_session.flush()
 
-        result = get_preference_multiplier(prefs, "energy", "full_sleep", "basic")
+        result = get_preference_multiplier(prefs, "stamina", "full_rest", "basic")
         assert result == 0.6
 
     def test_loner_reduces_social_satisfaction(
@@ -1058,15 +1075,15 @@ class TestSatisfyNeedWithMultiplier:
         # No modifier, so 30 + 20 = 50
         assert result.hunger == 50
 
-    def test_satisfy_need_applies_to_energy_correctly(
+    def test_satisfy_need_applies_to_stamina_correctly(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify satisfy_need increases energy (higher is better)."""
+        """Verify satisfy_need increases stamina (higher is better)."""
         entity = create_entity(db_session, game_session)
-        create_character_needs(db_session, game_session, entity, energy=20)
+        create_character_needs(db_session, game_session, entity, stamina=20)
         manager = NeedsManager(db_session, game_session)
 
-        result = manager.satisfy_need(entity.id, "energy", 30)
+        result = manager.satisfy_need(entity.id, "stamina", 30)
 
-        # Energy increases: 20 + 30 = 50
-        assert result.energy == 50
+        # Stamina increases: 20 + 30 = 50
+        assert result.stamina == 50
