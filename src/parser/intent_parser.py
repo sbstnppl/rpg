@@ -29,6 +29,7 @@ class SceneContext:
         in_combat: Whether combat is active
         in_conversation: Whether in active dialogue with NPC
         conversation_partner: Entity key of conversation partner if any
+        recent_mentions: Recent GM responses for pronoun resolution
     """
 
     location_key: str = ""
@@ -41,6 +42,7 @@ class SceneContext:
     in_combat: bool = False
     in_conversation: bool = False
     conversation_partner: str | None = None
+    recent_mentions: str = ""
 
 
 class IntentParser:

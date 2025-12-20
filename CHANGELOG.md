@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Pronoun Resolution in Player Input** - Resolve "she/he/it/they" from conversation context
+  - Added `recent_mentions` field to SceneContext for conversation history
+  - Intent classifier now receives entities, items, and recent GM responses
+  - Added `_build_scene_context()` helper to populate context from database
+  - Planner prompt now includes explicit pronoun resolution guidance
+  - Key files: `src/agents/nodes/parse_intent_node.py`, `src/planner/prompts.py`
+
 - **Turn Counter Sync on Resume** - Sync `total_turns` with actual turn count when resuming
   - Guards against crashes or inconsistencies leaving turn counter out of sync
   - Key file: `src/cli/commands/game.py`

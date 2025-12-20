@@ -9,11 +9,15 @@ Includes:
 """
 
 import re
-from typing import Any, Callable, Coroutine
+from typing import Any, Callable, Coroutine, TYPE_CHECKING
 
 from src.agents.state import GameState
 from src.llm.factory import get_extraction_provider
 from src.parser.intent_parser import IntentParser, SceneContext
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+    from src.database.models.session import GameSession
 
 
 # Maximum actions per turn (soft limit with friendly message)
@@ -54,6 +58,64 @@ def _is_affirmative(text: str) -> bool:
 def _is_negative(text: str) -> bool:
     """Check if text is a negative response."""
     return bool(NEGATIVE_RE.match(text.strip()))
+
+
+def _build_scene_context(state: GameState) -> SceneContext:
+    """Build enriched SceneContext with entities, items, and recent mentions.
+
+    Provides the LLM classifier with context needed for pronoun resolution
+    and target matching.
+
+    Args:
+        state: Current game state with _db and _game_session.
+
+    Returns:
+        SceneContext populated with entities, items, and recent conversation.
+    """
+    location_key = state.get("player_location", "")
+    context = SceneContext(location_key=location_key)
+
+    db: Session | None = state.get("_db")  # type: ignore[name-defined]
+    game_session: GameSession | None = state.get("_game_session")  # type: ignore[name-defined]
+
+    if db is None or game_session is None:
+        return context
+
+    # Import here to avoid circular imports
+    from src.managers.entity_manager import EntityManager
+    from src.managers.item_manager import ItemManager
+    from src.managers.turn_manager import TurnManager
+
+    # Get entities at current location
+    entity_mgr = EntityManager(db, game_session)
+    entities = entity_mgr.get_entities_at_location(location_key)
+
+    context.entities_present = [e.entity_key for e in entities]
+    context.entity_names = {e.entity_key: e.display_name for e in entities}
+
+    # Get items at current location (limit for performance)
+    item_mgr = ItemManager(db, game_session)
+    items = item_mgr.get_items_at_location(location_key)[:10]
+
+    context.items_present = [i.item_key for i in items]
+    context.item_names = {i.item_key: i.display_name for i in items}
+
+    # Get recent GM responses for pronoun resolution
+    turn_mgr = TurnManager(db, game_session)
+    recent_turns = turn_mgr.get_recent_turns(count=2)
+
+    if recent_turns:
+        mentions = []
+        for turn in reversed(recent_turns):
+            if turn.gm_response:
+                # Truncate but keep enough for entity mentions
+                text = turn.gm_response[:300]
+                if len(turn.gm_response) > 300:
+                    text += "..."
+                mentions.append(f"GM: {text}")
+        context.recent_mentions = "\n".join(mentions)
+
+    return context
 
 
 async def parse_intent_node(state: GameState) -> dict[str, Any]:
@@ -117,10 +179,8 @@ async def parse_intent_node(state: GameState) -> dict[str, Any]:
             **clear_queue,
         }
 
-    # Build scene context from state for target resolution
-    context = SceneContext(
-        location_key=state.get("player_location", ""),
-    )
+    # Build enriched scene context for pronoun resolution and target matching
+    context = _build_scene_context(state)
 
     # Get LLM provider for intent classification
     try:
@@ -198,10 +258,8 @@ def create_parse_intent_node() -> Callable[[GameState], Coroutine[Any, Any, dict
                 "ambient_flavor": None,
             }
 
-        # Build scene context from state for target resolution
-        context = SceneContext(
-            location_key=state.get("player_location", ""),
-        )
+        # Build enriched scene context for pronoun resolution and target matching
+        context = _build_scene_context(state)
 
         # Get LLM provider for intent classification
         try:

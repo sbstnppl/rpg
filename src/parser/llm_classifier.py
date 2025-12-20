@@ -99,6 +99,12 @@ Target Resolution:
 - Use entity_key if the target matches an entity in the scene
 - Use item_key if the target matches an item in the scene
 - Use the player's words if no clear match exists
+
+Pronoun Resolution:
+- Use "Recent Conversation" context to resolve pronouns (she/he/it/they/him/her/them)
+- Match pronouns to the most recently mentioned entity of matching type
+- Example: If GM just mentioned "Ursula", then "she" should resolve to "ursula"
+- If ambiguous (multiple candidates), set needs_clarification=true
 """
 
 
@@ -134,6 +140,11 @@ def _build_classifier_prompt(text: str, context: SceneContext) -> str:
 
     if context.in_conversation:
         parts.append(f"- Status: In conversation with {context.conversation_partner}")
+
+    if context.recent_mentions:
+        parts.append("")
+        parts.append("Recent Conversation:")
+        parts.append(context.recent_mentions)
 
     parts.append("")
     parts.append("Classify the player's intent. Extract mechanical actions only.")
