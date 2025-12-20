@@ -25,10 +25,86 @@ from src.executor.subturn_processor import (
     SubturnProcessor,
 )
 from src.llm.factory import get_gm_provider
+from src.managers.discourse_manager import DiscourseManager
+from src.managers.entity_manager import EntityManager
 from src.parser.action_types import Action, ActionType
 from src.validators.action_validator import ActionValidator
 
 logger = logging.getLogger(__name__)
+
+
+async def _resolve_and_spawn_target(
+    target: str | None,
+    db: Session,
+    game_session: GameSession,
+    location: str,
+) -> str | None:
+    """Resolve a target reference, spawning entity if needed.
+
+    If the target matches a mention that hasn't been spawned yet,
+    this spawns the entity on-demand using the mention's descriptors.
+
+    Args:
+        target: Action target (entity key, reference_id, or descriptive text).
+        db: Database session.
+        game_session: Current game session.
+        location: Current location for spawning.
+
+    Returns:
+        Resolved entity_key (spawned or existing), or original target if not found.
+    """
+    if not target:
+        return target
+
+    # First check if target is already a real entity
+    entity_mgr = EntityManager(db, game_session)
+    existing = entity_mgr.get_entity(target)
+    if existing:
+        return target  # Already exists
+
+    # Try to match against display names
+    existing_by_name = entity_mgr.get_entity_by_display_name(target)
+    if existing_by_name:
+        return existing_by_name.entity_key
+
+    # Check if target matches a discourse mention (spawn candidate)
+    discourse_mgr = DiscourseManager(db, game_session)
+    mention = discourse_mgr.resolve_reference(target)
+
+    if mention:
+        # If already spawned, return the spawned entity key
+        if mention.spawned_as:
+            return mention.spawned_as
+
+        # Spawn the entity from the mention
+        try:
+            from src.generators.emergent_npc import EmergentNPCGenerator
+
+            llm_provider = get_gm_provider()
+            generator = EmergentNPCGenerator(db, game_session, llm_provider)
+
+            # Build spawn request from mention
+            npc = await generator.create_npc(
+                name_hint=mention.display_text,
+                gender_hint=mention.gender,
+                occupation_hint=None,  # Could infer from descriptors
+                location_key=location,
+                role_hint=", ".join(mention.descriptors) if mention.descriptors else None,
+            )
+
+            if npc:
+                # Mark the mention as spawned
+                discourse_mgr.mark_as_spawned(mention.reference_id, npc.entity_key)
+                logger.info(
+                    f"Just-in-time spawned '{mention.display_text}' as {npc.entity_key}"
+                )
+                return npc.entity_key
+
+        except Exception as e:
+            logger.warning(f"Failed to spawn from mention '{target}': {e}")
+
+    # Fall back to original target
+    return target
 
 
 async def _plan_custom_actions(
@@ -171,13 +247,32 @@ async def subturn_processor_node(state: GameState) -> dict[str, Any]:
             "errors": [f"Player entity not found: {player_id}"],
         }
 
-    # Convert action dicts to Action objects
+    # Get player location for entity resolution
+    player_location = state.get("player_location", "")
+
+    # Convert action dicts to Action objects, resolving targets and spawning if needed
     actions = []
     for action_dict in parsed_actions:
+        # Resolve target - may spawn entity just-in-time if it's an unspawned mention
+        target = await _resolve_and_spawn_target(
+            action_dict.get("target"),
+            db,
+            game_session,
+            player_location,
+        )
+
+        # Also resolve indirect_target (e.g., "give X to her")
+        indirect_target = await _resolve_and_spawn_target(
+            action_dict.get("indirect_target"),
+            db,
+            game_session,
+            player_location,
+        )
+
         action = Action(
             type=ActionType(action_dict["type"]),
-            target=action_dict.get("target"),
-            indirect_target=action_dict.get("indirect_target"),
+            target=target,
+            indirect_target=indirect_target,
             manner=action_dict.get("manner"),
             parameters=action_dict.get("parameters", {}),
         )
@@ -190,7 +285,7 @@ async def subturn_processor_node(state: GameState) -> dict[str, Any]:
         db=db,
         game_session=game_session,
         scene_context=state.get("scene_context", ""),
-        player_location=state.get("player_location", ""),
+        player_location=player_location,
     )
 
     # INFO mode: Skip action execution entirely - pure knowledge query

@@ -90,6 +90,7 @@ from src.managers.time_manager import TimeManager
 from src.managers.milestone_manager import MilestoneManager
 from src.managers.summary_manager import SummaryManager
 from src.managers.narrative_mention_manager import NarrativeMentionManager
+from src.managers.discourse_manager import DiscourseManager, EntityMention
 
 __all__ = [
     # Base
@@ -205,4 +206,7 @@ __all__ = [
     "MilestoneManager",
     "SummaryManager",
     "NarrativeMentionManager",
+    # Discourse
+    "DiscourseManager",
+    "EntityMention",
 ]

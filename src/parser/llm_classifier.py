@@ -25,7 +25,9 @@ class ClassifiedAction(BaseModel):
     )
     target: str | None = Field(
         default=None,
-        description="The primary target of the action (item, entity, or location)",
+        description="The primary target of the action (item, entity, or location). "
+        "For CUSTOM queries ABOUT an entity (e.g., 'where is she?'), set this to the "
+        "resolved entity the query is about.",
     )
     indirect_target: str | None = Field(
         default=None,
@@ -100,11 +102,30 @@ Target Resolution:
 - Use item_key if the target matches an item in the scene
 - Use the player's words if no clear match exists
 
-Pronoun Resolution:
-- Use "Recent Conversation" context to resolve pronouns (she/he/it/they/him/her/them)
-- Match pronouns to the most recently mentioned entity of matching type
-- Example: If GM just mentioned "Ursula", then "she" should resolve to "ursula"
-- If ambiguous (multiple candidates), set needs_clarification=true
+Reference Resolution (CRITICAL):
+The context may include a "Reference Resolution Guide" section with pre-computed mappings.
+Use this to resolve references accurately.
+
+1. PRONOUNS (she/he/it/they/him/her/them):
+   - Match to the most recently mentioned entity of matching gender
+   - Example: GM mentioned "Ursula" (female) → "she" = "ursula"
+
+2. ANAPHORIC REFERENCES (the other one, the first, the second):
+   - Use the Reference Resolution Guide if available
+   - "the other one" typically refers to the contrasting entity in a pair
+   - Example: "Two guys - one singing, one playing guitar" → "the other one" = the guitar player
+
+3. DESCRIPTIVE REFERENCES (the tall merchant, the singing guy):
+   - Match descriptors to entity attributes from Entity Mentions
+   - Example: Entity has descriptor "singing" → "the singing guy" matches
+
+IMPORTANT - Always set `target` to the resolved entity:
+- For actions: "attack her" → target="ursula"
+- For CUSTOM queries: "where is she?" → target="ursula"
+- For anaphoric: "talk to the other one" → target="[reference_id from guide]"
+- If unspawned entity, use the reference_id (system will spawn on demand)
+
+If truly ambiguous (no guide available, multiple candidates), set needs_clarification=true.
 """
 
 

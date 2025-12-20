@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
     from src.database.models.session import GameSession
 
+from src.managers.discourse_manager import DiscourseManager
+
 
 # Maximum actions per turn (soft limit with friendly message)
 MAX_ACTIONS_PER_TURN = 5
@@ -100,20 +102,44 @@ def _build_scene_context(state: GameState) -> SceneContext:
     context.items_present = [i.item_key for i in items]
     context.item_names = {i.item_key: i.display_name for i in items}
 
-    # Get recent GM responses for pronoun resolution
+    # Get recent conversation for pronoun and reference resolution
+    # Increased from 2 turns x 300 chars to 10 turns x 1000 chars
+    # to match the context availability that Claude Code has
     turn_mgr = TurnManager(db, game_session)
-    recent_turns = turn_mgr.get_recent_turns(count=2)
+    recent_turns = turn_mgr.get_recent_turns(count=10)
 
     if recent_turns:
         mentions = []
         for turn in reversed(recent_turns):
+            # Include player input for context continuity
+            if turn.player_input:
+                player_text = turn.player_input[:200]
+                if len(turn.player_input) > 200:
+                    player_text += "..."
+                mentions.append(f"Player: {player_text}")
+
             if turn.gm_response:
-                # Truncate but keep enough for entity mentions
-                text = turn.gm_response[:300]
-                if len(turn.gm_response) > 300:
+                # Increased limit to capture more entity mentions
+                text = turn.gm_response[:1000]
+                if len(turn.gm_response) > 1000:
                     text += "..."
                 mentions.append(f"GM: {text}")
+
         context.recent_mentions = "\n".join(mentions)
+
+    # Add structured entity mentions from DiscourseManager
+    # This provides pre-computed pronoun candidates and entity descriptors
+    try:
+        discourse_mgr = DiscourseManager(db, game_session)
+        discourse_context = discourse_mgr.format_for_classifier()
+        if discourse_context:
+            context.recent_mentions = (
+                context.recent_mentions + "\n\n" + discourse_context
+                if context.recent_mentions
+                else discourse_context
+            )
+    except Exception:
+        pass  # Non-fatal - classifier can still work with conversation history
 
     return context
 

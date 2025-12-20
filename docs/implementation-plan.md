@@ -243,6 +243,19 @@
   - Automatic truncation for large sections
   - `for_model()` - model-specific budget configuration
 
+### 2.13 Discourse Management
+- [x] Create `src/managers/discourse_manager.py` - DiscourseManager
+  - `EntityMention` dataclass for tracking mentions with descriptors, gender, groups
+  - `extract_and_store()` - LLM extraction from GM responses
+  - `get_recent_mentions()` - load mentions from recent turns
+  - `get_pronoun_candidates()` - compute pronoun → entity mappings by gender
+  - `resolve_reference()` - resolve pronoun, anaphoric, or descriptive references
+  - `mark_as_spawned()` - update mention when spawned as real entity
+  - `format_for_classifier()` - format structured context for intent classifier
+  - `_resolve_pronoun()` - match she/he/it/they to recent mentions
+  - `_resolve_anaphoric()` - resolve "the other one" via contrast_with links
+  - `_resolve_descriptive()` - match descriptors to entity attributes
+
 ## Phase 3: LLM Integration
 
 ### 3.1 Provider Abstraction

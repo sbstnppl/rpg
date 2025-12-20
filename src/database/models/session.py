@@ -232,6 +232,14 @@ class Turn(Base):
         comment="[{name, description, context, location}] - background NPCs for deferred spawn",
     )
 
+    # Structured entity mentions for discourse-aware reference resolution
+    # Pre-extracted from GM response to enable pronoun/anaphoric resolution
+    mentioned_entities: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="[{reference_id, display_text, descriptors, gender, group_id, contrast_with, spawned_as}]",
+    )
+
     # Chained subturn metadata (hidden from player, for debugging/analytics)
     subturn_metadata: Mapped[dict | None] = mapped_column(
         JSON,

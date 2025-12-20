@@ -19,6 +19,7 @@ from src.managers.goal_manager import GoalManager
 from src.managers.item_manager import ItemManager
 from src.managers.location_manager import LocationManager
 from src.managers.relationship_manager import RelationshipManager
+from src.managers.discourse_manager import DiscourseManager
 
 
 async def persistence_node(state: GameState) -> dict[str, Any]:
@@ -168,6 +169,21 @@ async def _persist_state(
         _create_turn_record(db, game_session, state)
     except Exception as e:
         errors.append(f"Failed to create turn record: {e}")
+
+    # Extract entity mentions for discourse tracking (pronoun/reference resolution)
+    gm_response = state.get("gm_response")
+    turn_number = state.get("turn_number", game_session.total_turns)
+    if gm_response and turn_number:
+        try:
+            from src.llm.factory import get_extraction_provider
+
+            llm_provider = get_extraction_provider()
+            discourse_mgr = DiscourseManager(db, game_session, llm_provider)
+            await discourse_mgr.extract_and_store(gm_response, turn_number)
+        except Exception as e:
+            # Non-fatal - log but don't fail the persistence
+            import logging
+            logging.getLogger(__name__).warning(f"Discourse extraction failed: {e}")
 
     if errors:
         return {"errors": errors}

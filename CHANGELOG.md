@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Discourse-Aware Reference Resolution** - Comprehensive system for pronoun and anaphoric reference resolution
+  - New `DiscourseManager` class extracts entity mentions from GM responses using LLM (`src/managers/discourse_manager.py`)
+  - Tracks mentions with descriptors, gender, groups, and contrast relationships
+  - Resolves pronouns ("she" → Ursula), anaphoric references ("the other one" → guitar player)
+  - Pre-computes pronoun candidates by gender for classifier context
+  - Just-in-time entity spawning when player references unspawned mentions
+  - New `mentioned_entities` JSON column on Turn model for structured tracking
+  - Enhanced classifier context: 10 turns × 1000 chars (was 2 × 300)
+  - Key files: `src/managers/discourse_manager.py`, `src/agents/nodes/subturn_processor_node.py`
+
 ### Fixed
 - **Pronoun Conversion Breaking NPC References** - Fix "about her" (mother) becoming "about your"
   - Removed aggressive `his/her` → `your` replacement in `_convert_to_second_person()`

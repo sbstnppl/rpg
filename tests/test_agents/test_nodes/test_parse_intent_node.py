@@ -1,11 +1,19 @@
 """Tests for parse_intent_node and pronoun resolution context building."""
 
+from unittest.mock import AsyncMock, MagicMock
+import pytest
 from sqlalchemy.orm import Session
 
 from src.agents.nodes.parse_intent_node import _build_scene_context
 from src.database.models.session import GameSession, Turn
 from src.parser.intent_parser import SceneContext
-from src.parser.llm_classifier import _build_classifier_prompt
+from src.parser.action_types import ActionType
+from src.parser.llm_classifier import (
+    _build_classifier_prompt,
+    classify_intent,
+    ClassificationResult,
+    ClassifiedAction,
+)
 
 
 class TestBuildClassifierPrompt:
@@ -122,8 +130,8 @@ class TestBuildSceneContext:
         self, db_session: Session, game_session: GameSession
     ):
         """Long GM responses should be truncated with ellipsis."""
-        # Create turn with very long response
-        long_response = "A" * 500  # 500 chars
+        # Create turn with very long response (> 1000 chars to trigger truncation)
+        long_response = "A" * 1500  # 1500 chars, above 1000 limit
         turn = Turn(
             session_id=game_session.id,
             turn_number=1,
@@ -141,8 +149,9 @@ class TestBuildSceneContext:
 
         context = _build_scene_context(state)
 
-        # Should be truncated to ~300 chars + "..."
-        assert len(context.recent_mentions) < 350
+        # Should be truncated to ~1000 chars for GM + ~200 for player + prefixes + "..."
+        # Total should be < 1300 chars (not the full 1500)
+        assert len(context.recent_mentions) < 1300
         assert context.recent_mentions.endswith("...")
 
     def test_handles_empty_location(
@@ -160,3 +169,111 @@ class TestBuildSceneContext:
         # Should return empty lists, not None
         assert context.entities_present == []
         assert context.items_present == []
+
+
+class TestPronounResolutionPassthrough:
+    """Test that resolved pronouns are passed through to planner."""
+
+    @pytest.mark.asyncio
+    async def test_resolved_target_passed_for_custom_query(self):
+        """When classifier resolves pronoun for CUSTOM query, resolved_target should be in params."""
+        # Mock the LLM provider
+        mock_provider = MagicMock()
+        mock_response = MagicMock()
+        mock_response.parsed_content = ClassificationResult(
+            actions=[
+                ClassifiedAction(
+                    action_type="custom",
+                    target="ursula",  # Classifier resolved "she" to "ursula"
+                )
+            ]
+        )
+        mock_provider.complete_structured = AsyncMock(return_value=mock_response)
+
+        # Create context with Ursula mentioned in recent conversation
+        context = SceneContext(
+            location_key="farm",
+            entities_present=["ursula"],
+            entity_names={"ursula": "Ursula"},
+            recent_mentions="GM: Ursula waves at you from the field.",
+        )
+
+        # Classify the query
+        result = await classify_intent(
+            text="Where is she?",
+            context=context,
+            provider=mock_provider,
+        )
+
+        # Verify resolved_target is passed through
+        assert len(result.actions) == 1
+        action = result.actions[0]
+        assert action.type == ActionType.CUSTOM
+        assert action.target == "ursula"
+        assert action.parameters.get("resolved_target") == "ursula"
+        assert "Where is she?" in action.parameters.get("raw_input", "")
+
+    @pytest.mark.asyncio
+    async def test_no_resolved_target_when_no_pronoun(self):
+        """When classifier has no pronoun to resolve, resolved_target should not be set."""
+        mock_provider = MagicMock()
+        mock_response = MagicMock()
+        mock_response.parsed_content = ClassificationResult(
+            actions=[
+                ClassifiedAction(
+                    action_type="custom",
+                    target=None,  # No pronoun to resolve
+                )
+            ]
+        )
+        mock_provider.complete_structured = AsyncMock(return_value=mock_response)
+
+        context = SceneContext(location_key="farm")
+
+        result = await classify_intent(
+            text="Am I hungry?",
+            context=context,
+            provider=mock_provider,
+        )
+
+        assert len(result.actions) == 1
+        action = result.actions[0]
+        assert action.type == ActionType.CUSTOM
+        # resolved_target should NOT be set
+        assert "resolved_target" not in action.parameters
+        assert action.parameters.get("raw_input") == "Am I hungry?"
+
+    @pytest.mark.asyncio
+    async def test_resolved_target_for_action_with_pronoun(self):
+        """For regular actions (not CUSTOM), resolved pronoun should be in target."""
+        mock_provider = MagicMock()
+        mock_response = MagicMock()
+        mock_response.parsed_content = ClassificationResult(
+            actions=[
+                ClassifiedAction(
+                    action_type="talk",
+                    target="ursula",  # Resolved from "her"
+                )
+            ]
+        )
+        mock_provider.complete_structured = AsyncMock(return_value=mock_response)
+
+        context = SceneContext(
+            location_key="farm",
+            entities_present=["ursula"],
+            entity_names={"ursula": "Ursula"},
+            recent_mentions="GM: Ursula is standing nearby.",
+        )
+
+        result = await classify_intent(
+            text="Talk to her",
+            context=context,
+            provider=mock_provider,
+        )
+
+        assert len(result.actions) == 1
+        action = result.actions[0]
+        assert action.type == ActionType.TALK
+        assert action.target == "ursula"
+        # For non-CUSTOM actions, resolved_target is not separately tracked
+        # (the target field already contains the resolved value)
