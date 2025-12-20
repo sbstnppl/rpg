@@ -100,9 +100,9 @@ def _convert_to_second_person(fact: str) -> str:
     cleaned = re.sub(r"\bhimself\b", "yourself", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bherself\b", "yourself", cleaned, flags=re.IGNORECASE)
 
-    # Replace object pronouns
-    cleaned = re.sub(r"\bthem\b", "you", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\bhim\b", "you", cleaned, flags=re.IGNORECASE)
+    # NOTE: Object pronouns (him/her/them) are NOT replaced because they
+    # typically refer to OTHER entities, not the player. "find him" refers
+    # to an NPC, not the player.
 
     # Capitalize first letter
     if cleaned:

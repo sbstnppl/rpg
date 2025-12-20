@@ -164,6 +164,9 @@ class DynamicActionPlanner:
         # Get raw input from action
         raw_input = action.parameters.get("raw_input", str(action))
 
+        # Proactively generate occupation-implied NPCs if player is asking about them
+        self._ensure_occupation_npcs(raw_input, actor, actor_location)
+
         # Gather current state (comprehensive, with visibility filtering)
         current_state = self._gather_relevant_state(actor, actor_location)
 
@@ -228,6 +231,187 @@ class DynamicActionPlanner:
         except Exception as e:
             logger.error(f"Error generating plan for '{raw_input}': {e}")
             return self._fallback_plan(raw_input)
+
+    def _ensure_occupation_npcs(
+        self,
+        raw_input: str,
+        actor: Entity,
+        actor_location: str | int | None,
+    ) -> None:
+        """Proactively generate occupation-implied NPCs if player asks about them.
+
+        When a player asks "Who is my employer?" and they have an occupation
+        that implies an employer (apprentice, servant, worker), this generates
+        that NPC before the query is processed.
+
+        Args:
+            raw_input: Player's query text.
+            actor: Player entity.
+            actor_location: Current location key.
+        """
+        # Keywords that imply occupation-related NPCs
+        OCCUPATION_KEYWORDS = {
+            "employer": ["apprentice", "servant", "worker", "employee", "assistant"],
+            "master": ["apprentice"],
+            "boss": ["worker", "employee", "assistant"],
+            "household": ["apprentice", "servant"],
+            "family": ["apprentice", "servant"],  # employer's family
+        }
+
+        if not actor.occupation:
+            return
+
+        occupation_lower = actor.occupation.lower()
+        query_lower = raw_input.lower()
+
+        # Check if query mentions any occupation-implied NPC role
+        for keyword, occupations in OCCUPATION_KEYWORDS.items():
+            if keyword not in query_lower:
+                continue
+
+            # Check if player's occupation implies this NPC should exist
+            occupation_matches = any(
+                occ in occupation_lower for occ in occupations
+            )
+            if not occupation_matches:
+                continue
+
+            # Check if this NPC already exists
+            existing = self._find_occupation_npc(actor, keyword)
+            if existing:
+                logger.debug(f"Occupation NPC '{keyword}' already exists: {existing.display_name}")
+                continue
+
+            # Generate the NPC
+            logger.info(
+                f"Generating occupation-implied NPC '{keyword}' for occupation '{actor.occupation}'"
+            )
+            self._generate_occupation_npc(actor, keyword, actor_location)
+
+    def _find_occupation_npc(self, actor: Entity, role: str) -> Entity | None:
+        """Find existing NPC with relationship role matching occupation.
+
+        Args:
+            actor: Player entity.
+            role: Role keyword (employer, master, etc.).
+
+        Returns:
+            Entity if found, None otherwise.
+        """
+        from src.managers.relationship_manager import RelationshipManager
+
+        relationship_manager = RelationshipManager(self.db, self.game_session)
+
+        # Check for NPCs with relationship roles matching the keyword
+        relationships = relationship_manager.get_relationships_from(actor.id)
+
+        for rel in relationships:
+            # Check if role description matches
+            role_desc = (rel.role_description or "").lower()
+            if role in role_desc:
+                return self.entity_manager.get_entity_by_id(rel.to_entity_id)
+
+        # Also check reverse relationships (employer TO player)
+        relationships_to = relationship_manager.get_relationships_to(actor.id)
+        for rel in relationships_to:
+            role_desc = (rel.role_description or "").lower()
+            if role in role_desc or "employer" in role_desc:
+                return self.entity_manager.get_entity_by_id(rel.from_entity_id)
+
+        return None
+
+    def _generate_occupation_npc(
+        self,
+        actor: Entity,
+        role: str,
+        location_key: str | int | None,
+    ) -> Entity | None:
+        """Generate an NPC implied by the player's occupation.
+
+        Args:
+            actor: Player entity.
+            role: Role of NPC to generate (employer, master, etc.).
+            location_key: Location for the NPC.
+
+        Returns:
+            Generated Entity or None if generation fails.
+        """
+        from src.services.emergent_npc_generator import EmergentNPCGenerator, SceneContext
+
+        try:
+            npc_generator = EmergentNPCGenerator(self.db, self.game_session)
+
+            # Infer NPC details from player's occupation
+            occupation = actor.occupation or "worker"
+
+            # Build context
+            if "farm" in occupation.lower():
+                npc_role = "farmer"
+                context_desc = f"The master of a farm where {actor.display_name} works as an {occupation}"
+            elif "smith" in occupation.lower():
+                npc_role = "blacksmith"
+                context_desc = f"A master blacksmith who trains {actor.display_name}"
+            elif "shop" in occupation.lower() or "merchant" in occupation.lower():
+                npc_role = "merchant"
+                context_desc = f"A merchant who employs {actor.display_name}"
+            else:
+                npc_role = "employer"
+                context_desc = f"The employer of {actor.display_name}, a {occupation}"
+
+            # Create scene context
+            scene_context = SceneContext(
+                location_key=str(location_key) if location_key else "unknown",
+                location_name="the workplace",
+                time_of_day="day",
+                weather="clear",
+                ambient_mood="calm",
+                recent_events=[],
+                present_npcs=[],
+                player_state={
+                    "name": actor.display_name,
+                    "occupation": occupation,
+                },
+            )
+
+            # Generate the NPC
+            npc_state = npc_generator.create_npc(
+                role=npc_role,
+                location_key=str(location_key) if location_key else "unknown",
+                scene_context=scene_context,
+            )
+
+            # Create relationship: NPC is employer of player
+            from src.managers.relationship_manager import RelationshipManager
+
+            relationship_manager = RelationshipManager(self.db, self.game_session)
+
+            # Get the generated entity
+            npc_entity = self.entity_manager.get_entity(npc_state.entity_key)
+            if npc_entity:
+                # Create bidirectional employer-employee relationship
+                relationship_manager.create_relationship(
+                    from_id=npc_entity.id,
+                    to_id=actor.id,
+                    role_description=f"employer of {actor.display_name}",
+                )
+                relationship_manager.create_relationship(
+                    from_id=actor.id,
+                    to_id=npc_entity.id,
+                    role_description=f"works for {npc_state.display_name}",
+                )
+
+                self.db.commit()
+
+                logger.info(
+                    f"Generated occupation NPC '{npc_state.display_name}' as {role} for {actor.display_name}"
+                )
+                return npc_entity
+
+        except Exception as e:
+            logger.error(f"Failed to generate occupation NPC: {e}")
+            self.db.rollback()
+
+        return None
 
     def _gather_relevant_state(
         self, actor: Entity, actor_location: str | int | None = None
