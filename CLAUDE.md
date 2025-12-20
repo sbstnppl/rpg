@@ -42,6 +42,18 @@ An agentic console-based RPG using LangGraph for multi-agent orchestration. The 
 - **Typer + Rich** - CLI
 - **Anthropic + OpenAI** - Dual LLM support
 
+## Project Statistics
+
+| Category | Count |
+|----------|-------|
+| **Test Functions** | 3,186 across 134 test files |
+| **Manager Classes** | 52 specialized managers in `src/managers/` |
+| **Agent Nodes** | 18 LangGraph nodes in `src/agents/nodes/` |
+| **Database Models** | 29 model files in `src/database/models/` |
+| **CLI Commands** | 6 command modules in `src/cli/commands/` |
+
+*Update these counts when adding significant new components.*
+
 ## Database Access
 
 **Before any database work, read `.claude/docs/database-reference.md`** for connection details and table schemas.
@@ -161,7 +173,7 @@ tests/
 
 ### Commands
 ```bash
-# Run all tests (2306 tests, ~2 minutes)
+# Run all tests (3186 tests, ~2.5 minutes)
 pytest
 
 # Run specific test file
@@ -186,33 +198,47 @@ def test_something(db_session, game_session):
 
 ## Documentation Requirements
 
-**MANDATORY**: Documentation MUST be updated after any changes, feature implementations, bug fixes, or refactoring. The documentation MUST always reflect the current project and implementation status.
+**CRITICAL**: Documentation MUST be updated in the **SAME COMMIT** as code changes. This is not optional - undocumented changes create technical debt.
 
-### After Every Change, Update:
+### The /commit Command (RECOMMENDED)
 
-1. **`CHANGELOG.md`** - Add entry under `[Unreleased]` section (Added/Changed/Fixed/Removed)
-2. **`docs/implementation-plan.md`** - Mark completed items with `[x]`, add new methods/features to the appropriate section
-3. **Code docstrings** - All public methods MUST have Google-style docstrings with Args, Returns, and Raises sections
-4. **`docs/architecture.md`** - Update if architectural changes are made (new managers, agents, patterns)
-5. **`CLAUDE.md`** - Update if new patterns, conventions, or workflows are established
+Use the `/commit` slash command to automatically handle documentation. It will:
+1. Analyze your code changes
+2. Add appropriate CHANGELOG.md entries
+3. Update implementation-plan.md for new features
+4. Update architecture.md for new patterns
+5. Stage documentation and code together
+6. Create a properly formatted commit
 
-### Documentation Checklist (run after implementation):
-- [ ] CHANGELOG.md updated with new entry
-- [ ] Implementation plan updated with completed items
-- [ ] New methods have docstrings
-- [ ] Test count updated if significantly changed
-- [ ] Architecture doc updated (if applicable)
-- [ ] Commit message describes changes clearly
+This ensures documentation is never forgotten.
+
+### Manual Documentation Checklist
+
+If not using `/commit`, update these files manually:
+
+| Commit Type | CHANGELOG.md | implementation-plan.md | architecture.md |
+|-------------|--------------|------------------------|-----------------|
+| `feat:` | ✓ Add to `### Added` | ✓ Add new items | ✓ If new pattern |
+| `fix:` | ✓ Add to `### Fixed` | - | - |
+| `refactor:` | Optional `### Changed` | - | ✓ If pattern changes |
+| `docs:` | - | - | - |
+| `test:` | - | - | - |
+
+### Documentation Quality Standards
+
+1. **Be specific**: "Add SnapshotManager for session state capture" not "Add new manager"
+2. **Include file paths**: Reference key files in changelog entries
+3. **Update counts**: Keep Project Statistics section current
+4. **Add docstrings**: All public methods need Google-style docstrings
 
 ### Key Documentation Files:
 | File | Update When |
 |------|-------------|
-| `CHANGELOG.md` | **Every change** - Add entry under [Unreleased] section |
-| `docs/implementation-plan.md` | Any feature completion, new methods added |
-| `docs/architecture.md` | New components, patterns, or system changes |
+| `CHANGELOG.md` | **Every feat/fix** - Entry under [Unreleased] |
+| `docs/implementation-plan.md` | New features, phases, test count changes |
+| `docs/architecture.md` | New managers, agents, pipelines, patterns |
+| `CLAUDE.md` | New conventions, updated statistics |
 | `docs/user-guide.md` | New CLI commands, user-facing features |
-| `.claude/docs/coding-standards.md` | New coding conventions established |
-| `.claude/docs/database-conventions.md` | New DB patterns or model conventions |
 
 ## Common Tasks
 

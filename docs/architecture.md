@@ -151,6 +151,30 @@ The following agents are used in the **Legacy Pipeline**. The System-Authority p
 - guard: swordfighting, intimidation, perception + sword, shield
 - scholar: arcana, history, investigation + books, writing_kit
 
+### NPC Extraction Pipeline
+**Purpose**: Intelligently extract and spawn NPCs from narrative text
+
+**Flow**:
+1. `NPCExtractor` analyzes narrative for NPC mentions
+2. Classifies each NPC by importance level
+3. `ComplicationOracle.evaluate_npc_spawn()` decides spawn vs defer
+4. Critical/supporting NPCs spawn immediately via `EmergentNPCGenerator`
+5. Background NPCs stored in `Turn.mentioned_npcs` for on-demand spawning
+6. Player references trigger spawn from deferred pool
+
+**Importance Levels**:
+| Level | Description | Action |
+|-------|-------------|--------|
+| CRITICAL | Named characters integral to story | Spawn immediately |
+| SUPPORTING | Characters with speaking roles | Spawn immediately |
+| BACKGROUND | Unnamed crowd members, workers | Defer to mentioned_npcs |
+| REFERENCE | Historical/absent figures | Track as facts only |
+
+**Key Classes**:
+- `NPCExtractor` (`src/narrator/npc_extractor.py`) - LLM-based classification
+- `ExtractedNPC` - Pydantic model with name, occupation, importance, description
+- `TurnManager` - Stores/retrieves deferred NPCs
+
 ### CombatResolver
 **Purpose**: Handle tactical combat
 
@@ -498,7 +522,30 @@ class RelationshipManager:
 
 class ContextCompiler:
     def compile_scene(player_id: int, location: str, turn: int) -> SceneContext
+
+class SnapshotManager:
+    def create_snapshot(turn_number: int) -> SessionSnapshot  # Capture all tables
+    def restore_snapshot(turn_number: int) -> bool  # Restore session state
+    def list_snapshots() -> list[SessionSnapshot]  # Available restore points
+    def delete_snapshots_after(turn_number: int)  # Clean up after reset
 ```
+
+### SnapshotManager
+**Purpose**: Capture and restore complete session state for game save/reset functionality
+
+**Captured Tables**:
+- entities, entity_attributes, entity_skills, npc_extensions
+- items, storage_locations
+- locations, terrain_zones, zone_connections
+- relationships, relationship_changes
+- character_needs, vital_states, memories, preferences
+- facts, tasks, time_states
+- All session-scoped data
+
+**Use Cases**:
+- `game history` - View turn history with player inputs and GM responses
+- `game reset` - Restore session to any previous turn state
+- Debug/testing - Replay specific game states
 
 ## LLM Provider Abstraction
 

@@ -103,6 +103,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - "What did I eat for breakfast?" finds actual EAT actions from history
   - Falls back to establishing reasonable defaults if no history found
 
+- **Game History & Reset System** - Complete session state management with snapshots
+  - New `game history` command shows turn history in table/panel format
+  - New `game reset` command restores session to any previous turn state
+  - New `SnapshotManager` class (`src/managers/snapshot_manager.py`) for state capture
+  - Session snapshots capture all tables at each turn for full restoration
+  - Database migration for snapshot tables (`session_snapshots`, `snapshot_data`)
+
+- **NPC Extraction & Deferred Spawning** - Dynamic NPC generation from narrative
+  - New `NPCExtractor` class (`src/narrator/npc_extractor.py`) classifies NPCs by importance
+  - Importance levels: CRITICAL, SUPPORTING, BACKGROUND, REFERENCE
+  - Named/critical NPCs spawn immediately with full `EmergentNPCGenerator`
+  - Background NPCs defer to `Turn.mentioned_npcs` for on-demand activation
+  - `ComplicationOracle.evaluate_npc_spawn()` makes intelligent spawn/defer decisions
+  - Mirrors item extraction pattern for consistent entity handling
+
+- **Subturn Processor** - Handles chained multi-action turns with interrupt support
+  - New `SubturnProcessor` class (`src/executor/subturn_processor.py`)
+  - Processes action chains within single turn
+  - Interrupt handling for failed actions (stops chain, reports partial completion)
+  - Supports multi-step player commands like "go to X and talk to Y"
+
 ### Changed
 - **Narrative Validator Redesign** - Complete rewrite using LLM-based detection
   - Replaced regex-based item detection with LLM extraction (no more false positives)
@@ -116,6 +137,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Narrator now only mentions items that appear in mechanical facts
 
 ### Fixed
+- **Pronoun Handling in INFO Mode** - Correct pronoun usage for character gender
+  - INFO mode responses now use correct pronouns (he/she/they) based on character data
+  - Fixed inconsistent pronoun usage in concise responses
+
+- **Occupation NPC Generation** - Improved occupation-based attribute inference
+  - NPC attributes now correctly reflect occupation modifiers
+  - Fixed attribute calculation for occupation years and lifestyle tags
+
 - **StateIntegrityValidator Type Error** - Fixed crash when auto-fixing orphaned items
   - `_check_item_ownership()` tried to set `storage_location_id = "unknown"` (a string)
   - But `storage_location_id` is an integer foreign key, causing `InvalidTextRepresentation` error

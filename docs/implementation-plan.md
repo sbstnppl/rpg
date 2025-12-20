@@ -443,7 +443,7 @@
 ## Phase 7: Polish & Testing
 
 ### 7.1 Tests
-- [x] Test database models (2306 tests total)
+- [x] Test database models (3186 tests total)
 - [x] Test managers
 - [x] Test agent tools
 - [x] Integration tests
@@ -1779,9 +1779,59 @@ ENCUMBRANCE_EFFECTS = {
 
 ---
 
-## Phase 16: Future Considerations
+## Phase 17: Session Management & History [COMPLETE]
 
-### 16.1 Potential Additions (Not Planned)
+### 17.1 Snapshot System
+- [x] Create `src/database/models/snapshots.py` - Snapshot tables
+  - `SessionSnapshot` - Snapshot metadata (turn number, created_at)
+  - `SnapshotData` - JSON blobs of table data per snapshot
+- [x] Create `src/managers/snapshot_manager.py` - SnapshotManager class
+  - `create_snapshot(turn_number)` - Capture full session state (all tables)
+  - `restore_snapshot(turn_number)` - Restore session to previous state
+  - `list_snapshots()` - Get available restore points
+  - `delete_snapshots_after(turn_number)` - Clean up future snapshots after reset
+- [x] Database migration for snapshot tables
+
+### 17.2 History Commands
+- [x] Add `game history` CLI command - Display turn history
+  - Table format with turn number, player input, truncated response
+  - Panel format with full response text
+  - Filter options (last N turns, search text)
+- [x] Add `game reset` CLI command - Restore to previous turn
+  - Interactive turn selection with preview
+  - Full state restoration from snapshot
+  - Cleans up turns after reset point
+
+---
+
+## Phase 18: NPC Extraction System [COMPLETE]
+
+### 18.1 NPC Extractor
+- [x] Create `src/narrator/npc_extractor.py` - NPCExtractor class
+  - LLM-based NPC importance classification using Claude Haiku
+  - `extract()` method returns list of `ExtractedNPC` objects
+  - Importance levels: CRITICAL, SUPPORTING, BACKGROUND, REFERENCE
+  - Extracts name, occupation, description, relationships from narrative
+
+### 18.2 Deferred NPC Spawning
+- [x] Add `Turn.mentioned_npcs` field for deferred NPC storage
+- [x] Named/critical NPCs spawn immediately with `EmergentNPCGenerator`
+- [x] Background NPCs defer to `mentioned_npcs` for on-demand activation
+- [x] `ComplicationOracle.evaluate_npc_spawn()` makes spawn/defer decisions
+- [x] Player reference triggers spawn from deferred pool
+
+### 18.3 Subturn Processing
+- [x] Create `src/executor/subturn_processor.py` - SubturnProcessor class
+  - Handle multi-action turns (e.g., "go to X and talk to Y")
+  - `process_subturns()` executes action chain
+  - Interrupt handling for failed actions (stops chain, reports partial completion)
+  - State rollback on critical failures
+
+---
+
+## Phase 19: Future Considerations
+
+### 19.1 Potential Additions (Not Planned)
 - **Crafting System** - create items from materials
 - **Weather Impact** - weather affects travel, combat, NPC behavior
 - **Disease & Plague** - illness mechanics beyond injury
@@ -1790,7 +1840,7 @@ ENCUMBRANCE_EFFECTS = {
 - **Time Skip Mechanics** - fast-forward through downtime
 - **Multiplayer Support** - multiple player characters
 
-### 16.2 Setting-Specific Modules
+### 19.2 Setting-Specific Modules
 - **Fantasy Module** - full magic, divine intervention, mythical creatures
 - **Sci-Fi Module** - technology, hacking, space travel
 - **Horror Module** - sanity system, supernatural dread
