@@ -730,6 +730,21 @@ class ActionExecutor:
         destination = validation.resolved_target or action.target
         is_new = validation.metadata.get("new_location", False)
 
+        # Handle missing destination - EXIT without target means "leave"
+        if not destination:
+            # No specific destination - just record leaving current location
+            old_location = self._get_actor_location(actor)
+            return ExecutionResult(
+                action=action,
+                success=True,
+                outcome=f"Left {old_location}" if old_location else "Left the area",
+                state_changes=[],  # Don't generate misleading "Location: X -> None"
+                metadata={
+                    "from_location": old_location,
+                    "to_location": None,
+                },
+            )
+
         old_location = self._get_actor_location(actor)
         # Update stored location (for players, this is tracked in state)
         self._actor_location = destination

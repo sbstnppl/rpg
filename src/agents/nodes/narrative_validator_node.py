@@ -335,12 +335,31 @@ async def _handle_hallucinated_items(
 
     # Handle plot hooks that require re-narration
     if plot_hook_missing:
-        return await _handle_plot_hook_missing(
+        result = await _handle_plot_hook_missing(
             plot_hook_missing,
             validator,
             retry_count,
             new_facts,
         )
+        # Check if this is a fallback to normal spawn
+        if result.get("plot_hook_fallback_items"):
+            # Add fallback items to spawn list instead of failing
+            logger.info(
+                "Falling back to normal spawn for: %s",
+                [h.item_name for h in result["plot_hook_fallback_items"]],
+            )
+            for hook in result["plot_hook_fallback_items"]:
+                items_to_spawn.append(
+                    ExtractedItem(
+                        name=hook.item_name,
+                        importance=ItemImportance.IMPORTANT,
+                        context=hook.plot_hook_description or "Fallback spawn",
+                        is_new=True,
+                    )
+                )
+            # Continue with normal spawn flow below
+        else:
+            return result
 
     # Handle relocated items - spawn at alternate locations
     newly_spawned = list(spawned_items)
@@ -492,20 +511,19 @@ async def _handle_plot_hook_missing(
         State update dict with re-narration signal.
     """
     if retry_count >= MAX_RETRY_COUNT:
-        logger.error(
-            "Max re-narration attempts exceeded for plot hooks: %s",
+        logger.warning(
+            "Max re-narration attempts exceeded for plot hooks: %s. "
+            "Falling back to normal spawn.",
             [h.item_name for h in plot_hooks],
         )
+        # Return success with fallback signal - items will be spawned normally
         return {
             "narrative_validation_result": {
-                "is_valid": False,
+                "is_valid": True,  # Mark valid so flow continues
                 "max_retries_exceeded": True,
-                "plot_hooks": [h.to_dict() for h in plot_hooks],
+                "fallback_to_spawn": True,
             },
-            "errors": [
-                f"Narrative validation failed after {MAX_RETRY_COUNT} retries. "
-                f"Could not incorporate plot hooks for: {[h.item_name for h in plot_hooks]}"
-            ],
+            "plot_hook_fallback_items": plot_hooks,
         }
 
     # Build constraint prompt for re-narration

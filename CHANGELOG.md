@@ -48,6 +48,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Returns `None` if snapshot already exists for turn, avoiding duplicate key error
   - Key file: `src/managers/snapshot_manager.py`
 
+- **Item Orphaning on Drop** - Items dropped by entities are now properly stored
+  - Executor now uses `ItemManager.drop_item()` instead of manual DB updates
+  - Fixed pre-existing bug: `ItemManager.drop_item()` referenced non-existent column
+  - Items now get a proper `storage_location_id` pointing to a PLACE StorageLocation
+  - Key files: `src/agents/tools/executor.py`, `src/managers/item_manager.py`
+
+- **Plot Hook Crash on Max Retries** - Graceful fallback instead of game crash
+  - When narrator can't incorporate plot hooks after 2 retries, items now spawn normally
+  - Changed from error return to warning + fallback signal
+  - Key file: `src/agents/nodes/narrative_validator_node.py`
+
+- **Sleepiness Display Confusion** - Renamed to "Restfulness" with intuitive semantics
+  - Display now shows "Restfulness" (high=good) instead of "Sleepiness" (inverted)
+  - Thresholds: delirious < exhausted < tired < alert < well-rested
+  - Key files: `src/cli/commands/character.py`, `src/cli/display.py`
+
+- **Movement Pattern Not Matching "head out to"** - Extended regex pattern
+  - Added optional "out" and "over" to movement pattern
+  - Now matches "head out to the farm", "go over to the well", etc.
+  - Key file: `src/parser/patterns.py`
+
+- **"Moved to None" Errors** - Defensive handling for null destination
+  - Action executor now handles null destination gracefully
+  - Returns "Left the area" instead of crashing
+  - Key file: `src/executor/action_executor.py`
+
 ### Added
 - **Location Inhabitants Query** - Answer "Who works/lives here?" with habitual residents
   - New `get_location_inhabitants()` method in EntityManager queries NPCs by workplace/home_location

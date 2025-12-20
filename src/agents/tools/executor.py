@@ -1523,10 +1523,17 @@ class GMToolExecutor:
                 "message": f"{entity.display_name} gave {item.display_name} to {target.display_name}",
             }
         else:
-            # Drop on ground
-            item.holder_id = None
-            item.body_slot = None
-            self.db.flush()
+            # Drop on ground at current location
+            if self.current_zone_key is None:
+                return {
+                    "success": False,
+                    "error": "Cannot drop item - current location unknown",
+                }
+
+            try:
+                item_mgr.drop_item(item_key, self.current_zone_key)
+            except ValueError as e:
+                return {"success": False, "error": str(e)}
 
             return {
                 "success": True,
@@ -1534,6 +1541,7 @@ class GMToolExecutor:
                 "display_name": item.display_name,
                 "from_entity": entity_key,
                 "dropped": True,
+                "location": self.current_zone_key,
                 "message": f"{entity.display_name} dropped {item.display_name}",
             }
 

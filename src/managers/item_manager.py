@@ -369,28 +369,28 @@ class ItemManager(BaseManager):
         item.body_slot = None
         item.body_layer = 0
 
-        # Update or create storage location
+        # Find or create a storage location for this place
         storage = (
             self.db.query(StorageLocation)
             .filter(
                 StorageLocation.session_id == self.session_id,
-                StorageLocation.item_id == item.id,
+                StorageLocation.location_key == location_key,
+                StorageLocation.location_type == StorageLocationType.PLACE,
             )
             .first()
         )
 
-        if storage:
-            storage.location_type = StorageLocationType.PLACE
-            storage.location_key = location_key
-            storage.body_slot = None
-        else:
+        if storage is None:
             storage = StorageLocation(
                 session_id=self.session_id,
-                item_id=item.id,
-                location_type=StorageLocationType.PLACE,
                 location_key=location_key,
+                location_type=StorageLocationType.PLACE,
             )
             self.db.add(storage)
+            self.db.flush()
+
+        # Point the item to this storage location
+        item.storage_location_id = storage.id
 
         self.db.flush()
         return item

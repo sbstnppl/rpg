@@ -539,7 +539,7 @@ def status(
             needs = {
                 "Hunger": int(needs_state.hunger),
                 "Stamina": int(needs_state.stamina),
-                "Sleepiness": int(needs_state.sleep_pressure),
+                "Restfulness": int(100 - needs_state.sleep_pressure),
                 "Hygiene": int(needs_state.hygiene),
                 "Comfort": int(needs_state.comfort),
                 "Wellness": int(needs_state.wellness),

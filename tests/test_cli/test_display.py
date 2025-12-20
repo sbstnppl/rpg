@@ -5,6 +5,7 @@ from rich.text import Text
 
 from src.cli.display import (
     _create_progress_bar,
+    _get_need_description,
     _progress_bar,
     progress_spinner,
     progress_bar,
@@ -127,3 +128,63 @@ class TestProgressBar:
         with progress_bar("Test", total=10) as (progress_obj, task_id):
             for _ in range(10):
                 progress_obj.advance(task_id)
+
+
+class TestGetNeedDescription:
+    """Tests for _get_need_description function - specifically restfulness."""
+
+    def test_restfulness_high_is_well_rested(self):
+        """High restfulness (low sleep pressure) shows well-rested."""
+        desc, color = _get_need_description("restfulness", 95)
+        assert desc == "well-rested"
+        assert color == "green"
+
+    def test_restfulness_low_is_delirious(self):
+        """Very low restfulness (high sleep pressure) shows delirious."""
+        desc, color = _get_need_description("restfulness", 15)
+        assert desc == "delirious"
+        assert color == "red"
+
+    def test_restfulness_exhausted_range(self):
+        """Restfulness 21-40 shows exhausted."""
+        desc, color = _get_need_description("restfulness", 35)
+        assert desc == "exhausted"
+        assert color == "red"
+
+    def test_restfulness_tired_range(self):
+        """Restfulness 41-60 shows tired."""
+        desc, color = _get_need_description("restfulness", 55)
+        assert desc == "tired"
+        assert color == "yellow"
+
+    def test_restfulness_alert_range(self):
+        """Restfulness 61-80 shows alert."""
+        desc, color = _get_need_description("restfulness", 75)
+        assert desc == "alert"
+        assert color == "green"
+
+    def test_restfulness_at_boundary(self):
+        """Test exact boundary values."""
+        # At exactly 20 - should be delirious
+        desc, color = _get_need_description("restfulness", 20)
+        assert desc == "delirious"
+
+        # At exactly 80 - should be alert
+        desc, color = _get_need_description("restfulness", 80)
+        assert desc == "alert"
+
+        # At 100 - should be well-rested
+        desc, color = _get_need_description("restfulness", 100)
+        assert desc == "well-rested"
+
+    def test_hunger_still_works(self):
+        """Verify other needs still work correctly."""
+        # 80 is in the "full" range (green)
+        desc, color = _get_need_description("hunger", 80)
+        assert desc == "full"
+        assert color == "green"
+
+        # 10 is "starving" (red)
+        desc, color = _get_need_description("hunger", 10)
+        assert desc == "starving"
+        assert color == "red"

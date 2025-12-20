@@ -88,8 +88,9 @@ COMMAND_PATTERNS: list[tuple[str, ActionType, list[str]]] = [
 NATURAL_LANGUAGE_PATTERNS: list[tuple[str, ActionType, list[str], float]] = [
     # Movement - high confidence patterns
     # Stop capturing at punctuation or common clause starters like "in order to", "to look", etc.
+    # Handle optional "out" or "over" after the verb (e.g., "head out to", "go over to")
     (
-        r"\b(?:go|walk|head|move|travel|run)\s+(?:to|towards?|into|over\s+to)\s+(?:the\s+)?([^.?!]+?)(?:\s+(?:in\s+order\s+to|to\s+(?:look|find|see|get|search|check)|and\s+|then\s+)|[.?!]|$)",
+        r"\b(?:go|walk|head|move|travel|run)\s+(?:out\s+|over\s+)?(?:to|towards?|into)\s+(?:the\s+)?([^.?!]+?)(?:\s+(?:in\s+order\s+to|to\s+(?:look|find|see|get|search|check|wash|eat|drink)|and\s+|then\s+)|[.?!]|$)",
         ActionType.MOVE,
         ["target"],
         0.9,
