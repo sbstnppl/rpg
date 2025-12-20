@@ -30,18 +30,25 @@ import re
 
 
 def _convert_to_second_person(fact: str) -> str:
-    """Convert a narrator fact from third-person to second-person.
+    """Clean up narrator fact for display.
 
-    Transforms awkward third-person phrasing like:
-    - "Knows their father was imprisoned" -> "You know your father was imprisoned"
-    - "Player's mother is at home" -> "Your mother is at home"
-    - "Their siblings are nearby" -> "Your siblings are nearby"
+    With the planner now generating second-person facts directly ("You recall..."),
+    this function primarily handles edge cases and cleanup:
+    - Removes "Player " prefix if the planner occasionally regresses
+    - Converts verb-leading third-person patterns as fallback
+    - Converts "their" -> "your" (safe for player-centric facts)
+    - Converts "Player's" -> "your"
+
+    IMPORTANT: We do NOT convert "his/her" because these often refer to
+    third parties (NPCs, family members) and converting them breaks grammar.
+    For example: "You haven't heard about her" (mother) should NOT become
+    "You haven't heard about your" (broken).
 
     Args:
         fact: Raw narrator fact string.
 
     Returns:
-        Cleaned fact in second-person voice.
+        Cleaned fact ready for display.
     """
     cleaned = fact.strip()
 
@@ -50,10 +57,9 @@ def _convert_to_second_person(fact: str) -> str:
         cleaned = cleaned[7:]
 
     # Handle verb-leading patterns and convert to "You [verb]..."
+    # This is a fallback for occasional third-person output from the planner
     lower = cleaned.lower()
 
-    # Pattern: "Knows that X" -> "You know X"
-    # Pattern: "Recalls that X" -> "You recall X"
     verb_patterns = [
         (r"^knows\s+(?:that\s+)?", "You know "),
         (r"^recalls?\s+(?:that\s+)?", "You recall "),
@@ -84,25 +90,24 @@ def _convert_to_second_person(fact: str) -> str:
             cleaned = replacement + cleaned[match.end():]
             break
 
-    # Replace possessive pronouns throughout the text
-    # "their father" -> "your father", "his mother" -> "your mother"
+    # Replace safe possessive pronouns only
+    # "their father" -> "your father" (safe - "their" is player-neutral)
     cleaned = re.sub(r"\btheir\b", "your", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\bhis\b", "your", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\bher\b(?!\s+(?:own|self))", "your", cleaned, flags=re.IGNORECASE)  # "her" but not "her own/herself"
+
+    # Replace "Player's" with "your"
     cleaned = re.sub(r"\bPlayer'?s?\b", "your", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bthe player'?s?\b", "your", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\bhis/her\b", "your", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\bhis or her\b", "your", cleaned, flags=re.IGNORECASE)
 
-    # Replace reflexive pronouns
+    # NOTE: We intentionally do NOT replace "his", "her", "him" because
+    # these often refer to third parties (NPCs, family). For example:
+    # - "about her" (mother) should stay, not become "about your"
+    # - "his sword" (NPC's sword) should stay, not become "your sword"
+    # The planner is now instructed to use proper names for third parties.
+
+    # Replace reflexive pronouns when they refer to the player
+    # These are still safe because they're explicitly self-referential
     cleaned = re.sub(r"\bthemselves\b", "yourself", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\bthemself\b", "yourself", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\bhimself\b", "yourself", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\bherself\b", "yourself", cleaned, flags=re.IGNORECASE)
-
-    # NOTE: Object pronouns (him/her/them) are NOT replaced because they
-    # typically refer to OTHER entities, not the player. "find him" refers
-    # to an NPC, not the player.
 
     # Capitalize first letter
     if cleaned:

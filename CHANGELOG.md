@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Pronoun Conversion Breaking NPC References** - Fix "about her" (mother) becoming "about your"
+  - Removed aggressive `his/her` → `your` replacement in `_convert_to_second_person()`
+  - These pronouns often refer to third parties (NPCs, family) and converting breaks grammar
+  - Added NARRATOR FACT VOICE instructions to planner: generate second-person directly
+  - Updated 10+ planner examples to use "You recall..." instead of "Player recalls..."
+  - Key files: `src/agents/nodes/info_formatter_node.py`, `src/planner/prompts.py`
+
+- **Pronoun Resolution Lost Before Planner** - Pass resolved target from classifier to planner
+  - Classifier now includes `resolved_target` in CUSTOM action parameters
+  - Planner appends `[Note: pronoun refers to ursula]` when resolved_target exists
+  - Fixes "where is she?" incorrectly resolving to backstory "mother" instead of recent "Ursula"
+  - Key files: `src/parser/llm_classifier.py`, `src/planner/dynamic_action_planner.py`
+
 - **Pronoun Resolution in Player Input** - Resolve "she/he/it/they" from conversation context
   - Added `recent_mentions` field to SceneContext for conversation history
   - Intent classifier now receives entities, items, and recent GM responses

@@ -241,8 +241,15 @@ async def classify_intent(
     for classified in result.actions:
         action_type = _action_type_from_string(classified.action_type)
 
-        # Include raw_input in parameters for CUSTOM actions so the planner can access it
-        params = {"raw_input": text} if action_type == ActionType.CUSTOM else {}
+        # Include raw_input and resolved_target in parameters for CUSTOM actions
+        # so the planner can use the pronoun-resolved target
+        if action_type == ActionType.CUSTOM:
+            params = {"raw_input": text}
+            # If the classifier resolved a pronoun to a specific target, include it
+            if classified.target:
+                params["resolved_target"] = classified.target
+        else:
+            params = {}
 
         action = Action(
             type=action_type,

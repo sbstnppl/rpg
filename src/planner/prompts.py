@@ -16,6 +16,20 @@ NEVER say "the question is vague" or "who is she?" - always attempt to resolve p
 from context. If truly ambiguous (multiple candidates of same gender), pick the most
 recently mentioned one.
 
+NARRATOR FACT VOICE (CRITICAL):
+When generating narrator_facts, ALWAYS use second-person voice ("you"):
+- CORRECT: "You left home two weeks ago"
+- CORRECT: "You recall that your father is imprisoned"
+- CORRECT: "You are quite hungry"
+- WRONG: "He left home two weeks ago"
+- WRONG: "Player recalls that their father is imprisoned"
+- WRONG: "Player is quite hungry"
+
+For third parties (NPCs, family members), use their proper names or third-person pronouns:
+- CORRECT: "You haven't heard from your mother since leaving Riverbrook"
+- CORRECT: "Your mother's whereabouts are unknown to you"
+- WRONG: "You haven't heard from her since leaving" (ambiguous - who is "her"?)
+
 ACTION TYPES (choose one):
 - state_change: Action that modifies game state (items, world, character)
 - recall: Player is querying knowledge, checking memory, asking about their state or environment
@@ -247,7 +261,7 @@ Current: background mentions "father was imprisoned in Riverbrook"
 Output: {
   "action_type": "recall",
   "state_changes": [],
-  "narrator_facts": ["Player recalls that their father is imprisoned in Riverbrook jail"]
+  "narrator_facts": ["You recall that your father is imprisoned in Riverbrook jail"]
 }
 
 Input: "Am I hungry?"
@@ -255,7 +269,7 @@ Current: character_needs has hunger=25
 Output: {
   "action_type": "recall",
   "state_changes": [],
-  "narrator_facts": ["Player is quite hungry - their stomach growls insistently"]
+  "narrator_facts": ["You are quite hungry - your stomach growls insistently"]
 }
 
 Input: "Do I have a knife?"
@@ -263,7 +277,7 @@ Current: inventory has no knife
 Output: {
   "action_type": "recall",
   "state_changes": [],
-  "narrator_facts": ["Player checks their belongings but finds no knife"]
+  "narrator_facts": ["You check your belongings but find no knife"]
 }
 
 Input: "What is the guard wearing?"
@@ -287,7 +301,7 @@ Current: relationships list does not include innkeeper
 Output: {
   "action_type": "recall",
   "state_changes": [],
-  "narrator_facts": ["Player hasn't really gotten to know the innkeeper yet"]
+  "narrator_facts": ["You haven't really gotten to know the innkeeper yet"]
 }
 
 Input: "Who works at this farm?"
@@ -312,14 +326,14 @@ Output: {
     "old_value": false,
     "new_value": true
   }],
-  "narrator_facts": ["Player's shirt is now buttoned up, lying smooth against their chest"]
+  "narrator_facts": ["Your shirt is now buttoned up, lying smooth against your chest"]
 }
 
 Input: "I scratch my nose"
 Output: {
   "action_type": "narrative_only",
   "state_changes": [],
-  "narrator_facts": ["Player scratched their nose"]
+  "narrator_facts": ["You scratch your nose"]
 }
 
 Input: "I look for a washbasin to clean up"
@@ -339,7 +353,7 @@ Output: {
       "display_name": "Washbasin"
     }
   }],
-  "narrator_facts": ["Player finds a simple washbasin on a wooden stand near the window"]
+  "narrator_facts": ["You find a simple washbasin on a wooden stand near the window"]
 }
 
 Input: "I search for gold coins"
@@ -347,7 +361,7 @@ Current: items_at_location is empty, location is farmhouse_bedroom
 Output: {
   "action_type": "recall",
   "state_changes": [],
-  "narrator_facts": ["Player searches thoroughly but finds no gold or valuables"]
+  "narrator_facts": ["You search thoroughly but find no gold or valuables"]
 }
 
 Input: "Where do I usually wash myself?"
@@ -362,7 +376,7 @@ Output: {
     "old_value": null,
     "new_value": "Finn washes at the well behind the farmhouse, drawing water with a bucket"
   }],
-  "narrator_facts": ["Player recalls that they usually wash at the well behind the farmhouse, drawing water with a bucket"]
+  "narrator_facts": ["You usually wash at the well behind the farmhouse, drawing water with a bucket"]
 }
 
 Input: "Where would I find a bucket?"
@@ -377,7 +391,7 @@ Output: {
     "old_value": null,
     "new_value": "Buckets are usually kept near the well or in the barn"
   }],
-  "narrator_facts": ["Player knows that buckets are usually kept near the well or in the barn"]
+  "narrator_facts": ["You know that buckets are usually kept near the well or in the barn"]
 }
 
 Input: "What color is this shirt?"

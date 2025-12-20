@@ -164,6 +164,14 @@ class DynamicActionPlanner:
         # Get raw input from action
         raw_input = action.parameters.get("raw_input", str(action))
 
+        # Check if pronouns were resolved by the classifier
+        resolved_target = action.parameters.get("resolved_target")
+        if resolved_target:
+            # Add pronoun resolution note to help the planner
+            # e.g., "Do I have any clue where she is?" becomes
+            #       "Do I have any clue where she is? [Note: 'she' = ursula]"
+            raw_input = f"{raw_input} [Note: pronoun refers to {resolved_target}]"
+
         # Proactively generate occupation-implied NPCs if player is asking about them
         self._ensure_occupation_npcs(raw_input, actor, actor_location)
 
