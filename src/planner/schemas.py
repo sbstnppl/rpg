@@ -220,6 +220,10 @@ class RelevantState(BaseModel):
         default_factory=list,
         description="NPCs with VISIBLE info only (appearance, mood, visible equipment)"
     )
+    location_inhabitants: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="NPCs who habitually live/work at this location (known to player after spending time here)"
+    )
     items_at_location: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Items on location surfaces (not in closed containers)"

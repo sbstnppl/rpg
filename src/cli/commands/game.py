@@ -997,6 +997,11 @@ async def _game_loop(
         # RESUME: Show context and last response, skip scene generation
         _display_resume_context(db, player, last_turn, game_session)
         player_location = last_turn.location_at_turn or "starting_location"
+
+        # Sync total_turns with actual turn count (guards against crashes/inconsistencies)
+        if last_turn.turn_number != game_session.total_turns:
+            game_session.total_turns = last_turn.turn_number
+            db.commit()
     else:
         # NEW GAME: Generate initial scene
         game_session.total_turns += 1  # Increment for first turn

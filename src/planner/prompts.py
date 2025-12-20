@@ -55,6 +55,12 @@ The player is asking about something. Use the CURRENT STATE provided to answer:
 7. Location queries ("Have I been here before?")
    -> Check discovered_locations
 
+8. Inhabitant queries ("Who works here?", "Who lives here?", "Who else is at this farm?")
+   -> Check location_inhabitants list FIRST (NPCs who habitually live/work at this location)
+   -> These are people the player KNOWS about because they're regulars at this location
+   -> Also check npcs_present for who's currently visible right now
+   -> Combine both: "Erik the farmhand works here. He's currently in the fields."
+
 FOR PERSONAL/ROUTINE KNOWLEDGE QUERIES:
 When the player asks about something their CHARACTER WOULD DEFINITELY KNOW but isn't in the data:
 - Where they sleep, wash, eat in their own home
@@ -269,6 +275,16 @@ Output: {
   "action_type": "recall",
   "state_changes": [],
   "narrator_facts": ["Player hasn't really gotten to know the innkeeper yet"]
+}
+
+Input: "Who works at this farm?"
+Current: location_inhabitants = [{name: "Ursula", role: "lives here", job: "farmer"},
+                                  {name: "Erik", role: "works here", job: "farmhand"}]
+         npcs_present = [{name: "Ursula", ...}]
+Output: {
+  "action_type": "recall",
+  "state_changes": [],
+  "narrator_facts": ["Ursula the farmer lives here, and Erik works as a farmhand. Ursula is currently in the kitchen."]
 }
 
 Input: "I button up my shirt"
@@ -500,7 +516,8 @@ Discovered Locations: {discovered_locations}
 Relationships (NPCs player has met): {relationships}
 
 CURRENT ENVIRONMENT:
-NPCs Present: {npcs_present}
+NPCs Present (currently here): {npcs_present}
+Location Inhabitants (live/work here): {location_inhabitants}
 Items at Location: {items_at_location}
 Available Exits: {available_exits}
 

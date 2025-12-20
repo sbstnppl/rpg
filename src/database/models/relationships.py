@@ -118,6 +118,11 @@ class Relationship(Base, TimestampMixin):
         nullable=True,
         comment="dating, married, engaged, etc.",
     )
+    relationship_description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Narrative description of current relationship state",
+    )
 
     # History
     first_met_turn: Mapped[int | None] = mapped_column(

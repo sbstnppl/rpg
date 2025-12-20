@@ -8,12 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Turn Counter Sync on Resume** - Sync `total_turns` with actual turn count when resuming
+  - Guards against crashes or inconsistencies leaving turn counter out of sync
+  - Key file: `src/cli/commands/game.py`
+
 - **Snapshot Duplicate Key Error** - Prevent UniqueViolation when resuming game sessions
   - `capture_snapshot()` now checks for existing snapshot before insertion
   - Returns `None` if snapshot already exists for turn, avoiding duplicate key error
   - Key file: `src/managers/snapshot_manager.py`
 
 ### Added
+- **Location Inhabitants Query** - Answer "Who works/lives here?" with habitual residents
+  - New `get_location_inhabitants()` method in EntityManager queries NPCs by workplace/home_location
+  - Walks location hierarchy (farmhouse_kitchen → family_farm) to find relevant NPCs
+  - New query type 8 in planner prompts for inhabitant queries
+  - `location_inhabitants` field added to RelevantState schema
+  - NPCExtension now auto-populates `workplace` and `home_location` on generation
+  - Residential occupations (farmer, innkeeper, etc.) get `home_location` set automatically
+  - Key files: `src/managers/entity_manager.py`, `src/planner/prompts.py`
+
 - **Realism Validation System** - Ensures game mechanics match real-world behavior
   - New `realism-principles.md` with conceptual principles across 4 domains
   - Domain-specific validators: physiology, temporal, social, physics

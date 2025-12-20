@@ -1456,6 +1456,18 @@ class EmergentNPCGenerator:
             OccupationDetails with occupation, skills, typical_items, education,
             background_summary, and wealth_level.
         """
+        # Check if event loop is already running (common in async contexts like LangGraph)
+        try:
+            asyncio.get_running_loop()
+            # Loop is running - use fallback to avoid nested async issues
+            logger.debug("Event loop already running, using occupation fallback")
+            return self._generate_occupation_fallback(
+                role_hint, age, setting, location_key
+            )
+        except RuntimeError:
+            # No running loop - safe to use asyncio.run()
+            pass
+
         try:
             # Run async LLM call in sync context
             return asyncio.run(
@@ -1463,14 +1475,6 @@ class EmergentNPCGenerator:
                     role_hint, setting, location_context, age, gender
                 )
             )
-        except RuntimeError as e:
-            # Handle case where event loop is already running
-            if "cannot be called from a running event loop" in str(e):
-                logger.warning("Event loop already running, using fallback")
-                return self._generate_occupation_fallback(
-                    role_hint, age, setting, location_key
-                )
-            raise
         except Exception as e:
             logger.warning(f"LLM occupation generation failed: {e}, using fallback")
             return self._generate_occupation_fallback(
@@ -2670,14 +2674,29 @@ Generate occupation details that fit naturally in this setting."""
         self.db.flush()
 
         # Create NPC extension
+        # Set workplace to where NPC was generated (their work location)
+        # Set home_location for occupations that typically live on-site
+        generation_location = npc_state.current_state.current_location
+        occupation_lower = npc_state.background.occupation.lower() if npc_state.background.occupation else ""
+
+        # Occupations that typically live at their workplace
+        residential_occupations = {
+            "farmer", "innkeeper", "miller", "blacksmith", "baker",
+            "shepherd", "fisherman", "lighthouse keeper", "hermit",
+            "caretaker", "servant", "cook", "stable hand", "farmhand",
+        }
+        is_residential = any(occ in occupation_lower for occ in residential_occupations)
+
         extension = NPCExtension(
             entity_id=entity.id,
             job=npc_state.background.occupation,
             current_activity=npc_state.current_state.current_activity,
-            current_location=npc_state.current_state.current_location,
+            current_location=generation_location,
             current_mood=npc_state.current_state.mood,
             speech_pattern=npc_state.personality.speech_pattern,
             personality_traits={trait: True for trait in npc_state.personality.traits},
+            workplace=generation_location,  # NPCs are generated at their workplace
+            home_location=generation_location if is_residential else None,
         )
         self.db.add(extension)
 

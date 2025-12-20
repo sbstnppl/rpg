@@ -629,11 +629,11 @@ class EmergentItemGenerator:
         if existing:
             return existing.id
 
-        # Create a new ground storage location
+        # Create a new ground storage location (PLACE type for static world locations)
         storage = StorageLocation(
             session_id=self.session_id,
             location_key=storage_key,
-            location_type=StorageLocationType.GROUND,
+            location_type=StorageLocationType.PLACE,
             world_location_id=location.id,
             is_temporary=False,
         )

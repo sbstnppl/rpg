@@ -282,6 +282,86 @@ class EntityManager(BaseManager):
             query = query.filter(Entity.is_alive == True)
         return query.all()
 
+    def get_location_inhabitants(
+        self, location_key: str, alive_only: bool = True
+    ) -> list[dict]:
+        """Get NPCs who habitually live or work at a location.
+
+        Unlike get_npcs_in_scene which returns NPCs currently present,
+        this returns NPCs whose workplace or home_location matches,
+        regardless of where they are right now.
+
+        Also checks parent locations - if you're in 'farmhouse_kitchen',
+        this will also return NPCs who work at 'family_farm' (the parent).
+
+        Args:
+            location_key: Location to query (e.g., 'family_farm').
+            alive_only: If True, only return living NPCs.
+
+        Returns:
+            List of dicts with NPC info and role (lives_here/works_here).
+        """
+        from sqlalchemy import or_
+        from src.database.models.world import Location
+
+        # Build list of location keys to check (current + parents)
+        location_keys_to_check = [location_key]
+
+        # Get parent location keys (walk up the hierarchy)
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+        while location and location.parent_location_id:
+            parent = (
+                self.db.query(Location)
+                .filter(Location.id == location.parent_location_id)
+                .first()
+            )
+            if parent:
+                location_keys_to_check.append(parent.location_key)
+                location = parent
+            else:
+                break
+
+        query = (
+            self.db.query(Entity)
+            .join(NPCExtension, Entity.id == NPCExtension.entity_id)
+            .filter(
+                Entity.session_id == self.session_id,
+                Entity.entity_type == EntityType.NPC,
+                or_(
+                    NPCExtension.home_location.in_(location_keys_to_check),
+                    NPCExtension.workplace.in_(location_keys_to_check),
+                ),
+            )
+        )
+        if alive_only:
+            query = query.filter(Entity.is_alive == True)
+
+        npcs = query.all()
+
+        result = []
+        for npc in npcs:
+            ext = npc.npc_extension
+            # Determine role - prioritize "lives here" if both match
+            if ext.home_location in location_keys_to_check:
+                role = "lives here"
+            else:
+                role = "works here"
+
+            result.append({
+                "key": npc.entity_key,
+                "name": npc.display_name,
+                "role": role,
+                "job": ext.job,
+            })
+        return result
+
     def update_location(self, entity_key: str, location_key: str) -> Entity:
         """Update entity's current location.
 

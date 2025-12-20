@@ -185,6 +185,7 @@ class DynamicActionPlanner:
             character_memories=json.dumps(current_state.character_memories, indent=2),
             # New environment perception fields
             npcs_present=json.dumps(current_state.npcs_present, indent=2),
+            location_inhabitants=json.dumps(current_state.location_inhabitants, indent=2),
             items_at_location=json.dumps(current_state.items_at_location, indent=2),
             available_exits=json.dumps(current_state.available_exits, indent=2),
             # New knowledge fields
@@ -303,18 +304,18 @@ class DynamicActionPlanner:
         relationship_manager = RelationshipManager(self.db, self.game_session)
 
         # Check for NPCs with relationship roles matching the keyword
-        relationships = relationship_manager.get_relationships_from(actor.id)
+        relationships = relationship_manager.get_relationships_for_entity(actor.id, direction="from")
 
         for rel in relationships:
             # Check if role description matches
-            role_desc = (rel.role_description or "").lower()
+            role_desc = (rel.relationship_description or "").lower()
             if role in role_desc:
                 return self.entity_manager.get_entity_by_id(rel.to_entity_id)
 
         # Also check reverse relationships (employer TO player)
-        relationships_to = relationship_manager.get_relationships_to(actor.id)
+        relationships_to = relationship_manager.get_relationships_for_entity(actor.id, direction="to")
         for rel in relationships_to:
-            role_desc = (rel.role_description or "").lower()
+            role_desc = (rel.relationship_description or "").lower()
             if role in role_desc or "employer" in role_desc:
                 return self.entity_manager.get_entity_by_id(rel.from_entity_id)
 
@@ -361,16 +362,12 @@ class DynamicActionPlanner:
             # Create scene context
             scene_context = SceneContext(
                 location_key=str(location_key) if location_key else "unknown",
-                location_name="the workplace",
+                location_description="the workplace",
                 time_of_day="day",
                 weather="clear",
-                ambient_mood="calm",
-                recent_events=[],
-                present_npcs=[],
-                player_state={
-                    "name": actor.display_name,
-                    "occupation": occupation,
-                },
+                environment=["calm"],
+                entities_present=[],
+                player_visible_state=None,
             )
 
             # Generate the NPC
@@ -389,16 +386,26 @@ class DynamicActionPlanner:
             npc_entity = self.entity_manager.get_entity(npc_state.entity_key)
             if npc_entity:
                 # Create bidirectional employer-employee relationship
-                relationship_manager.create_relationship(
+                rel1 = relationship_manager.get_or_create_relationship(
                     from_id=npc_entity.id,
                     to_id=actor.id,
-                    role_description=f"employer of {actor.display_name}",
                 )
-                relationship_manager.create_relationship(
+                rel1.knows = True
+                rel1.relationship_type = "employer"
+                rel1.relationship_description = f"Employer of {actor.display_name}"
+                rel1.trust = 60
+                rel1.familiarity = 70
+
+                rel2 = relationship_manager.get_or_create_relationship(
                     from_id=actor.id,
                     to_id=npc_entity.id,
-                    role_description=f"works for {npc_state.display_name}",
                 )
+                rel2.knows = True
+                rel2.relationship_type = "employee"
+                rel2.relationship_description = f"Works for {npc_state.display_name}"
+                rel2.trust = 65
+                rel2.respect = 70
+                rel2.familiarity = 70
 
                 self.db.commit()
 
@@ -491,6 +498,7 @@ class DynamicActionPlanner:
         # NEW: Environment perception (visibility-filtered)
         # ===========================================
         npcs_present = self._get_visible_npcs(actor, actor_location)
+        location_inhabitants = self._get_location_inhabitants(actor, actor_location)
         items_at_location = self._get_visible_location_items(actor_location)
         available_exits = self._get_available_exits(actor_location)
 
@@ -517,6 +525,7 @@ class DynamicActionPlanner:
             visible_injuries=visible_injuries,
             character_memories=character_memories,
             npcs_present=npcs_present,
+            location_inhabitants=location_inhabitants,
             items_at_location=items_at_location,
             available_exits=available_exits,
             discovered_locations=discovered_locations,
@@ -737,6 +746,63 @@ class DynamicActionPlanner:
             ]
         except Exception as e:
             logger.warning(f"Could not get visible equipment: {e}")
+            self.db.rollback()
+        return []
+
+    def _get_location_inhabitants(
+        self, actor: Entity, actor_location: str | int | None
+    ) -> list[dict[str, Any]]:
+        """Get NPCs who habitually live/work at current location.
+
+        Unlike _get_visible_npcs which returns who's physically here NOW,
+        this returns NPCs whose workplace or home_location matches,
+        regardless of whether they're present right now.
+
+        Args:
+            actor: The player entity (excluded from results).
+            actor_location: Current location key (string) or ID (int).
+
+        Returns:
+            List of NPCs with role info (lives here/works here).
+        """
+        if not actor_location:
+            return []
+
+        try:
+            from src.database.models.world import Location
+
+            # Resolve location key from ID if needed
+            is_location_id = isinstance(actor_location, int)
+            if not is_location_id and isinstance(actor_location, str) and actor_location.isdigit():
+                is_location_id = True
+                actor_location = int(actor_location)
+
+            location_key = actor_location
+            if is_location_id:
+                location = (
+                    self.db.query(Location)
+                    .filter(
+                        Location.session_id == self.game_session.id,
+                        Location.id == actor_location,
+                    )
+                    .first()
+                )
+                location_key = location.location_key if location else None
+
+            if not location_key:
+                return []
+
+            # Get inhabitants using EntityManager
+            inhabitants = self.entity_manager.get_location_inhabitants(str(location_key))
+
+            # Filter out the player
+            return [
+                inh for inh in inhabitants
+                if inh.get("key") != actor.entity_key
+            ]
+
+        except Exception as e:
+            logger.warning(f"Could not get location inhabitants: {e}")
             self.db.rollback()
         return []
 
