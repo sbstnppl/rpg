@@ -1237,6 +1237,14 @@ def _save_turn_immediately(
         player_location: Current location key.
     """
     from src.database.models.session import Turn
+    from src.database.models.world import TimeState
+
+    # Get current game time for turn snapshot
+    time_state = (
+        db.query(TimeState)
+        .filter(TimeState.session_id == game_session.id)
+        .first()
+    )
 
     # Check if turn already exists (created by persistence_node during graph)
     existing = (
@@ -1253,6 +1261,10 @@ def _save_turn_immediately(
         existing.player_input = player_input
         existing.gm_response = gm_response
         existing.location_at_turn = player_location
+        # Set date/time if not already set
+        if time_state and existing.game_day_at_turn is None:
+            existing.game_day_at_turn = time_state.current_day
+            existing.game_time_at_turn = time_state.current_time
     else:
         # Create new turn
         turn = Turn(
@@ -1261,6 +1273,8 @@ def _save_turn_immediately(
             player_input=player_input,
             gm_response=gm_response,
             location_at_turn=player_location,
+            game_day_at_turn=time_state.current_day if time_state else None,
+            game_time_at_turn=time_state.current_time if time_state else None,
         )
         db.add(turn)
 

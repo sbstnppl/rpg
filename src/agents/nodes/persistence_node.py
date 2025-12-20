@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from src.agents.state import GameState
 from src.database.models.enums import EntityType, GoalPriority, GoalStatus, GoalType, ItemType
 from src.database.models.session import GameSession, Turn
+from src.database.models.world import TimeState
 from src.managers.entity_manager import EntityManager
 from src.managers.fact_manager import FactManager
 from src.managers.goal_manager import GoalManager
@@ -452,6 +453,13 @@ def _create_turn_record(
     """
     turn_number = state.get("turn_number", game_session.total_turns + 1)
 
+    # Get current game time for turn snapshot
+    time_state = (
+        db.query(TimeState)
+        .filter(TimeState.session_id == game_session.id)
+        .first()
+    )
+
     # Check if turn already saved by game.py
     existing = (
         db.query(Turn)
@@ -501,6 +509,10 @@ def _create_turn_record(
         # Persist queued actions for continuation flow
         if queued_actions is not None:
             existing.queued_actions = queued_actions
+        # Set date/time if not already set
+        if time_state and existing.game_day_at_turn is None:
+            existing.game_day_at_turn = time_state.current_day
+            existing.game_time_at_turn = time_state.current_time
         db.flush()  # Ensure changes visible before _save_turn_immediately queries
         return existing
 
@@ -516,6 +528,8 @@ def _create_turn_record(
         mentioned_npcs=state.get("deferred_npcs") or [],
         subturn_metadata=subturn_metadata,
         queued_actions=queued_actions,
+        game_day_at_turn=time_state.current_day if time_state else None,
+        game_time_at_turn=time_state.current_time if time_state else None,
     )
     db.add(turn)
     db.flush()

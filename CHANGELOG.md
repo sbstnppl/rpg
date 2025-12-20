@@ -137,6 +137,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Narrator now only mentions items that appear in mechanical facts
 
 ### Fixed
+- **Turn Timestamps Not Populated** - Turns now record game day and time
+  - `Turn.game_day_at_turn` and `Turn.game_time_at_turn` were always NULL
+  - Now populated from `TimeState` when turns are saved
+  - Both `_save_turn_immediately()` and `_create_turn_record()` set these fields
+  - Stores end-of-turn time (after action execution)
+
 - **Pronoun Handling in INFO Mode** - Correct pronoun usage for character gender
   - INFO mode responses now use correct pronouns (he/she/they) based on character data
   - Fixed inconsistent pronoun usage in concise responses

@@ -523,3 +523,197 @@ class TestPersistenceNodeAutoStorage:
         )
         assert len(locations) == 1
         assert locations[0].location_key == "weary_traveler"  # Original key
+
+
+class TestTurnTimestampPopulation:
+    """Tests for turn timestamp (game_day_at_turn, game_time_at_turn) population."""
+
+    @pytest.mark.asyncio
+    async def test_new_turn_gets_timestamp_from_time_state(
+        self, db_session, game_session, player_entity
+    ):
+        """New turn should get game_day_at_turn and game_time_at_turn from TimeState."""
+        from src.database.models.session import Turn
+        from src.database.models.world import TimeState
+
+        # Create TimeState for this session
+        time_state = TimeState(
+            session_id=game_session.id,
+            current_day=3,
+            current_time="14:30",
+            day_of_week="Wednesday",
+            season="Summer",
+            weather="Sunny",
+        )
+        db_session.add(time_state)
+        db_session.flush()
+
+        node = create_persistence_node(db_session, game_session)
+
+        state = create_initial_state(
+            session_id=game_session.id,
+            player_id=player_entity.id,
+            player_location="tavern",
+            player_input="Look around",
+        )
+        state["gm_response"] = "You see a cozy tavern."
+
+        await node(state)
+
+        turn = (
+            db_session.query(Turn)
+            .filter(Turn.session_id == game_session.id)
+            .order_by(Turn.turn_number.desc())
+            .first()
+        )
+
+        assert turn is not None
+        assert turn.game_day_at_turn == 3
+        assert turn.game_time_at_turn == "14:30"
+
+    @pytest.mark.asyncio
+    async def test_turn_without_time_state_gets_null_timestamp(
+        self, db_session, game_session, player_entity
+    ):
+        """Turn should have null timestamps if TimeState doesn't exist."""
+        from src.database.models.session import Turn
+
+        # No TimeState created for this session
+
+        node = create_persistence_node(db_session, game_session)
+
+        state = create_initial_state(
+            session_id=game_session.id,
+            player_id=player_entity.id,
+            player_location="tavern",
+            player_input="Look around",
+        )
+        state["gm_response"] = "You see a cozy tavern."
+
+        await node(state)
+
+        turn = (
+            db_session.query(Turn)
+            .filter(Turn.session_id == game_session.id)
+            .order_by(Turn.turn_number.desc())
+            .first()
+        )
+
+        assert turn is not None
+        assert turn.game_day_at_turn is None
+        assert turn.game_time_at_turn is None
+
+    @pytest.mark.asyncio
+    async def test_existing_turn_gets_timestamp_if_not_set(
+        self, db_session, game_session, player_entity
+    ):
+        """Existing turn without timestamp should get it populated."""
+        from src.database.models.session import Turn
+        from src.database.models.world import TimeState
+
+        # Create TimeState
+        time_state = TimeState(
+            session_id=game_session.id,
+            current_day=5,
+            current_time="09:15",
+            day_of_week="Friday",
+            season="Fall",
+            weather="Cloudy",
+        )
+        db_session.add(time_state)
+
+        # Create existing turn without timestamp
+        existing_turn = Turn(
+            session_id=game_session.id,
+            turn_number=1,
+            player_input="Hello",
+            gm_response="Hi there",
+            game_day_at_turn=None,  # Explicitly null
+            game_time_at_turn=None,
+        )
+        db_session.add(existing_turn)
+        db_session.flush()
+
+        node = create_persistence_node(db_session, game_session)
+
+        state = create_initial_state(
+            session_id=game_session.id,
+            player_id=player_entity.id,
+            player_location="tavern",
+            player_input="Hello",
+        )
+        state["gm_response"] = "Hi there"
+        state["turn_number"] = 1  # Same turn number to trigger update path
+
+        await node(state)
+
+        turn = (
+            db_session.query(Turn)
+            .filter(
+                Turn.session_id == game_session.id,
+                Turn.turn_number == 1,
+            )
+            .first()
+        )
+
+        assert turn is not None
+        assert turn.game_day_at_turn == 5
+        assert turn.game_time_at_turn == "09:15"
+
+    @pytest.mark.asyncio
+    async def test_existing_turn_keeps_timestamp_if_already_set(
+        self, db_session, game_session, player_entity
+    ):
+        """Existing turn with timestamp should not have it overwritten."""
+        from src.database.models.session import Turn
+        from src.database.models.world import TimeState
+
+        # Create TimeState with different time
+        time_state = TimeState(
+            session_id=game_session.id,
+            current_day=10,
+            current_time="20:00",
+            day_of_week="Sunday",
+            season="Winter",
+            weather="Snowy",
+        )
+        db_session.add(time_state)
+
+        # Create existing turn WITH timestamp already set
+        existing_turn = Turn(
+            session_id=game_session.id,
+            turn_number=1,
+            player_input="Hello",
+            gm_response="Hi there",
+            game_day_at_turn=2,  # Already set
+            game_time_at_turn="08:00",  # Already set
+        )
+        db_session.add(existing_turn)
+        db_session.flush()
+
+        node = create_persistence_node(db_session, game_session)
+
+        state = create_initial_state(
+            session_id=game_session.id,
+            player_id=player_entity.id,
+            player_location="tavern",
+            player_input="Hello",
+        )
+        state["gm_response"] = "Hi there"
+        state["turn_number"] = 1
+
+        await node(state)
+
+        turn = (
+            db_session.query(Turn)
+            .filter(
+                Turn.session_id == game_session.id,
+                Turn.turn_number == 1,
+            )
+            .first()
+        )
+
+        # Should keep original timestamp, not update to current TimeState
+        assert turn is not None
+        assert turn.game_day_at_turn == 2
+        assert turn.game_time_at_turn == "08:00"
