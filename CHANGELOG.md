@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Scene-First Architecture Phase 1: Schemas & Constraints** - Foundation for new world-first architecture
+  - New `src/world/` module with Pydantic schemas for World Mechanics, Scene Builder, Narrator, and Resolution
+  - 25 Pydantic models: `WorldUpdate`, `NPCPlacement`, `SceneManifest`, `NarratorManifest`, `EntityRef`, etc.
+  - `RealisticConstraintChecker` class enforces social, physical, and event constraints
+  - `SocialLimits` with personality-adjusted relationship caps (5 close friends, 15 casual, 50 acquaintances)
+  - Physical constraints: visiting hours (7am-10pm), private location access, sleep hours
+  - Event constraints: max 3/day, 2 intrusions/week, 2hr minimum between events
+  - 93 tests in `tests/test_world/` covering all schemas and constraint logic
+  - Key files: `src/world/schemas.py`, `src/world/constraints.py`
+
 - **Discourse-Aware Reference Resolution** - Comprehensive system for pronoun and anaphoric reference resolution
   - New `DiscourseManager` class extracts entity mentions from GM responses using LLM (`src/managers/discourse_manager.py`)
   - Tracks mentions with descriptors, gender, groups, and contrast relationships

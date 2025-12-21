@@ -1842,6 +1842,69 @@ ENCUMBRANCE_EFFECTS = {
 
 ---
 
+## Phase 20: Scene-First Architecture [IN PROGRESS]
+
+This phase replaces the narrator-driven entity creation with a world-first approach where:
+- World exists before narration
+- Narrator can only reference persisted entities
+- Reference resolution happens in one place
+
+See `docs/scene-first-architecture/` for detailed design docs.
+
+### 20.1 Foundation - Schemas & Constraints [COMPLETE]
+- [x] Create `src/world/__init__.py` - Module initialization
+- [x] Create `src/world/schemas.py` - Pydantic models (25 models)
+  - `WorldUpdate`, `NPCPlacement`, `NPCMovement`, `NewElement`, `WorldEvent`, `FactUpdate`
+  - `FurnitureSpec`, `ItemSpec`, `Atmosphere`, `SceneContents`, `SceneNPC`, `SceneManifest`
+  - `EntityRef`, `NarratorManifest`, `NarrationContext`, `NarrationResult`
+  - `InvalidReference`, `UnkeyedReference`, `ValidationResult`, `ResolutionResult`
+  - `SocialLimits`, `ConstraintResult`, `PersistedNPC`, `PersistedItem`, `PersistedScene`
+- [x] Create `src/world/constraints.py` - RealisticConstraintChecker
+  - `check_social_constraints()` - Relationship limits, introduction rates
+  - `check_physical_constraints()` - Location access, time of day, private spaces
+  - `check_event_constraints()` - Event frequency, intrusion limits
+  - `check_all_placements()`, `filter_valid_placements()` - Batch validation
+- [x] Create `tests/test_world/test_schemas.py` - 53 schema tests
+- [x] Create `tests/test_world/test_constraints.py` - 40 constraint tests
+
+### 20.2 World Mechanics
+- [ ] Create `src/world/world_mechanics.py` - WorldMechanics class
+- [ ] Create `data/templates/world_mechanics.jinja2` - LLM prompt
+- [ ] Create `tests/test_world/test_world_mechanics.py`
+
+### 20.3 Scene Builder
+- [ ] Create `src/world/scene_builder.py` - SceneBuilder class
+- [ ] Create `data/templates/scene_builder.jinja2` - LLM prompt
+- [ ] Create `tests/test_world/test_scene_builder.py`
+
+### 20.4 Persistence Layer
+- [ ] Create `src/world/scene_persister.py` - ScenePersister class
+- [ ] Add `scene_generated` flag to Location model
+- [ ] Create `tests/test_world/test_scene_persister.py`
+
+### 20.5 Constrained Narrator
+- [ ] Create `src/narrator/validator.py` - NarratorValidator class
+- [ ] Create `src/narrator/constrained_narrator.py` - ConstrainedNarrator class
+- [ ] Create `data/templates/constrained_narrator.jinja2`
+- [ ] Create `tests/test_narrator/`
+
+### 20.6 Reference Resolution
+- [ ] Create `src/resolver/reference_resolver.py` - ReferenceResolver class
+- [ ] Create `tests/test_resolver/`
+
+### 20.7 Graph Integration
+- [ ] Create new graph nodes for scene-first flow
+- [ ] Update `src/agents/state.py` with new fields
+- [ ] Create `build_scene_first_graph()` in `src/agents/graph.py`
+- [ ] Create `tests/test_integration/test_scene_first_flow.py`
+
+### 20.8 Migration & Cleanup
+- [ ] Add feature flag for old/new graph
+- [ ] Remove legacy reference resolution code
+- [ ] Update documentation
+
+---
+
 ## Phase 19: Future Considerations
 
 ### 19.1 Potential Additions (Not Planned)
