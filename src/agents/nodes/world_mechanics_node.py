@@ -51,6 +51,15 @@ async def world_mechanics_node(state: GameState) -> dict[str, Any]:
     location_changed = state.get("location_changed", False)
     just_entered = location_changed or state.get("just_entered_location", False)
 
+    # If this is a loop-back after GO action (location_changed=True),
+    # clear the parsed_actions to prevent re-execution of already-executed actions
+    clear_actions = {}
+    if location_changed:
+        clear_actions = {
+            "parsed_actions": [],
+            "resolved_actions": [],
+        }
+
     # Import here to avoid circular imports
     from src.world.world_mechanics import WorldMechanics
     from src.database.models.world import Location
@@ -101,10 +110,13 @@ async def world_mechanics_node(state: GameState) -> dict[str, Any]:
         return {
             "world_update": world_update_dict,
             "just_entered_location": just_entered,
+            **clear_actions,
         }
 
     except Exception as e:
+        import traceback
         return {
             "world_update": None,
-            "errors": [f"World mechanics failed: {str(e)}"],
+            "errors": [f"World mechanics failed for '{location_key}': {str(e)} - {traceback.format_exc()[:200]}"],
+            **clear_actions,
         }

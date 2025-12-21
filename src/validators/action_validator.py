@@ -665,8 +665,8 @@ class ActionValidator:
 
         # If we have a target, try to validate the path
         if action.target:
-            # Check if location exists
-            location = self.location_manager.get_location(action.target)
+            # Check if location exists (use fuzzy matching to resolve "well" -> "family_farm_well")
+            location = self.location_manager.fuzzy_match_location(action.target)
             if location:
                 # Check if there's a valid path
                 # For now, allow if location exists

@@ -52,7 +52,7 @@ async def persist_scene_node(state: GameState) -> dict[str, Any]:
     if scene_manifest_dict is None:
         return {
             "narrator_manifest": None,
-            "errors": ["No scene manifest to persist"],
+            "errors": [f"No scene manifest to persist for location '{location_key}'"],
         }
 
     scene_manifest = SceneManifest.model_validate(scene_manifest_dict)

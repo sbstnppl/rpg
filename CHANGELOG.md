@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CLI Progress Streaming** - Real-time node-by-node progress during graph execution
+  - New `_run_graph_with_progress()` uses LangGraph's `astream(stream_mode="updates")`
+  - Progress spinner shows which node is running: "Building scene...", "Executing actions...", etc.
+  - `NODE_PROGRESS_MESSAGES` dict maps node names to user-friendly descriptions
+  - Key file: `src/cli/commands/game.py`
+
 - **Ollama LLM Provider** - Native Ollama integration for local LLM inference
   - New `OllamaProvider` class using `langchain-ollama` (`src/llm/ollama_provider.py`)
   - Supports Llama 3, Qwen3, Mistral and other Ollama models
@@ -28,6 +34,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key files: `src/agents/graph.py`, `src/agents/nodes/world_mechanics_node.py`, `src/agents/nodes/scene_builder_node.py`
 
 ### Fixed
+- **GO action loops back for scene building** - After player moves to new location, graph routes back to `world_mechanics` to build scene
+  - New `route_after_state_validator()` checks `location_changed` flag (`src/agents/graph.py`)
+  - World mechanics node clears `parsed_actions` on loop-back to prevent re-execution
+  - Key file: `src/agents/graph.py`, `src/agents/nodes/world_mechanics_node.py`
+
+- **GO action fuzzy location matching** - Location targets now use fuzzy matching instead of exact keys
+  - `GMToolExecutor.execute_go()` uses `fuzzy_match_location()` (`src/agents/tools/executor.py`)
+  - `ActionValidator` uses fuzzy matching for GO action targets (`src/validators/action_validator.py`)
+  - Allows "go to well" to resolve to "family_farm_well"
+
+- **Improved error messages in scene-first nodes** - Include location key for easier debugging
+  - SceneBuilderNode, WorldMechanicsNode, PersistSceneNode now show location in errors
+
 - **Scene-first routing skips world_mechanics** - Added check for missing `narrator_manifest` and LOOK actions (`src/agents/graph.py:route_after_parse_scene_first`)
 - **CLI hardcoded starting_location** - `_single_turn()` now finds actual location from DB (`src/cli/commands/game.py`)
 - **complete_structured returns dict not model** - Added `model_validate()` conversion in SceneBuilder and WorldMechanics

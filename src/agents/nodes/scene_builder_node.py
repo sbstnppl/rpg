@@ -101,12 +101,13 @@ async def scene_builder_node(state: GameState) -> dict[str, Any]:
         # Location not found
         return {
             "scene_manifest": None,
-            "errors": [f"Scene building failed: {str(e)}"],
+            "errors": [f"Scene building failed for '{location_key}': {str(e)}"],
         }
     except Exception as e:
+        import traceback
         return {
             "scene_manifest": None,
-            "errors": [f"Scene building failed: {str(e)}"],
+            "errors": [f"Scene building failed for '{location_key}': {str(e)} - {traceback.format_exc()[:200]}"],
         }
 
 

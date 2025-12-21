@@ -1858,15 +1858,16 @@ class GMToolExecutor:
         if entity is None:
             return {"success": False, "error": f"Entity '{entity_key}' not found"}
 
-        # Check if location exists
-        location = (
-            self.db.query(Location)
-            .filter(
-                Location.session_id == self.game_session.id,
-                Location.location_key == location_key,
-            )
-            .first()
-        )
+        # Use fuzzy matching to resolve location target
+        from src.managers.location_manager import LocationManager
+        location_mgr = LocationManager(self.db, self.game_session)
+
+        # First try fuzzy match to find existing location
+        location = location_mgr.fuzzy_match_location(location_key)
+
+        # If fuzzy match found a different key, update location_key
+        if location:
+            location_key = location.location_key
 
         if location is None and create_if_missing:
             # Create a minimal location record

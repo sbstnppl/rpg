@@ -49,6 +49,26 @@ INTENT_PATTERNS: list[tuple[str, str]] = [
     (r"\b(attack|hit|strike|fight)\s+(?:the\s+)?(.+)", "attack"),
 ]
 
+# Node name to user-friendly progress descriptions
+NODE_PROGRESS_MESSAGES: dict[str, str] = {
+    "context_compiler": "Gathering context...",
+    "parse_intent": "Understanding your intent...",
+    "world_mechanics": "Simulating world...",
+    "scene_builder": "Building scene...",
+    "persist_scene": "Saving scene...",
+    "resolve_references": "Resolving references...",
+    "subturn_processor": "Executing actions...",
+    "state_validator": "Validating state...",
+    "constrained_narrator": "Generating narrative...",
+    "validate_narrator": "Validating narrative...",
+    "persistence": "Saving turn...",
+    # Legacy pipeline nodes
+    "game_master": "Thinking...",
+    "entity_extractor": "Extracting entities...",
+    "world_simulator": "Simulating world...",
+    "combat_resolver": "Resolving combat...",
+}
+
 # Valid pipeline options and their aliases
 PIPELINE_ALIASES = {
     "system-authority": "system-authority",
@@ -140,6 +160,47 @@ def _detect_action(player_input: str) -> tuple[str | None, str | None, str | Non
                 return action, match.group(2), None
 
     return None, None, None
+
+
+async def _run_graph_with_progress(compiled, state, progress, task) -> dict:
+    """Run the LangGraph with streaming progress updates.
+
+    Uses astream with stream_mode="updates" to get node-by-node progress,
+    updating the spinner as each node runs.
+
+    Args:
+        compiled: Compiled LangGraph.
+        state: Initial state dict.
+        progress: Rich Progress instance.
+        task: Progress task ID for updates.
+
+    Returns:
+        Final accumulated state from graph execution.
+    """
+    result = {}
+    accumulated_errors = []
+
+    async for chunk in compiled.astream(state, stream_mode="updates"):
+        # chunk is a dict with node names as keys
+        for node_name, node_output in chunk.items():
+            # Update progress with node-specific message
+            message = NODE_PROGRESS_MESSAGES.get(node_name, f"Processing {node_name}...")
+            progress.update(task, description=message)
+
+            # Accumulate results (later nodes overwrite earlier for same keys)
+            if isinstance(node_output, dict):
+                # Special handling for errors - accumulate instead of overwrite
+                if "errors" in node_output and node_output["errors"]:
+                    accumulated_errors.extend(node_output["errors"])
+                    # Remove errors from output so it doesn't overwrite
+                    node_output = {k: v for k, v in node_output.items() if k != "errors"}
+                result.update(node_output)
+
+    # Add accumulated errors to result
+    if accumulated_errors:
+        result["errors"] = accumulated_errors
+
+    return result
 
 
 async def _validate_and_enhance_input(
@@ -1059,9 +1120,9 @@ async def _game_loop(
         initial_state["_db"] = db
         initial_state["_game_session"] = game_session
 
-        with progress_spinner("Setting the scene..."):
+        with progress_spinner("Setting the scene...") as (progress, task):
             try:
-                result = await compiled.ainvoke(initial_state)
+                result = await _run_graph_with_progress(compiled, initial_state, progress, task)
                 if result.get("gm_response"):
                     display_narrative(result["gm_response"])
                     player_location = result.get("player_location", player_location)
@@ -1172,9 +1233,9 @@ async def _game_loop(
         state["_db"] = db
         state["_game_session"] = game_session
 
-        with progress_spinner("Thinking..."):
+        with progress_spinner("Starting...") as (progress, task):
             try:
-                result = await compiled.ainvoke(state)
+                result = await _run_graph_with_progress(compiled, state, progress, task)
             except Exception as e:
                 display_error(f"Error: {e}")
                 game_session.total_turns -= 1
@@ -1594,8 +1655,8 @@ async def _single_turn(
     state["_db"] = db
     state["_game_session"] = game_session
 
-    with progress_spinner("Processing..."):
-        result = await compiled.ainvoke(state)
+    with progress_spinner("Processing...") as (progress, task):
+        result = await _run_graph_with_progress(compiled, state, progress, task)
 
     if result.get("gm_response"):
         display_narrative(result["gm_response"])

@@ -479,6 +479,27 @@ def route_after_validate_narrator(
     return "persistence"
 
 
+def route_after_state_validator(
+    state: GameState,
+) -> Literal["world_mechanics", "constrained_narrator"]:
+    """Route after state validation - check for location changes.
+
+    If the player moved locations during action execution (GO action),
+    we need to build the scene for the new location before narrating.
+
+    Args:
+        state: Current game state.
+
+    Returns:
+        "world_mechanics" if location changed, "constrained_narrator" otherwise.
+    """
+    # If location changed during action execution, build scene for new location
+    if state.get("location_changed"):
+        return "world_mechanics"
+
+    return "constrained_narrator"
+
+
 def build_scene_first_graph() -> StateGraph:
     """Build the Scene-First game orchestration graph.
 
@@ -571,9 +592,19 @@ def build_scene_first_graph() -> StateGraph:
         },
     )
 
-    # Action execution flow: subturn → state_validator → narrator
+    # Action execution flow: subturn → state_validator → [route based on location change]
     graph.add_edge("subturn_processor", "state_validator")
-    graph.add_edge("state_validator", "constrained_narrator")
+
+    # After state validation, check if location changed (GO action)
+    # If location changed, go to world_mechanics to build scene for new location
+    graph.add_conditional_edges(
+        "state_validator",
+        route_after_state_validator,
+        {
+            "world_mechanics": "world_mechanics",
+            "constrained_narrator": "constrained_narrator",
+        },
+    )
 
     # Narrator → validation
     graph.add_edge("constrained_narrator", "validate_narrator")
