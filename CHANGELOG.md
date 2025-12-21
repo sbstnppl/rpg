@@ -8,6 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Scene-First Architecture Phase 6: Reference Resolution** - Resolves player references to scene entities
+  - New `ReferenceResolver` class resolves player text to entity keys (`src/resolver/reference_resolver.py`)
+  - Cascade resolution: exact key → display name → pronoun → descriptor matching
+  - Pronoun resolution with gender indexing (he/him → male NPCs, she/her → female NPCs)
+  - `last_mentioned` context for disambiguating pronouns in conversation
+  - Descriptor matching with scoring for partial matches ("the bartender" → bartender_001)
+  - Ambiguity detection returns candidate list for clarification prompts
+  - 26 tests covering all resolution strategies and edge cases
+  - Key files: `src/resolver/reference_resolver.py`, `tests/test_resolver/test_reference_resolver.py`
+
+- **Scene-First Architecture Phase 5: Constrained Narrator** - Validates and generates narration
+  - New `NarratorValidator` class validates [key] references in narrator output (`src/narrator/validator.py`)
+  - Extracts all [key] patterns and validates against manifest entities
+  - Detects unkeyed entity mentions (display names without [key] format)
+  - New `SceneNarrator` class generates constrained narration (`src/narrator/scene_narrator.py`)
+  - Retry loop with error feedback for validation failures (max 3 attempts)
+  - `_strip_keys()` removes [key] markers for player-facing display text
+  - Fallback generation when validation keeps failing
+  - 41 tests covering validation, narration generation, and key stripping
+  - Key files: `src/narrator/validator.py`, `src/narrator/scene_narrator.py`
+
+- **Scene-First Architecture Phase 4: Persistence Layer** - Persists scene contents to database
+  - New `ScenePersister` class saves World Mechanics and Scene Builder output (`src/world/scene_persister.py`)
+  - `persist_world_update()` creates NPCs from placements with full entity linkage
+  - `persist_scene()` creates furniture and items with StorageLocation records
+  - `build_narrator_manifest()` converts SceneManifest to NarratorManifest with EntityRefs
+  - Furniture stored as Items with `furniture_type` property in PLACE-type StorageLocation
+  - Items linked to location via `owner_location_id` for scene tracking
+  - Atomic transactions - all or nothing persistence
+  - 23 tests covering NPC/item/furniture creation and manifest building
+  - Key files: `src/world/scene_persister.py`, `tests/test_world/test_scene_persister.py`
+
 - **Scene-First Architecture Phase 3: Scene Builder** - Generates physical scene contents for locations
   - New `SceneBuilder` class for first-visit generation and return-visit loading (`src/world/scene_builder.py`)
   - `build_scene()` main entry point returns `SceneManifest` with furniture, items, NPCs, atmosphere

@@ -413,6 +413,9 @@ class ResolutionResult(BaseModel):
     """Result of resolving a player reference."""
 
     resolved: bool = Field(default=False)
+    entity: EntityRef | None = Field(default=None)
+
+    # Legacy fields for backwards compatibility
     entity_key: str | None = Field(default=None)
     entity_type: str | None = Field(default=None)
 
@@ -420,6 +423,9 @@ class ResolutionResult(BaseModel):
     ambiguous: bool = Field(default=False)
     candidates: list[EntityRef] = Field(default_factory=list)
     clarification_needed: str | None = Field(default=None)
+
+    # Resolution method used
+    method: str = Field(default="none")
 
     # If failed
     error: str | None = Field(default=None)

@@ -120,28 +120,28 @@ This document tracks the implementation of the Scene-First Architecture. Each se
 ## Phase 4: Persistence Layer
 
 ### 4.1 Scene Persister
-- [ ] Create `src/world/scene_persister.py`:
-  - [ ] `ScenePersister` class
-  - [ ] `persist_world_update()` - Persist World Mechanics output
-  - [ ] `persist_scene()` - Persist Scene Builder output
-  - [ ] `build_narrator_manifest()` - Build manifest for narrator
-  - [ ] `_create_npc()` - Create new NPC with full linkage
-  - [ ] `_create_item()` - Create new item with location
-  - [ ] `_create_furniture()` - Create furniture item
+- [x] Create `src/world/scene_persister.py`:
+  - [x] `ScenePersister` class
+  - [x] `persist_world_update()` - Persist World Mechanics output
+  - [x] `persist_scene()` - Persist Scene Builder output
+  - [x] `build_narrator_manifest()` - Build manifest for narrator
+  - [x] `_create_npc()` - Create new NPC with full linkage
+  - [x] `_create_item()` - Create new item with location
+  - [x] `_create_furniture()` - Create furniture item
 
 ### 4.2 Database Considerations
-- [ ] Review `StorageLocation` model - ensure it supports scene items
-- [ ] Review `Item` model - ensure `owner_location_id` works for scene items
-- [ ] Consider if new model needed for furniture vs items
-- [ ] Add `scene_generated` flag to Location model (tracks if scene built)
+- [x] Review `StorageLocation` model - ensure it supports scene items
+- [x] Review `Item` model - ensure `owner_location_id` works for scene items
+- [x] Consider if new model needed for furniture vs items (decided: furniture uses Item with furniture_type property)
+- [x] Add `scene_generated` flag to Location model (using existing `first_visited_turn` instead)
 
 ### 4.3 Tests for Phase 4
-- [ ] Create `tests/test_world/test_scene_persister.py`:
-  - [ ] Test NPC creation with location
-  - [ ] Test item creation with storage location
-  - [ ] Test furniture creation
-  - [ ] Test manifest building
-  - [ ] Test atomic transaction (all or nothing)
+- [x] Create `tests/test_world/test_scene_persister.py` (23 tests):
+  - [x] Test NPC creation with location
+  - [x] Test item creation with storage location
+  - [x] Test furniture creation
+  - [x] Test manifest building
+  - [x] Test atomic transaction (all or nothing)
 
 **Phase 4 Complete When**: All scene contents persist correctly to DB
 
@@ -150,41 +150,41 @@ This document tracks the implementation of the Scene-First Architecture. Each se
 ## Phase 5: Constrained Narrator
 
 ### 5.1 Narrator Validator
-- [ ] Create `src/narrator/validator.py`:
-  - [ ] `NarratorValidator` class
-  - [ ] `validate()` - Check output against manifest
-  - [ ] `_extract_key_references()` - Find all [key] patterns
-  - [ ] `_detect_unkeyed_references()` - Catch mentions without keys
-  - [ ] `ValidationResult` schema
-  - [ ] `InvalidReference` error type
-  - [ ] `UnkeyedReference` error type
+- [x] Create `src/narrator/validator.py`:
+  - [x] `NarratorValidator` class
+  - [x] `validate()` - Check output against manifest
+  - [x] `_extract_key_references()` - Find all [key] patterns
+  - [x] `_detect_unkeyed_references()` - Catch mentions without keys
+  - [x] `ValidationResult` schema (in src/world/schemas.py)
+  - [x] `InvalidReference` error type (in src/world/schemas.py)
+  - [x] `UnkeyedReference` error type (in src/world/schemas.py)
 
 ### 5.2 Constrained Narrator
-- [ ] Create `src/narrator/constrained_narrator.py`:
-  - [ ] `ConstrainedNarrator` class
-  - [ ] `narrate()` - Main entry with retry loop
-  - [ ] `_generate()` - Call LLM with manifest
-  - [ ] `_strip_keys()` - Remove [key] markers for display
-  - [ ] `_generate_safe_fallback()` - Fallback if validation keeps failing
-  - [ ] `NarrationType` enum (SCENE_ENTRY, ACTION_RESULT, DIALOGUE, CLARIFICATION)
-  - [ ] `NarrationContext` dataclass
-  - [ ] `NarrationResult` dataclass
+- [x] Create `src/narrator/scene_narrator.py`:
+  - [x] `SceneNarrator` class
+  - [x] `narrate()` - Main entry with retry loop
+  - [x] `_generate()` - Call LLM with manifest
+  - [x] `_strip_keys()` - Remove [key] markers for display
+  - [x] `_generate_fallback()` - Fallback if validation keeps failing
+  - [x] `NarrationType` enum (in src/world/schemas.py)
+  - [x] `NarrationContext` dataclass (in src/world/schemas.py)
+  - [x] `NarrationResult` dataclass (in src/world/schemas.py)
 
 ### 5.3 Narrator Prompts
-- [ ] Create `data/templates/constrained_narrator.jinja2`
-- [ ] Include manifest reference guide in prompt
-- [ ] Include [key] format rules
-- [ ] Include retry feedback mechanism
+- [x] Prompts included inline in SceneNarrator._get_system_prompt() and _build_prompt()
+- [x] Manifest reference guide via NarratorManifest.get_reference_guide()
+- [x] [key] format rules in system prompt
+- [x] Retry feedback mechanism via NarrationContext.with_errors()
 
 ### 5.4 Tests for Phase 5
-- [ ] Create `tests/test_narrator/test_validator.py`:
-  - [ ] Test valid output passes
-  - [ ] Test invalid key detected
-  - [ ] Test unkeyed reference detected
-- [ ] Create `tests/test_narrator/test_constrained_narrator.py`:
-  - [ ] Test successful narration
-  - [ ] Test retry on validation failure
-  - [ ] Test key stripping for display
+- [x] Create `tests/test_narrator/test_validator.py` (23 tests):
+  - [x] Test valid output passes
+  - [x] Test invalid key detected
+  - [x] Test unkeyed reference detected
+- [x] Create `tests/test_narrator/test_scene_narrator.py` (18 tests):
+  - [x] Test successful narration
+  - [x] Test retry on validation failure
+  - [x] Test key stripping for display
 
 **Phase 5 Complete When**: Narrator generates valid, constrained output
 
@@ -193,24 +193,24 @@ This document tracks the implementation of the Scene-First Architecture. Each se
 ## Phase 6: Reference Resolution
 
 ### 6.1 Simple Reference Resolver
-- [ ] Create `src/resolver/__init__.py`
-- [ ] Create `src/resolver/reference_resolver.py`:
-  - [ ] `ReferenceResolver` class
-  - [ ] `resolve()` - Main resolution method
-  - [ ] `_try_exact_key()` - Direct key match
-  - [ ] `_try_display_name()` - Display name match
-  - [ ] `_try_pronoun()` - Pronoun resolution
-  - [ ] `_try_descriptor()` - Descriptor matching
-  - [ ] `ResolutionResult` schema
+- [x] Create `src/resolver/__init__.py`
+- [x] Create `src/resolver/reference_resolver.py`:
+  - [x] `ReferenceResolver` class
+  - [x] `resolve()` - Main resolution method
+  - [x] `_try_exact_key()` - Direct key match
+  - [x] `_try_display_name()` - Display name match
+  - [x] `_try_pronoun()` - Pronoun resolution
+  - [x] `_try_descriptor()` - Descriptor matching
+  - [x] `ResolutionResult` schema (updated in src/world/schemas.py)
 
 ### 6.2 Tests for Phase 6
-- [ ] Create `tests/test_resolver/test_reference_resolver.py`:
-  - [ ] Test exact key resolution
-  - [ ] Test display name resolution
-  - [ ] Test pronoun resolution (single candidate)
-  - [ ] Test pronoun ambiguity (multiple candidates)
-  - [ ] Test descriptor resolution
-  - [ ] Test unknown reference
+- [x] Create `tests/test_resolver/test_reference_resolver.py` (26 tests):
+  - [x] Test exact key resolution
+  - [x] Test display name resolution
+  - [x] Test pronoun resolution (single candidate)
+  - [x] Test pronoun ambiguity (multiple candidates)
+  - [x] Test descriptor resolution
+  - [x] Test unknown reference
 
 **Phase 6 Complete When**: References resolve correctly from manifest
 
@@ -332,9 +332,9 @@ This document tracks the implementation of the Scene-First Architecture. Each se
 | 1. Schemas & Constraints | Complete | 2025-12-21 | 2025-12-21 |
 | 2. World Mechanics | Complete | 2025-12-21 | 2025-12-21 |
 | 3. Scene Builder | Complete | 2025-12-21 | 2025-12-21 |
-| 4. Persistence | Not Started | | |
-| 5. Constrained Narrator | Not Started | | |
-| 6. Reference Resolution | Not Started | | |
+| 4. Persistence | Complete | 2025-12-21 | 2025-12-21 |
+| 5. Constrained Narrator | Complete | 2025-12-21 | 2025-12-21 |
+| 6. Reference Resolution | Complete | 2025-12-21 | 2025-12-21 |
 | 7. Graph Integration | Not Started | | |
 | 8. Migration & Cleanup | Not Started | | |
 
