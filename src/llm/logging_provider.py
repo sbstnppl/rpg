@@ -107,6 +107,7 @@ class LoggingProvider:
         temperature: float = 0.7,
         stop_sequences: Sequence[str] | None = None,
         system_prompt: str | None = None,
+        **kwargs: Any,
     ) -> LLMResponse:
         """Generate a completion from messages with logging.
 
@@ -117,6 +118,7 @@ class LoggingProvider:
             temperature: Sampling temperature.
             stop_sequences: Sequences that stop generation.
             system_prompt: System-level instructions.
+            **kwargs: Provider-specific options (e.g., think for Ollama).
 
         Returns:
             LLMResponse with text and metadata.
@@ -136,6 +138,7 @@ class LoggingProvider:
                 temperature=temperature,
                 stop_sequences=stop_sequences,
                 system_prompt=system_prompt,
+                **kwargs,
             )
             return response
         except Exception as e:
@@ -172,6 +175,7 @@ class LoggingProvider:
         temperature: float = 0.7,
         tool_choice: str | dict[str, Any] = "auto",
         system_prompt: str | None = None,
+        **kwargs: Any,
     ) -> LLMResponse:
         """Generate a completion that may include tool calls with logging.
 
@@ -183,6 +187,7 @@ class LoggingProvider:
             temperature: Sampling temperature.
             tool_choice: Tool selection mode.
             system_prompt: System-level instructions.
+            **kwargs: Provider-specific options (e.g., think for Ollama).
 
         Returns:
             LLMResponse with text and/or tool_calls.
@@ -203,6 +208,7 @@ class LoggingProvider:
                 temperature=temperature,
                 tool_choice=tool_choice,
                 system_prompt=system_prompt,
+                **kwargs,
             )
             return response
         except Exception as e:

@@ -604,8 +604,12 @@ class SnapshotManager:
 ## LLM Provider Abstraction
 
 ### Providers
-- **AnthropicProvider**: Claude models
-- **OpenAIProvider**: GPT models + OpenAI-compatible APIs (DeepSeek, Ollama)
+- **AnthropicProvider**: Claude models (default)
+- **OpenAIProvider**: GPT models + OpenAI-compatible APIs (DeepSeek, vLLM)
+- **OllamaProvider**: Native Ollama integration for local LLMs (Llama 3, Qwen3, Mistral)
+  - Thinking mode control: `think=False` for fast narration, `think=True` for reasoning
+  - Automatic `<think>` tag stripping for Qwen3 and other reasoning models
+  - Configure via: `LLM_PROVIDER=ollama`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`
 
 ### Audit Logging
 Enable with `LOG_LLM_CALLS=true`:

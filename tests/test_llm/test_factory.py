@@ -6,6 +6,7 @@ from unittest.mock import patch, MagicMock
 from src.llm.factory import get_provider, get_gm_provider, get_cheap_provider
 from src.llm.anthropic_provider import AnthropicProvider
 from src.llm.openai_provider import OpenAIProvider
+from src.llm.ollama_provider import OllamaProvider
 from src.llm.exceptions import UnsupportedProviderError
 
 
@@ -36,6 +37,35 @@ class TestGetProvider:
             provider = get_provider("openai")
             assert isinstance(provider, OpenAIProvider)
             assert provider.provider_name == "openai"
+
+    def test_get_ollama_provider(self):
+        """Test getting Ollama provider."""
+        with patch("src.llm.factory.settings") as mock_settings:
+            mock_settings.llm_provider = "ollama"
+            mock_settings.ollama_base_url = "http://localhost:11434"
+            mock_settings.ollama_model = "llama3"
+            mock_settings.log_llm_calls = False
+
+            provider = get_provider("ollama")
+            assert isinstance(provider, OllamaProvider)
+            assert provider.provider_name == "ollama"
+            assert provider.default_model == "llama3"
+
+    def test_get_ollama_provider_with_custom_url(self):
+        """Test getting Ollama provider with custom base URL."""
+        with patch("src.llm.factory.settings") as mock_settings:
+            mock_settings.ollama_base_url = "http://localhost:11434"
+            mock_settings.ollama_model = "llama3"
+            mock_settings.log_llm_calls = False
+
+            provider = get_provider(
+                "ollama",
+                model="llama3.1",
+                base_url="http://192.168.1.100:11434",
+            )
+            assert isinstance(provider, OllamaProvider)
+            assert provider.default_model == "llama3.1"
+            assert provider._base_url == "http://192.168.1.100:11434"
 
     def test_get_default_provider_from_settings(self):
         """Test getting provider from settings."""

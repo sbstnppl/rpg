@@ -36,6 +36,7 @@ from src.llm.base import LLMProvider
 # Providers
 from src.llm.anthropic_provider import AnthropicProvider
 from src.llm.openai_provider import OpenAIProvider
+from src.llm.ollama_provider import OllamaProvider
 
 # Factory
 from src.llm.factory import (
@@ -88,6 +89,7 @@ __all__ = [
     # Providers
     "AnthropicProvider",
     "OpenAIProvider",
+    "OllamaProvider",
     # Factory
     "get_provider",
     "get_gm_provider",

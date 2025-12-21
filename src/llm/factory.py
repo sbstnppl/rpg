@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from src.llm.logging_provider import LoggingProvider
 
 
-ProviderType = Literal["anthropic", "openai"]
+ProviderType = Literal["anthropic", "openai", "ollama"]
 
 
 def get_provider(
@@ -71,6 +71,12 @@ def get_provider(
             default_model=model or settings.gm_model,
             base_url=base_url or settings.openai_base_url,
         )
+    elif provider == "ollama":
+        from src.llm.ollama_provider import OllamaProvider
+        llm_provider = OllamaProvider(
+            base_url=base_url or settings.ollama_base_url,
+            default_model=model or settings.ollama_model,
+        )
     else:
         raise UnsupportedProviderError(f"Provider '{provider}' is not supported")
 
@@ -84,34 +90,55 @@ def get_provider(
     return llm_provider
 
 
+def _get_model_for_provider(model_setting: str) -> str | None:
+    """Get the appropriate model for the current provider.
+
+    For Ollama, uses ollama_model from settings (ignores Anthropic/OpenAI model names).
+    For other providers, uses the specified model setting.
+
+    Args:
+        model_setting: The model name from settings (e.g., settings.gm_model).
+
+    Returns:
+        Model name to use, or None to use provider default.
+    """
+    if settings.llm_provider == "ollama":
+        # Ollama uses its own model setting, ignore Anthropic/OpenAI model names
+        return None
+    return model_setting
+
+
 def get_gm_provider() -> LLMProvider:
     """Get provider configured for GameMaster (narrative generation).
 
     Uses the gm_model from settings for high-quality narrative output.
+    For Ollama, uses the ollama_model setting instead.
 
     Returns:
         LLMProvider configured for GM use.
     """
-    return get_provider(model=settings.gm_model)
+    return get_provider(model=_get_model_for_provider(settings.gm_model))
 
 
 def get_extraction_provider() -> LLMProvider:
     """Get provider configured for entity extraction.
 
     Uses the extraction_model from settings.
+    For Ollama, uses the ollama_model setting instead.
 
     Returns:
         LLMProvider configured for extraction.
     """
-    return get_provider(model=settings.extraction_model)
+    return get_provider(model=_get_model_for_provider(settings.extraction_model))
 
 
 def get_cheap_provider() -> LLMProvider:
     """Get provider configured for cheap/fast operations.
 
     Uses the cheap_model from settings for cost-effective operations.
+    For Ollama, uses the ollama_model setting instead.
 
     Returns:
         LLMProvider configured for cheap operations.
     """
-    return get_provider(model=settings.cheap_model)
+    return get_provider(model=_get_model_for_provider(settings.cheap_model))

@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Ollama LLM Provider** - Native Ollama integration for local LLM inference
+  - New `OllamaProvider` class using `langchain-ollama` (`src/llm/ollama_provider.py`)
+  - Supports Llama 3, Qwen3, Mistral and other Ollama models
+  - Thinking mode control: `think=False` (default) for fast responses, `think=True` for reasoning
+  - Automatic `<think>` tag stripping from Qwen3 and other reasoning models
+  - Environment config: `LLM_PROVIDER=ollama`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`
+  - Tool calling and structured output support
+  - 19 tests for OllamaProvider (`tests/test_llm/test_ollama_provider.py`)
+
 - **Scene-First Architecture Phase 7-8: Graph Integration & Testing** - Complete scene-first pipeline
   - New `build_scene_first_graph()` in `src/agents/graph.py` with full node wiring
   - New graph nodes: `world_mechanics_node`, `scene_builder_node`, `persist_scene_node`, `resolve_references_node`, `constrained_narrator_node`, `validate_narrator_node`

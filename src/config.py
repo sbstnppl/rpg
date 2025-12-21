@@ -21,8 +21,12 @@ class Settings(BaseSettings):
     # LLM Providers
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    llm_provider: Literal["anthropic", "openai"] = "anthropic"
-    openai_base_url: str | None = None  # Custom endpoint for Ollama/vLLM/DeepSeek
+    llm_provider: Literal["anthropic", "openai", "ollama"] = "anthropic"
+    openai_base_url: str | None = None  # Custom endpoint for vLLM/DeepSeek
+
+    # Ollama Settings
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3"
 
     # Model Selection
     gm_model: str = "claude-sonnet-4-20250514"  # Primary narrative model
