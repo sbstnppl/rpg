@@ -57,6 +57,7 @@ from src.world.constraints import (
 )
 
 from src.world.world_mechanics import WorldMechanics
+from src.world.scene_builder import SceneBuilder
 
 __all__ = [
     # Enums
@@ -98,6 +99,8 @@ __all__ = [
     "EventLimits",
     # World Mechanics Engine
     "WorldMechanics",
+    # Scene Builder Engine
+    "SceneBuilder",
     # Persistence
     "PersistedNPC",
     "PersistedItem",

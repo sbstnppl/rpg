@@ -86,19 +86,19 @@ This document tracks the implementation of the Scene-First Architecture. Each se
 ## Phase 3: Scene Builder
 
 ### 3.1 Core Scene Builder
-- [ ] Create `src/world/scene_builder.py`:
-  - [ ] `SceneBuilder` class
-  - [ ] `__init__(db, game_session, llm_provider)`
-  - [ ] `build_scene()` - Main entry point
-  - [ ] `_build_first_visit()` - Generate scene for new location
-  - [ ] `_load_existing_scene()` - Load from DB for return visit
-  - [ ] `_add_discoverable_details()` - Add details based on observation level
-  - [ ] `_generate_container_contents()` - Lazy-load container contents
+- [x] Create `src/world/scene_builder.py`:
+  - [x] `SceneBuilder` class
+  - [x] `__init__(db, game_session, llm_provider)`
+  - [x] `build_scene()` - Main entry point
+  - [x] `_build_first_visit()` - Generate scene for new location
+  - [x] `_load_existing_scene()` - Load from DB for return visit
+  - [x] `_filter_by_observation_level()` - Filter items based on observation level
+  - [ ] `_generate_container_contents()` - Lazy-load container contents (deferred to Phase 4)
 
 ### 3.2 Scene Builder LLM Integration
-- [ ] Create prompt template in `data/templates/scene_builder.jinja2`
-- [ ] Implement `_call_scene_builder_llm()` method
-- [ ] Handle structured output for furniture, items, atmosphere
+- [x] Create prompt template in `data/templates/scene_builder.jinja2`
+- [x] Implement `_call_scene_builder_llm()` method
+- [x] Handle structured output for furniture, items, atmosphere
 
 ### 3.3 Location Templates (Optional Enhancement)
 - [ ] Create `src/world/location_templates.py`:
@@ -107,11 +107,11 @@ This document tracks the implementation of the Scene-First Architecture. Each se
   - [ ] Template loading from `data/templates/locations/`
 
 ### 3.4 Tests for Phase 3
-- [ ] Create `tests/test_world/test_scene_builder.py`:
-  - [ ] Test first visit scene generation
-  - [ ] Test return visit loading
-  - [ ] Test observation level progression
-  - [ ] Test container content lazy loading
+- [x] Create `tests/test_world/test_scene_builder.py` (21 tests):
+  - [x] Test first visit scene generation
+  - [x] Test return visit loading
+  - [x] Test observation level progression
+  - [x] Test container content hiding (contents visible only when opened)
 
 **Phase 3 Complete When**: Scene Builder generates appropriate scene contents
 
@@ -331,7 +331,7 @@ This document tracks the implementation of the Scene-First Architecture. Each se
 |-------|--------|---------|-----------|
 | 1. Schemas & Constraints | Complete | 2025-12-21 | 2025-12-21 |
 | 2. World Mechanics | Complete | 2025-12-21 | 2025-12-21 |
-| 3. Scene Builder | Not Started | | |
+| 3. Scene Builder | Complete | 2025-12-21 | 2025-12-21 |
 | 4. Persistence | Not Started | | |
 | 5. Constrained Narrator | Not Started | | |
 | 6. Reference Resolution | Not Started | | |

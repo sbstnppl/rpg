@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Scene-First Architecture Phase 3: Scene Builder** - Generates physical scene contents for locations
+  - New `SceneBuilder` class for first-visit generation and return-visit loading (`src/world/scene_builder.py`)
+  - `build_scene()` main entry point returns `SceneManifest` with furniture, items, NPCs, atmosphere
+  - `_build_first_visit()` calls LLM to generate furniture, items, and atmosphere for new locations
+  - `_load_existing_scene()` loads previously persisted scene from database (no LLM call needed)
+  - `_merge_npcs()` combines NPCs from WorldUpdate with entity details from database
+  - `_filter_by_observation_level()` filters items based on ENTRY/LOOK/SEARCH/EXAMINE levels
+  - Fallback mode works without LLM provider using sensible defaults
+  - Time-aware atmosphere generation based on current hour
+  - Furniture stored as Items with `furniture_type` property (no separate enum needed)
+  - Jinja2 prompt template for LLM scene generation (`data/templates/scene_builder.jinja2`)
+  - 21 new tests covering first-visit, return-visit, NPC merging, observation levels
+  - Key files: `src/world/scene_builder.py`, `tests/test_world/test_scene_builder.py`
+
 - **Scene-First Architecture Phase 2: World Mechanics** - Core world simulation engine
   - New `WorldMechanics` class determines NPC presence at locations (`src/world/world_mechanics.py`)
   - `get_scheduled_npcs()` queries NPC schedules for time/day matching

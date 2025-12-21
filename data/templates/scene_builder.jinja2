@@ -1,0 +1,136 @@
+{# Scene Builder Template for Scene-First Architecture #}
+{# This template generates the physical contents of a location #}
+
+## Location to Generate
+
+**Name**: {{ location.display_name }}
+**Type**: {{ location.location_type }}
+**Category**: {{ location.category or "general" }}
+**Description**: {{ location.description }}
+
+{% if location.atmosphere %}
+**Atmosphere Notes**: {{ location.atmosphere }}
+{% endif %}
+
+{% if location.typical_crowd %}
+**Typical Crowd**: {{ location.typical_crowd }}
+{% endif %}
+
+## Current Context
+
+**Time**: {{ game_time.display }} ({{ game_time.day_name }})
+**Weather**: {{ game_time.weather or "clear" }}
+**Season**: {{ game_time.season or "spring" }}
+**Temperature**: {{ game_time.temperature or "comfortable" }}
+
+## Setting Information
+
+**Setting**: {{ setting.name or "fantasy" }}
+**Era/Period**: {{ setting.era or "medieval" }}
+**Technology Level**: {{ setting.tech_level or "low fantasy" }}
+
+---
+
+## Your Task
+
+Generate the physical contents of this {{ location.location_type }} location. Output a SceneContents object with:
+
+### 1. Furniture (2-5 pieces)
+
+Generate furniture appropriate for a {{ location.location_type }}:
+- Each piece needs a unique `furniture_key` (format: `type_001`, e.g., `bed_001`, `desk_001`)
+- Include `display_name`, `furniture_type`, `material`, `condition`
+- Specify `position_in_room` (e.g., "against the wall", "by the window")
+- Mark `is_container: true` for storage furniture (closets, chests, desks with drawers)
+- Set `container_state` if container ("open", "closed", or "locked")
+
+### 2. Items (2-6 items)
+
+Generate items that would naturally be in this location:
+- Each item needs a unique `item_key` (format: `type_001`)
+- Include `display_name`, `item_type`, `position`
+- Set visibility:
+  - `obvious`: Seen immediately on entering
+  - `discoverable`: Seen when player looks around
+  - `hidden`: Only found by thorough searching
+
+### 3. Atmosphere
+
+Generate sensory details based on time and location:
+- `lighting`: Describe light quality (e.g., "soft morning light", "dim candlelight")
+- `lighting_source`: What provides light (e.g., "window", "fireplace", "candles")
+- `sounds`: List ambient sounds appropriate for time/place
+- `smells`: List scents (if any)
+- `temperature`: Based on weather and location
+- `weather_effects`: How weather affects interior (if applicable)
+- `overall_mood`: One word or phrase (e.g., "cozy", "tense", "peaceful")
+
+### 4. Discoverable Hints
+
+List 0-3 hints about things player might find with closer investigation.
+
+---
+
+## Guidelines
+
+1. **Consistency**: Generate furniture and items appropriate for this specific location type
+2. **Realism**: Items should be plausible for the setting and location
+3. **Hidden items are rare**: Most things should be obvious or discoverable
+4. **Time-appropriate lighting**: Adjust based on time of day
+5. **Unique keys**: Never duplicate item/furniture keys
+6. **Materiality**: Describe materials appropriate for the era (wood, iron, stone, etc.)
+
+## Example Output for a Bedroom
+
+```json
+{
+  "furniture": [
+    {
+      "furniture_key": "bed_001",
+      "display_name": "a wooden bed",
+      "furniture_type": "bed",
+      "material": "oak",
+      "condition": "good",
+      "position_in_room": "against the wall",
+      "is_container": false
+    },
+    {
+      "furniture_key": "desk_001",
+      "display_name": "a small writing desk",
+      "furniture_type": "desk",
+      "material": "pine",
+      "condition": "worn",
+      "position_in_room": "by the window",
+      "is_container": true,
+      "container_state": "closed"
+    }
+  ],
+  "items": [
+    {
+      "item_key": "candle_001",
+      "display_name": "a half-melted candle",
+      "item_type": "light",
+      "position": "on the desk",
+      "visibility": "obvious"
+    },
+    {
+      "item_key": "book_001",
+      "display_name": "a leather-bound journal",
+      "item_type": "book",
+      "position": "on the bedside table",
+      "visibility": "discoverable"
+    }
+  ],
+  "atmosphere": {
+    "lighting": "soft morning light",
+    "lighting_source": "window",
+    "sounds": ["birds chirping outside"],
+    "smells": ["fresh linen"],
+    "temperature": "comfortable",
+    "overall_mood": "peaceful"
+  },
+  "discoverable_hints": ["The desk drawer might contain something"]
+}
+```
+
+Output as structured JSON matching the SceneContents schema.
