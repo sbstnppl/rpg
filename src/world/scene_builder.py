@@ -255,12 +255,17 @@ class SceneBuilder(BaseManager):
 
 ## Instructions
 Generate appropriate:
-1. **Furniture** - 2-5 pieces appropriate for this location type
-2. **Items** - 2-6 items that would naturally be here
+1. **Furniture** - 3-5 DISTINCT pieces appropriate for this location type
+2. **Items** - 3-5 DISTINCT items that would naturally be here
 3. **Atmosphere** - Lighting, sounds, smells based on time and location
 
+IMPORTANT - Avoid duplicates:
+- Do NOT generate similar items (e.g., don't have both "tankards" AND "mugs")
+- Each item should be functionally different
+- Use clear, distinct keys (e.g., 'bar_001', 'fireplace_001')
+
 For each furniture/item:
-- Use snake_case keys (e.g., 'bed_001', 'desk_main')
+- Use snake_case keys like 'bar_001', 'table_001' - keep them short
 - Mark visibility: OBVIOUS (seen on entry), DISCOVERABLE (seen on look), HIDDEN (found on search)
 - Include position in room
 

@@ -244,6 +244,8 @@ async def parse_intent_node(state: GameState) -> dict[str, Any]:
         result = {
             "parsed_actions": action_dicts,
             "ambient_flavor": parsed_intent.ambient_flavor,
+            "needs_clarification": parsed_intent.needs_clarification,
+            "clarification_prompt": parsed_intent.clarification_prompt,
             **clear_queue,
         }
 

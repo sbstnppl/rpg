@@ -306,8 +306,8 @@ class NarratorManifest(BaseModel):
 
     def get_reference_guide(self) -> str:
         """Format for narrator prompt."""
-        lines = ["## Entities You May Reference", ""]
-        lines.append("Use [key] format when referencing these:")
+        lines = ["## Entities You May Reference (EXACT KEYS)", ""]
+        lines.append("Use EXACTLY these [key] values - do not modify or invent keys:")
         lines.append("")
 
         # Group by type

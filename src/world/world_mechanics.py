@@ -296,6 +296,47 @@ class WorldMechanics(BaseManager):
 
         return placements
 
+    def get_current_location_npcs(self, location_key: str) -> list[NPCPlacement]:
+        """Get NPCs whose current_location matches this location.
+
+        This catches NPCs who are at a location but aren't:
+        - Scheduled to be there
+        - Residents
+        - Event-driven
+
+        Args:
+            location_key: The location to check.
+
+        Returns:
+            List of NPCPlacement for NPCs at this location.
+        """
+        # Query entities via their NPC extensions with matching current_location
+        results = (
+            self.db.query(Entity, NPCExtension)
+            .join(NPCExtension, Entity.id == NPCExtension.entity_id)
+            .filter(
+                Entity.session_id == self.session_id,
+                Entity.entity_type == EntityType.NPC,
+                Entity.is_alive == True,
+                NPCExtension.current_location == location_key,
+            )
+            .all()
+        )
+
+        placements = []
+        for entity, ext in results:
+            placement = NPCPlacement(
+                entity_key=entity.entity_key,
+                presence_reason=PresenceReason.VISITING,
+                presence_justification="Currently at this location",
+                activity=ext.current_activity or "present",
+                mood=ext.current_mood or "neutral",
+                position_in_scene="in the area",
+            )
+            placements.append(placement)
+
+        return placements
+
     # =========================================================================
     # Event-Driven NPCs
     # =========================================================================
@@ -493,6 +534,7 @@ class WorldMechanics(BaseManager):
         Combines:
         - Scheduled NPCs
         - Resident NPCs
+        - NPCs with current_location set to this location
         - Event-driven NPCs
 
         Note: Story-driven NPCs require async call - use get_npcs_at_location_async().
@@ -514,6 +556,12 @@ class WorldMechanics(BaseManager):
             if resident.entity_key not in existing_keys:
                 placements.append(resident)
                 existing_keys.add(resident.entity_key)
+
+        # Add NPCs with current_location set
+        for current_npc in self.get_current_location_npcs(location_key):
+            if current_npc.entity_key not in existing_keys:
+                placements.append(current_npc)
+                existing_keys.add(current_npc.entity_key)
 
         # Add event-driven NPCs
         for event_npc in self.get_event_driven_npcs(location_key):

@@ -267,9 +267,13 @@ class DiscourseManager:
         """Compute pronoun candidates from recent mentions.
 
         Returns a mapping of pronouns to the most likely entity:
-        - "she/her" -> most recent female entity
-        - "he/him" -> most recent male entity
+        - "she/her" -> most recent female entity (only if unambiguous)
+        - "he/him" -> most recent male entity (only if unambiguous)
         - "the other one" -> entity with is_contrast=True in most recent group
+
+        IMPORTANT: When multiple same-gender entities exist in the scene,
+        pronouns for that gender are NOT resolved. This allows the scene-first
+        ReferenceResolver to properly detect ambiguity and ask for clarification.
 
         Returns:
             Dict mapping pronoun patterns to EntityMention.
@@ -277,14 +281,18 @@ class DiscourseManager:
         mentions = self.get_recent_mentions()
         candidates: dict[str, EntityMention] = {}
 
-        # Track most recent by gender
-        for mention in mentions:
-            if mention.gender == "female" and "she" not in candidates:
-                candidates["she"] = mention
-                candidates["her"] = mention
-            elif mention.gender == "male" and "he" not in candidates:
-                candidates["he"] = mention
-                candidates["him"] = mention
+        # Count entities by gender to detect ambiguity
+        male_mentions = [m for m in mentions if m.gender == "male"]
+        female_mentions = [m for m in mentions if m.gender == "female"]
+
+        # Only provide pronoun resolution when unambiguous (single candidate)
+        if len(female_mentions) == 1:
+            candidates["she"] = female_mentions[0]
+            candidates["her"] = female_mentions[0]
+
+        if len(male_mentions) == 1:
+            candidates["he"] = male_mentions[0]
+            candidates["him"] = male_mentions[0]
 
         # Track "the other one" from contrast pairs
         for mention in mentions:

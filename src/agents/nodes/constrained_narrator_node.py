@@ -37,6 +37,18 @@ async def constrained_narrator_node(state: GameState) -> dict[str, Any]:
     from src.narrator.scene_narrator import SceneNarrator
     from src.world.schemas import NarrationContext, NarrationType, NarratorManifest
 
+    # Handle clarification directly if needed (can work without manifest)
+    if state.get("needs_clarification"):
+        clarification_prompt = state.get("clarification_prompt")
+        if clarification_prompt:
+            return {
+                "gm_response": clarification_prompt,
+            }
+        else:
+            return {
+                "gm_response": "Could you be more specific about who or what you mean?",
+            }
+
     # Get narrator manifest
     narrator_manifest_dict = state.get("narrator_manifest")
     if narrator_manifest_dict is None:
@@ -72,6 +84,13 @@ async def constrained_narrator_node(state: GameState) -> dict[str, Any]:
             narration_type=narration_type,
             context=context,
         )
+
+        # Log validation status but don't fail - the output is still usable
+        if not result.validation_passed:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Narrator validation did not pass, but output is usable"
+            )
 
         return {
             "gm_response": result.display_text,

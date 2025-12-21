@@ -107,25 +107,32 @@ The context may include a "Reference Resolution Guide" section with pre-computed
 Use this to resolve references accurately.
 
 1. PRONOUNS (she/he/it/they/him/her/them):
-   - Match to the most recently mentioned entity of matching gender
-   - Example: GM mentioned "Ursula" (female) → "she" = "ursula"
+   - FIRST check if there's a Reference Resolution Guide with a mapping for this pronoun
+   - If a mapping exists (e.g., "him" → [entity_id]), use that mapping
+   - If NO mapping exists AND multiple entities match the pronoun's gender:
+     SET needs_clarification=true and provide a clarification_question listing the candidates
+   - Example: Two males present with no pronoun guide → "talk to him" requires clarification
 
 2. ANAPHORIC REFERENCES (the other one, the first, the second):
    - Use the Reference Resolution Guide if available
    - "the other one" typically refers to the contrasting entity in a pair
-   - Example: "Two guys - one singing, one playing guitar" → "the other one" = the guitar player
+   - If ambiguous, set needs_clarification=true
 
 3. DESCRIPTIVE REFERENCES (the tall merchant, the singing guy):
    - Match descriptors to entity attributes from Entity Mentions
    - Example: Entity has descriptor "singing" → "the singing guy" matches
 
-IMPORTANT - Always set `target` to the resolved entity:
-- For actions: "attack her" → target="ursula"
-- For CUSTOM queries: "where is she?" → target="ursula"
-- For anaphoric: "talk to the other one" → target="[reference_id from guide]"
-- If unspawned entity, use the reference_id (system will spawn on demand)
+IMPORTANT - Pronoun Clarification:
+When processing pronouns like "him", "her", "them":
+- If there is ONE entity of matching gender → resolve to that entity
+- If there are MULTIPLE entities of matching gender AND no Resolution Guide mapping:
+  → DO NOT guess, DO NOT pick the most recent
+  → Set needs_clarification=true
+  → Ask "Which [pronoun] do you mean: [list candidates]?"
 
-If truly ambiguous (no guide available, multiple candidates), set needs_clarification=true.
+Target setting:
+- For resolved entities: target="entity_key" or target="[reference_id]"
+- For unresolved/ambiguous: leave actions empty, set needs_clarification=true
 """
 
 

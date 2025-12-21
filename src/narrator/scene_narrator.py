@@ -54,7 +54,7 @@ class SceneNarrator:
         manifest: NarratorManifest,
         llm_provider: LLMProvider | None = None,
         max_retries: int = 3,
-        temperature: float = 0.7,
+        temperature: float = 0.4,  # Lower temp for more consistent [key] usage
     ) -> None:
         """Initialize SceneNarrator.
 
@@ -216,50 +216,35 @@ class SceneNarrator:
 
         parts.append("---")
         parts.append("")
-        parts.append("Write the narration now. Use [key] format for all entity references!")
+        parts.append("REMINDER: Only use EXACT keys from the list above. Do not invent keys!")
+        parts.append("Write the narration now:")
 
         return "\n".join(parts)
 
     def _get_system_prompt(self) -> str:
         """Get the system prompt for narration."""
-        return """You are the Narrator for a fantasy RPG.
+        return """MANDATORY OUTPUT FORMAT: Every physical object MUST be written as [key].
 
-Your ONLY job is to describe what exists. You CANNOT invent new things.
+You are a narrator. When describing ANY physical thing (furniture, item, person),
+you MUST wrap it in brackets using its exact key from the manifest.
 
-## Critical Rules
+EXAMPLE - This is EXACTLY how your output should look:
+"The warmth of [fireplace_001] greets you. Behind [bar_001], [bartender_joe] nods."
 
-### Rule 1: Use [key] Format for ALL Entity References
+BAD OUTPUT (will be rejected):
+"The warmth of the fireplace greets you. Behind the bar, the bartender nods."
+↑ This has NO [key] markers and will FAIL validation!
 
-When mentioning ANY entity (NPC, item, furniture), you MUST use the [key] format:
+RULES:
+1. Write [key] for EVERY physical thing - no exceptions
+2. Only reference items from the manifest - don't invent
+3. Atmosphere words (lighting, sounds, smells) don't need [key]
 
-CORRECT:
-"You see [marcus_001] sitting on [bed_001], reading [book_001]."
+The [key] markers get stripped before display, so write naturally around them:
+- "the old [bar_001]" becomes "the old weathered oak bar"
+- "[bartender_joe] smiles" becomes "Joe the Bartender smiles"
 
-WRONG:
-"You see Marcus sitting on the bed."
-"You see your friend sitting on a wooden bed."
-
-### Rule 2: ONLY Reference Entities from the Manifest
-
-If it's not in the entity list provided, it DOES NOT EXIST.
-Do not mention items, people, or objects not listed.
-
-### Rule 3: You May Describe Entities Creatively
-
-[marcus_001] can be described as:
-- "your old friend [marcus_001]"
-- "[marcus_001], looking tired but pleased"
-
-But you MUST include the [key].
-
-### Rule 4: Atmosphere Is Free
-
-You may use atmosphere details (lighting, sounds, smells) without [key] format.
-
-## Output Format
-
-Write engaging, immersive prose with [key] markers embedded.
-The [key] markers will be stripped before showing to the player."""
+Your output WILL BE VALIDATED. Any physical object without [key] = rejection."""
 
     def _strip_keys(self, text: str) -> str:
         """Strip [key] markers and replace with display names.

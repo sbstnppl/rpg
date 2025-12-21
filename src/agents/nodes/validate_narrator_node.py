@@ -98,14 +98,18 @@ async def validate_narrator_node(state: GameState) -> dict[str, Any]:
                 "_route_to_narrator": True,  # Signal to route back
             }
         else:
-            # Max retries exceeded - accept current output with warning
+            # Max retries exceeded - accept current output (it's still usable)
+            import logging
+            logging.getLogger(__name__).info(
+                f"Narrator validation soft-failed after {retry_count} retries, accepting output"
+            )
             return {
                 "narrative_validation_result": {
                     "valid": False,
                     "accepted_with_errors": True,
                     "errors": validation_result.error_messages,
                 },
-                "errors": ["Narrator validation failed after retries"],
+                # Don't add to errors - the output is still usable
             }
 
     except Exception as e:

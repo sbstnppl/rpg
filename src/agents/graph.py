@@ -387,9 +387,10 @@ SCENE_FIRST_NODES: dict = {}
 
 def route_after_parse_scene_first(
     state: GameState,
-) -> Literal["world_mechanics", "resolve_references"]:
+) -> Literal["world_mechanics", "resolve_references", "constrained_narrator"]:
     """Route after parsing - determine if scene needs building.
 
+    If parser detected ambiguity, route to narrator for clarification.
     If player just entered a location, route to world_mechanics to build scene.
     Otherwise, route directly to resolve_references for action processing.
 
@@ -397,8 +398,15 @@ def route_after_parse_scene_first(
         state: Current game state.
 
     Returns:
-        "world_mechanics" for location changes, "resolve_references" otherwise.
+        "constrained_narrator" for clarification,
+        "world_mechanics" for location changes,
+        "resolve_references" otherwise.
     """
+    # If parser detected clarification needed (e.g., ambiguous pronouns),
+    # route directly to narrator to ask for clarification
+    if state.get("needs_clarification"):
+        return "constrained_narrator"
+
     # Scene requests always need world mechanics
     if state.get("is_scene_request"):
         return "world_mechanics"
@@ -537,13 +545,14 @@ def build_scene_first_graph() -> StateGraph:
     # Initial flow: context → parse
     graph.add_edge("context_compiler", "parse_intent")
 
-    # After parse: route based on whether we need to build scene
+    # After parse: route based on whether we need to build scene or ask clarification
     graph.add_conditional_edges(
         "parse_intent",
         route_after_parse_scene_first,
         {
             "world_mechanics": "world_mechanics",
             "resolve_references": "resolve_references",
+            "constrained_narrator": "constrained_narrator",
         },
     )
 
