@@ -49,30 +49,35 @@ This document tracks the implementation of the Scene-First Architecture. Each se
 ## Phase 2: World Mechanics
 
 ### 2.1 Core World Mechanics
-- [ ] Create `src/world/world_mechanics.py`:
-  - [ ] `WorldMechanics` class
-  - [ ] `__init__(db, game_session, llm_provider)`
-  - [ ] `advance_world()` - Main entry point
-  - [ ] `get_npcs_at_location()` - Determine NPC presence
-  - [ ] `_get_scheduled_npcs()` - Query NPC schedules
-  - [ ] `_get_event_driven_npcs()` - NPCs from events
-  - [ ] `_get_story_driven_npcs()` - NPCs from narrative needs
-  - [ ] `maybe_introduce_element()` - Introduce new elements with constraints
+- [x] Create `src/world/world_mechanics.py`:
+  - [x] `WorldMechanics` class
+  - [x] `__init__(db, game_session, llm_provider)`
+  - [x] `advance_world()` - Main entry point
+  - [x] `get_npcs_at_location()` - Determine NPC presence
+  - [x] `get_scheduled_npcs()` - Query NPC schedules
+  - [x] `get_resident_npcs()` - NPCs who live at location
+  - [ ] `_get_event_driven_npcs()` - NPCs from events (deferred to Phase 7)
+  - [ ] `_get_story_driven_npcs()` - NPCs from narrative needs (deferred to Phase 7)
+  - [x] `maybe_introduce_element()` - Introduce new elements with constraints
+  - [x] `get_relationship_counts()` - Count player relationships by category
+  - [x] `check_placement_constraints()` - Validate NPC placements
 
 ### 2.2 World Mechanics LLM Integration
-- [ ] Create prompt template in `data/templates/world_mechanics.jinja2`
-- [ ] Implement `_call_world_mechanics_llm()` method
-- [ ] Handle structured output parsing
-- [ ] Add constraint checking before accepting LLM suggestions
+- [x] Create prompt template in `data/templates/world_mechanics.jinja2`
+- [ ] Implement `_call_world_mechanics_llm()` method (deferred to Phase 7)
+- [ ] Handle structured output parsing (deferred to Phase 7)
+- [x] Add constraint checking before accepting LLM suggestions
 
 ### 2.3 Tests for Phase 2
-- [ ] Create `tests/test_world/test_world_mechanics.py`:
-  - [ ] Test scheduled NPC presence
-  - [ ] Test event-driven NPC placement
-  - [ ] Test constraint enforcement (social limits)
-  - [ ] Test constraint enforcement (physical plausibility)
-  - [ ] Test new element introduction with valid constraints
-  - [ ] Test new element rejection when constraints violated
+- [x] Create `tests/test_world/test_world_mechanics.py` (25 tests):
+  - [x] Test scheduled NPC presence
+  - [x] Test resident NPC presence
+  - [x] Test constraint enforcement (social limits)
+  - [x] Test constraint enforcement (physical plausibility)
+  - [x] Test new element introduction with valid constraints
+  - [x] Test new element rejection when constraints violated
+  - [x] Test time context handling
+  - [x] Test relationship counting
 
 **Phase 2 Complete When**: World Mechanics correctly determines NPC presence with constraints
 
@@ -325,7 +330,7 @@ This document tracks the implementation of the Scene-First Architecture. Each se
 | Phase | Status | Started | Completed |
 |-------|--------|---------|-----------|
 | 1. Schemas & Constraints | Complete | 2025-12-21 | 2025-12-21 |
-| 2. World Mechanics | Not Started | | |
+| 2. World Mechanics | Complete | 2025-12-21 | 2025-12-21 |
 | 3. Scene Builder | Not Started | | |
 | 4. Persistence | Not Started | | |
 | 5. Constrained Narrator | Not Started | | |

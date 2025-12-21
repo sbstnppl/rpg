@@ -52,7 +52,11 @@ from src.world.schemas import (
 
 from src.world.constraints import (
     RealisticConstraintChecker,
+    PhysicalLimits,
+    EventLimits,
 )
+
+from src.world.world_mechanics import WorldMechanics
 
 __all__ = [
     # Enums
@@ -90,6 +94,10 @@ __all__ = [
     "SocialLimits",
     "ConstraintResult",
     "RealisticConstraintChecker",
+    "PhysicalLimits",
+    "EventLimits",
+    # World Mechanics Engine
+    "WorldMechanics",
     # Persistence
     "PersistedNPC",
     "PersistedItem",

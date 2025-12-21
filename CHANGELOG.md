@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Scene-First Architecture Phase 2: World Mechanics** - Core world simulation engine
+  - New `WorldMechanics` class determines NPC presence at locations (`src/world/world_mechanics.py`)
+  - `get_scheduled_npcs()` queries NPC schedules for time/day matching
+  - `get_resident_npcs()` finds NPCs who live at a location
+  - `get_npcs_at_location()` combines scheduled and resident NPCs
+  - `check_placement_constraints()` validates physical and social constraints
+  - `advance_world()` main entry point returns `WorldUpdate` with valid placements
+  - `maybe_introduce_element()` validates new elements against constraints
+  - `get_relationship_counts()` categorizes player relationships (close/casual/acquaintances)
+  - Jinja2 prompt template for LLM integration (`data/templates/world_mechanics.jinja2`)
+  - 25 new tests covering scheduled NPCs, residents, constraints, and time context
+  - Key files: `src/world/world_mechanics.py`, `tests/test_world/test_world_mechanics.py`
+
 - **Scene-First Architecture Phase 1: Schemas & Constraints** - Foundation for new world-first architecture
   - New `src/world/` module with Pydantic schemas for World Mechanics, Scene Builder, Narrator, and Resolution
   - 25 Pydantic models: `WorldUpdate`, `NPCPlacement`, `SceneManifest`, `NarratorManifest`, `EntityRef`, etc.

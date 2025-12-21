@@ -1,0 +1,75 @@
+{# World Mechanics Template for Scene-First Architecture #}
+{# This template generates context for the World Mechanics LLM call #}
+
+## Current Context
+
+**Location**: {{ location.display_name }} ({{ location.location_key }})
+**Location Type**: {{ location.location_type }}
+**Time**: {{ game_time.display }}
+**Day of Week**: {{ game_time.day_name }}
+
+## Player Information
+
+**Player**: {{ player.display_name }}
+**Personality**: {{ player.personality or "not specified" }}
+
+### Current Relationships
+{% for rel in relationships %}
+- {{ rel.target_name }}: {{ rel.type }} ({{ rel.closeness }}/100)
+{% else %}
+No established relationships yet.
+{% endfor %}
+
+### Relationship Counts
+- Close friends: {{ counts.close_friends }}/{{ limits.max_close_friends }}
+- Casual friends: {{ counts.casual_friends }}/{{ limits.max_casual_friends }}
+- Acquaintances: {{ counts.acquaintances }}/{{ limits.max_acquaintances }}
+- New this week: {{ counts.new_this_week }}/{{ limits.max_new_relationships_per_week }}
+
+## NPCs Who Should Be Here (from schedules)
+{% for npc in scheduled_npcs %}
+- {{ npc.display_name }} ({{ npc.entity_key }}): {{ npc.schedule_activity }}
+{% else %}
+No scheduled NPCs at this location right now.
+{% endfor %}
+
+## NPCs Who Live Here
+{% for npc in resident_npcs %}
+- {{ npc.display_name }} ({{ npc.entity_key }})
+{% else %}
+No NPCs reside at this location.
+{% endfor %}
+
+## Recent Events (avoid repetition)
+{% for event in recent_events %}
+- {{ event.event_type }}: {{ event.description }} ({{ event.days_ago }} days ago)
+{% else %}
+No recent notable events.
+{% endfor %}
+
+## Active Plot Threads
+{% for plot in active_plots %}
+- {{ plot.name }}: {{ plot.current_state }}
+{% else %}
+No active plot threads.
+{% endfor %}
+
+## Recent Turn Summary
+{{ recent_turns_summary or "Beginning of the game." }}
+
+---
+
+## Your Task
+
+Determine:
+1. Which scheduled NPCs are actually present (they might be away for a reason)
+2. Should any unscheduled NPCs be here? (event or story driven)
+3. Are there any world events occurring?
+4. Any new facts to establish?
+
+**Important**: If introducing a new NPC or element, you MUST:
+- Verify it doesn't exceed social limits
+- Provide clear narrative justification
+- Ensure physical plausibility
+
+Output as structured JSON matching the WorldUpdate schema.
