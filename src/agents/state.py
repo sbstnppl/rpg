@@ -143,6 +143,17 @@ class GameState(TypedDict, total=False):
     is_continuation: bool  # Whether this turn resumes queued actions
     continuation_prompt: str | None  # Question to ask player (e.g., "Continue to the well?")
 
+    # Scene-First Architecture fields (new world-building flow)
+    # These fields are used by the scene-first pipeline that builds the world BEFORE narrating
+    world_update: dict[str, Any] | None  # WorldUpdate from world_mechanics_node
+    scene_manifest: dict[str, Any] | None  # SceneManifest from scene_builder_node
+    narrator_manifest: dict[str, Any] | None  # NarratorManifest for constrained narrator
+    resolved_actions: list[dict[str, Any]] | None  # Actions with resolved entity references
+    needs_clarification: bool  # Whether reference resolution needs player input
+    clarification_prompt: str | None  # Question to ask player about ambiguous reference
+    clarification_candidates: list[dict[str, Any]] | None  # Candidate entities for clarification
+    just_entered_location: bool  # Whether player just entered this location (triggers scene building)
+
     # Runtime dependencies (injected by game loop, not persisted)
     _db: Any  # SQLAlchemy Session
     _game_session: Any  # GameSession model
@@ -231,6 +242,15 @@ def create_initial_state(
         queued_actions=None,
         is_continuation=False,
         continuation_prompt=None,
+        # Scene-First Architecture fields
+        world_update=None,
+        scene_manifest=None,
+        narrator_manifest=None,
+        resolved_actions=None,
+        needs_clarification=False,
+        clarification_prompt=None,
+        clarification_candidates=None,
+        just_entered_location=False,
         # Metadata
         turn_number=turn_number,
         errors=[],

@@ -58,18 +58,35 @@ The Scene-First Architecture inverts the current causality:
 **Interface**:
 ```python
 class WorldMechanics:
-    async def advance_world(
-        self,
-        current_time: GameTime,
-        player_location: str,
-        recent_events: list[Event],
-    ) -> WorldUpdate
-
-    async def get_npcs_at_location(
+    def advance_world(
         self,
         location_key: str,
-        current_time: GameTime,
-    ) -> list[NPCPresence]
+        location_type: str | None = None,
+        is_player_home: bool = False,
+    ) -> WorldUpdate
+
+    def get_npcs_at_location(self, location_key: str) -> list[NPCPlacement]
+    """Sync version: scheduled + resident + event-driven NPCs."""
+
+    async def get_npcs_at_location_async(
+        self,
+        location_key: str,
+        location_type: str = "general",
+        scene_context: str = "",
+    ) -> list[NPCPlacement]
+    """Async version: includes story-driven NPCs via LLM."""
+
+    def get_scheduled_npcs(self, location_key: str) -> list[NPCPlacement]
+    def get_resident_npcs(self, location_key: str) -> list[NPCPlacement]
+    def get_event_driven_npcs(self, location_key: str) -> list[NPCPlacement]
+
+    async def get_story_driven_npcs(
+        self,
+        location_key: str,
+        location_type: str,
+        scene_context: str = "",
+    ) -> list[NPCPlacement]
+    """Uses LLM to determine if story needs an NPC appearance."""
 ```
 
 ---
@@ -113,10 +130,17 @@ class WorldMechanics:
 class SceneBuilder:
     async def build_scene(
         self,
-        location: Location,
+        location_key: str,
         world_update: WorldUpdate,
-        observation_level: ObservationLevel,
+        observation_level: ObservationLevel = ObservationLevel.ENTRY,
     ) -> SceneManifest
+
+    async def generate_container_contents(
+        self,
+        container: Item,
+        location: Location,
+    ) -> list[ItemSpec]
+    """Lazy-loads container contents when opened for first time."""
 ```
 
 ---

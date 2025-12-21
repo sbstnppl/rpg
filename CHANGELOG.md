@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Scene-First Architecture Phase 7-8: Graph Integration & Testing** - Complete scene-first pipeline
+  - New `build_scene_first_graph()` in `src/agents/graph.py` with full node wiring
+  - New graph nodes: `world_mechanics_node`, `scene_builder_node`, `persist_scene_node`, `resolve_references_node`, `constrained_narrator_node`, `validate_narrator_node`
+  - Routing functions: `route_after_parse_scene_first()`, `route_after_resolve()`, `route_after_validate_narrator()`
+  - Feature flag `--pipeline scene-first` in CLI to switch between pipelines
+  - New `docs/IDEAS.md` for tracking deferred feature ideas
+  - New `docs/scene-first-architecture/troubleshooting.md`
+  - Integration test: `tests/test_integration/test_scene_first_flow.py` (14 tests)
+  - Key files: `src/agents/graph.py`, `src/agents/nodes/world_mechanics_node.py`, `src/agents/nodes/scene_builder_node.py`
+
+### Fixed
+- **Scene-first routing skips world_mechanics** - Added check for missing `narrator_manifest` and LOOK actions (`src/agents/graph.py:route_after_parse_scene_first`)
+- **CLI hardcoded starting_location** - `_single_turn()` now finds actual location from DB (`src/cli/commands/game.py`)
+- **complete_structured returns dict not model** - Added `model_validate()` conversion in SceneBuilder and WorldMechanics
+- **Missing FactManager.list_facts()** - Added method for complication oracle (`src/managers/fact_manager.py`)
+
 - **Scene-First Architecture Phase 6: Reference Resolution** - Resolves player references to scene entities
   - New `ReferenceResolver` class resolves player text to entity keys (`src/resolver/reference_resolver.py`)
   - Cascade resolution: exact key → display name → pronoun → descriptor matching

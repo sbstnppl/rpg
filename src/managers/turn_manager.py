@@ -51,6 +51,10 @@ class TurnManager(BaseManager):
     ) -> list[dict[str, Any]]:
         """Get decorative items mentioned in recent turns at a location.
 
+        DEPRECATED: In scene-first architecture, all items are created upfront
+        in the scene manifest. Deferred item tracking is not needed. This method
+        is kept for system-authority pipeline backward compatibility.
+
         These are items that were mentioned in narrative but deferred for
         on-demand spawning (decorative items like pebbles, dust, etc.).
 
@@ -97,6 +101,10 @@ class TurnManager(BaseManager):
         lookback_turns: int = 10,
     ) -> list[dict[str, Any]]:
         """Get all decorative items mentioned in recent turns (any location).
+
+        DEPRECATED: In scene-first architecture, all items are created upfront
+        in the scene manifest. Deferred item tracking is not needed. This method
+        is kept for system-authority pipeline backward compatibility.
 
         This is a fallback for when location-specific lookup fails. Useful
         for INFO responses that mention items at locations the player hasn't
@@ -169,6 +177,10 @@ class TurnManager(BaseManager):
         items: list[dict[str, str]],
     ) -> bool:
         """Save mentioned items to a turn.
+
+        DEPRECATED: In scene-first architecture, all items are created upfront
+        in the scene manifest. Deferred item tracking is not needed. This method
+        is kept for system-authority pipeline backward compatibility.
 
         Used by narrative validator to persist deferred items for later
         on-demand spawning.

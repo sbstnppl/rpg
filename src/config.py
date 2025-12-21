@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     # Game Settings
     default_setting: str = "fantasy"
     checkpoint_interval: int = 15  # Turns between checkpoints
+    pipeline: Literal["legacy", "system-authority", "scene-first"] = "system-authority"
 
     # Debug
     debug: bool = False

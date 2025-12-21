@@ -150,6 +150,11 @@ class IntentParser:
     ) -> ParsedIntent:
         """Try to resolve ambiguous targets using scene context.
 
+        DEPRECATED: This is a simple name-matching resolution. The scene-first
+        architecture uses resolve_references_node for sophisticated resolution
+        including pronouns, recency, and disambiguation. This method is kept
+        for backward compatibility with the system-authority pipeline.
+
         For example, if player says "talk to the guard" and there's an
         entity "town_guard" in the scene, resolve the target.
 

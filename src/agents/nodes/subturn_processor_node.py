@@ -41,6 +41,10 @@ async def _resolve_and_spawn_target(
 ) -> str | None:
     """Resolve a target reference, spawning entity if needed.
 
+    DEPRECATED: This function is only used by the system-authority pipeline.
+    The scene-first architecture pre-resolves references via resolve_references_node,
+    so this on-demand spawning is no longer needed in that flow.
+
     If the target matches a mention that hasn't been spawned yet,
     this spawns the entity on-demand using the mention's descriptors.
 
@@ -215,7 +219,13 @@ async def subturn_processor_node(state: GameState) -> dict[str, Any]:
             "errors": ["Missing database session or game session in state"],
         }
 
+    # Check for pre-resolved actions (scene-first flow) or raw parsed actions
+    resolved_actions = state.get("resolved_actions")
     parsed_actions = state.get("parsed_actions", [])
+
+    # Use resolved actions if available (scene-first), otherwise use parsed actions
+    action_dicts = resolved_actions if resolved_actions else parsed_actions
+    use_scene_first_resolution = resolved_actions is not None
 
     # Handle scene requests - skip action processing entirely
     if state.get("is_scene_request"):
@@ -225,7 +235,7 @@ async def subturn_processor_node(state: GameState) -> dict[str, Any]:
             "queued_actions": None,
         }
 
-    if not parsed_actions:
+    if not action_dicts:
         return {
             "chained_turn_result": ChainedTurnResult().to_dict(),
             "continuation_status": None,
@@ -250,24 +260,27 @@ async def subturn_processor_node(state: GameState) -> dict[str, Any]:
     # Get player location for entity resolution
     player_location = state.get("player_location", "")
 
-    # Convert action dicts to Action objects, resolving targets and spawning if needed
+    # Convert action dicts to Action objects
     actions = []
-    for action_dict in parsed_actions:
-        # Resolve target - may spawn entity just-in-time if it's an unspawned mention
-        target = await _resolve_and_spawn_target(
-            action_dict.get("target"),
-            db,
-            game_session,
-            player_location,
-        )
-
-        # Also resolve indirect_target (e.g., "give X to her")
-        indirect_target = await _resolve_and_spawn_target(
-            action_dict.get("indirect_target"),
-            db,
-            game_session,
-            player_location,
-        )
+    for action_dict in action_dicts:
+        if use_scene_first_resolution:
+            # Scene-first: use pre-resolved target keys
+            target = action_dict.get("resolved_target_key") or action_dict.get("target")
+            indirect_target = action_dict.get("resolved_indirect_key") or action_dict.get("indirect_target")
+        else:
+            # System-authority: resolve targets on-demand, spawning if needed
+            target = await _resolve_and_spawn_target(
+                action_dict.get("target"),
+                db,
+                game_session,
+                player_location,
+            )
+            indirect_target = await _resolve_and_spawn_target(
+                action_dict.get("indirect_target"),
+                db,
+                game_session,
+                player_location,
+            )
 
         action = Action(
             type=ActionType(action_dict["type"]),

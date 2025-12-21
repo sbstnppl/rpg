@@ -13,7 +13,7 @@ The RPG uses a LangGraph-based multi-agent architecture where specialized agents
 
 ## Game Pipelines
 
-The RPG supports two game pipelines, selectable via `--pipeline` flag on CLI commands.
+The RPG supports three game pipelines, selectable via `--pipeline` flag on CLI commands.
 
 ### System-Authority Pipeline (Default, Recommended)
 
@@ -71,6 +71,60 @@ START → ContextCompiler → GameMaster (with Tool Calling)
 - Less predictable outcomes
 
 **CLI**: `rpg game play --pipeline legacy`
+
+---
+
+### Scene-First Pipeline (New Architecture)
+
+```
+START → ContextCompiler → ParseIntent
+                              ↓
+                [route_after_parse]
+               /               \
+              ↓                 ↓
+       WorldMechanics     ResolveReferences
+              ↓                 |
+       SceneBuilder       [route_after_resolve]
+              ↓             /        \
+       PersistScene   SubturnProcessor  ConstrainedNarrator
+              ↓              ↓              ↓
+       ResolveReferences → StateValidator → ConstrainedNarrator
+                                              ↓
+                                       ValidateNarrator
+                                           /     \
+                                          ↓       ↓
+                              ConstrainedNarrator  Persistence → END
+                                   (retry)
+```
+
+**Philosophy**: "Build the world BEFORE narrating it"
+
+**Key Innovation**: All entities exist in a scene manifest before the narrator runs. The narrator can only reference entities that exist, preventing orphaned entities and state/narrative drift.
+
+**Benefits**:
+- **No orphaned entities**: Everything mentioned is pre-created
+- **Single source of truth**: NarratorManifest contains all valid references
+- **Proper pronoun resolution**: Full context for "he", "she", "the other one"
+- **Clarification flow**: Ambiguous references prompt player for clarification
+- **Constrained narrator**: Validation catches invented entities
+
+**Components**:
+1. **WorldMechanics** - Determines what exists: NPCs present (schedules, events), world state
+2. **SceneBuilder** - Generates scene contents: furniture, items, atmosphere
+3. **PersistScene** - Saves all scene contents to DB, builds NarratorManifest
+4. **ResolveReferences** - Matches player targets to manifest entities
+5. **ConstrainedNarrator** - Generates prose using only manifest entities (with [key] format)
+6. **ValidateNarrator** - Ensures narrator followed rules, triggers retry if not
+
+**Reference Format**: Narrator embeds entity keys in output:
+```
+"You see [marcus_001] sitting on [bed_001]."
+→ Display: "You see Marcus sitting on the bed."
+```
+
+**CLI**: `rpg game play --pipeline scene-first`
+
+**Documentation**: See `docs/scene-first-architecture/` for detailed design.
 
 ---
 

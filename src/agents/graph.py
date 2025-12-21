@@ -107,6 +107,8 @@ from src.agents.nodes.info_formatter_node import info_formatter_node
 from src.agents.nodes.narrator_node import narrator_node
 from src.agents.nodes.narrative_validator_node import narrative_validator_node
 
+# Scene-First Architecture nodes - imported lazily below to avoid circular imports
+
 
 # Map of agent names to node functions (legacy flow)
 AGENT_NODES = {
@@ -346,6 +348,233 @@ def build_system_authority_graph() -> StateGraph:
         route_after_narrative_validator,
         {
             "narrator": "narrator",
+            "persistence": "persistence",
+        },
+    )
+
+    graph.add_edge("persistence", END)
+
+    return graph
+
+
+def _get_scene_first_nodes():
+    """Get scene-first nodes with lazy imports to avoid circular imports."""
+    from src.agents.nodes.world_mechanics_node import world_mechanics_node
+    from src.agents.nodes.scene_builder_node import scene_builder_node
+    from src.agents.nodes.persist_scene_node import persist_scene_node
+    from src.agents.nodes.resolve_references_node import resolve_references_node
+    from src.agents.nodes.constrained_narrator_node import constrained_narrator_node
+    from src.agents.nodes.validate_narrator_node import validate_narrator_node
+
+    return {
+        "context_compiler": context_compiler_node,
+        "parse_intent": parse_intent_node,
+        "world_mechanics": world_mechanics_node,
+        "scene_builder": scene_builder_node,
+        "persist_scene": persist_scene_node,
+        "resolve_references": resolve_references_node,
+        "subturn_processor": subturn_processor_node,
+        "state_validator": state_validator_node,
+        "constrained_narrator": constrained_narrator_node,
+        "validate_narrator": validate_narrator_node,
+        "persistence": persistence_node,
+    }
+
+
+# Lazy-loaded node map (populated on first access)
+SCENE_FIRST_NODES: dict = {}
+
+
+def route_after_parse_scene_first(
+    state: GameState,
+) -> Literal["world_mechanics", "resolve_references"]:
+    """Route after parsing - determine if scene needs building.
+
+    If player just entered a location, route to world_mechanics to build scene.
+    Otherwise, route directly to resolve_references for action processing.
+
+    Args:
+        state: Current game state.
+
+    Returns:
+        "world_mechanics" for location changes, "resolve_references" otherwise.
+    """
+    # Scene requests always need world mechanics
+    if state.get("is_scene_request"):
+        return "world_mechanics"
+
+    # Location changes need scene building
+    if state.get("location_changed") or state.get("just_entered_location"):
+        return "world_mechanics"
+
+    # If no narrator_manifest exists, we need to build the scene first
+    # This handles first turn at a location or fresh games
+    if state.get("narrator_manifest") is None:
+        return "world_mechanics"
+
+    # LOOK actions always need fresh scene context
+    parsed_actions = state.get("parsed_actions") or []
+    for action in parsed_actions:
+        if action.get("type", "").upper() == "LOOK":
+            return "world_mechanics"
+
+    # Other actions need reference resolution
+    if parsed_actions:
+        return "resolve_references"
+
+    # Default to world mechanics for scene description
+    return "world_mechanics"
+
+
+def route_after_resolve(
+    state: GameState,
+) -> Literal["subturn_processor", "constrained_narrator"]:
+    """Route after reference resolution.
+
+    If clarification is needed, route to narrator for clarification prompt.
+    Otherwise, route to subturn processor for action execution.
+
+    Args:
+        state: Current game state.
+
+    Returns:
+        "constrained_narrator" for clarification, "subturn_processor" otherwise.
+    """
+    if state.get("needs_clarification"):
+        return "constrained_narrator"
+
+    # Check if there are resolved actions to execute
+    resolved_actions = state.get("resolved_actions") or []
+    if resolved_actions:
+        return "subturn_processor"
+
+    # No actions - go to narrator for scene description
+    return "constrained_narrator"
+
+
+def route_after_validate_narrator(
+    state: GameState,
+) -> Literal["constrained_narrator", "persistence"]:
+    """Route after narrator validation.
+
+    If validation failed and retries remain, go back to narrator.
+    Otherwise, proceed to persistence.
+
+    Args:
+        state: Current game state.
+
+    Returns:
+        "constrained_narrator" if re-narration needed, "persistence" otherwise.
+    """
+    if state.get("_route_to_narrator"):
+        return "constrained_narrator"
+    return "persistence"
+
+
+def build_scene_first_graph() -> StateGraph:
+    """Build the Scene-First game orchestration graph.
+
+    This is the new pipeline that builds the world BEFORE narrating:
+    - World Mechanics determines what exists (NPCs, events)
+    - Scene Builder generates/loads scene contents
+    - Persistence stores everything to DB
+    - Reference Resolution matches player targets to entities
+    - Constrained Narrator describes only what exists
+    - Validation ensures narrator followed rules
+
+    Graph structure:
+        START
+          |
+          v
+        context_compiler (gather scene context)
+          |
+          v
+        parse_intent (convert input to actions)
+          |
+          v
+        [route_after_parse]
+         /              \\
+        v                v
+    world_mechanics    resolve_references
+        |                    |
+        v              [route_after_resolve]
+    scene_builder       /        \\
+        |              v          v
+        v         subturn_    constrained_
+    persist_scene processor   narrator
+        |              |           |
+        v              v           v
+    resolve_refs  state_validator  |
+        |              |           |
+        v              v           |
+    [rejoin] → constrained_narrator
+                       |
+                       v
+                validate_narrator
+                   /      \\
+                  v        v
+          constrained_  persistence
+          narrator        |
+          (retry)         v
+                        END
+
+    Returns:
+        Configured StateGraph ready to compile.
+    """
+    # Create graph with GameState schema
+    graph = StateGraph(GameState)
+
+    # Get nodes (lazy import to avoid circular imports)
+    nodes = _get_scene_first_nodes()
+
+    # Add all nodes
+    for name, func in nodes.items():
+        graph.add_node(name, func)
+
+    # Set entry point
+    graph.set_entry_point("context_compiler")
+
+    # Initial flow: context → parse
+    graph.add_edge("context_compiler", "parse_intent")
+
+    # After parse: route based on whether we need to build scene
+    graph.add_conditional_edges(
+        "parse_intent",
+        route_after_parse_scene_first,
+        {
+            "world_mechanics": "world_mechanics",
+            "resolve_references": "resolve_references",
+        },
+    )
+
+    # Scene building flow: world_mechanics → scene_builder → persist_scene → resolve
+    graph.add_edge("world_mechanics", "scene_builder")
+    graph.add_edge("scene_builder", "persist_scene")
+    graph.add_edge("persist_scene", "resolve_references")
+
+    # After reference resolution: route based on clarification needs
+    graph.add_conditional_edges(
+        "resolve_references",
+        route_after_resolve,
+        {
+            "subturn_processor": "subturn_processor",
+            "constrained_narrator": "constrained_narrator",
+        },
+    )
+
+    # Action execution flow: subturn → state_validator → narrator
+    graph.add_edge("subturn_processor", "state_validator")
+    graph.add_edge("state_validator", "constrained_narrator")
+
+    # Narrator → validation
+    graph.add_edge("constrained_narrator", "validate_narrator")
+
+    # Validation routes back to narrator or to persistence
+    graph.add_conditional_edges(
+        "validate_narrator",
+        route_after_validate_narrator,
+        {
+            "constrained_narrator": "constrained_narrator",
             "persistence": "persistence",
         },
     )

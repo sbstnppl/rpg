@@ -178,6 +178,23 @@ class FactManager(BaseManager):
             .all()
         )
 
+    def list_facts(self, limit: int = 20) -> list[Fact]:
+        """Get recent facts, most recent first.
+
+        Args:
+            limit: Maximum number of facts to return.
+
+        Returns:
+            List of Facts ordered by creation (most recent first).
+        """
+        return (
+            self.db.query(Fact)
+            .filter(Fact.session_id == self.session_id)
+            .order_by(Fact.id.desc())
+            .limit(limit)
+            .all()
+        )
+
     def update_certainty(self, fact_id: int, certainty: int) -> Fact:
         """Update confidence level of a fact.
 

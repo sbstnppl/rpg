@@ -159,9 +159,16 @@ Return the entities that a player might want to interact with or refer to."""
 class DiscourseManager:
     """Manages entity mentions across conversation turns.
 
-    This manager tracks entities mentioned in GM responses, enabling
-    accurate pronoun and reference resolution. It maintains a registry
-    of mentions with their descriptors, gender hints, and group relationships.
+    PARTIALLY DEPRECATED: In the scene-first architecture, entity resolution
+    is handled by ReferenceResolver using the NarratorManifest. The resolve_reference()
+    and mark_as_spawned() methods are deprecated. The extract_and_store() method
+    may still be used to feed entity mentions into World Mechanics for story-driven
+    NPC placement, but this is optional.
+
+    For system-authority pipeline, this manager is still used for:
+    - Tracking entities mentioned in GM responses
+    - Pronoun and reference resolution
+    - Just-in-time spawning from mentions
 
     Example:
         manager = DiscourseManager(db, game_session, llm_provider)
@@ -169,7 +176,7 @@ class DiscourseManager:
         # After GM response
         await manager.extract_and_store(gm_response, turn_number)
 
-        # When resolving player reference
+        # When resolving player reference (DEPRECATED - use ReferenceResolver instead)
         mention = manager.resolve_reference("the other one")
         if mention and not mention.spawned_as:
             # Spawn the entity
@@ -290,6 +297,10 @@ class DiscourseManager:
 
     def resolve_reference(self, reference: str) -> EntityMention | None:
         """Resolve a reference to an entity mention.
+
+        DEPRECATED: In scene-first architecture, use ReferenceResolver with
+        NarratorManifest instead. This method is kept for system-authority
+        pipeline backward compatibility.
 
         Handles:
         - Pronouns: "she", "he", "her", "him"

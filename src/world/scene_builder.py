@@ -218,6 +218,9 @@ class SceneBuilder(BaseManager):
             system_prompt=system_prompt,
         )
 
+        # Convert dict to Pydantic model
+        if isinstance(response.parsed_content, dict):
+            return SceneContents.model_validate(response.parsed_content)
         return response.parsed_content
 
     def _build_scene_prompt(
@@ -716,3 +719,166 @@ Key principles:
             "weather": time_state.weather or "clear",
             "season": time_state.season,
         }
+
+    # =========================================================================
+    # Container Contents Generation (Lazy Loading)
+    # =========================================================================
+
+    async def generate_container_contents(
+        self,
+        container: Item,
+        location: Location,
+    ) -> list[ItemSpec]:
+        """Generate contents for a container when first opened.
+
+        This provides lazy-loading for container contents. Instead of
+        generating contents for every drawer, chest, and cabinet upfront,
+        we generate them on-demand when the player opens the container.
+
+        Args:
+            container: The container item being opened.
+            location: The location containing the container.
+
+        Returns:
+            List of ItemSpec for generated contents.
+        """
+        # Check if container already has contents
+        storage = self._get_container_storage(container)
+        if storage:
+            existing_items = (
+                self.db.query(Item)
+                .filter(
+                    Item.session_id == self.session_id,
+                    Item.storage_location_id == storage.id,
+                )
+                .all()
+            )
+            if existing_items:
+                # Already has contents, convert to specs
+                return self._items_to_specs(existing_items)
+
+        # No contents yet - generate them
+        if self.llm_provider is None:
+            # No LLM, return empty (container is empty)
+            return []
+
+        # Generate contents via LLM
+        contents = await self._call_container_contents_llm(container, location)
+        return contents
+
+    async def _call_container_contents_llm(
+        self,
+        container: Item,
+        location: Location,
+    ) -> list[ItemSpec]:
+        """Call LLM to generate container contents.
+
+        Args:
+            container: The container being opened.
+            location: The location of the container.
+
+        Returns:
+            List of ItemSpec for generated contents.
+        """
+        from src.llm.message_types import Message
+        from pydantic import BaseModel
+
+        class ContainerContentsResponse(BaseModel):
+            """Response schema for container contents generation."""
+            items: list[ItemSpec]
+            is_empty: bool = False
+            empty_reason: str | None = None
+
+        container_type = container.properties.get("furniture_type", "container") if container.properties else "container"
+        location_type = location.category or "general"
+
+        prompt = f"""Generate realistic contents for a {container_type} in a {location_type}.
+
+## Container
+- Type: {container.display_name}
+- Location: {location.display_name}
+
+## Instructions
+Generate 0-4 items that would realistically be found in this container.
+
+Consider:
+- Container type (chest has different contents than kitchen drawer)
+- Location type (bedroom has different items than shop)
+- Keep items mundane and appropriate
+- Sometimes containers are empty - that's fine
+
+For each item:
+- Use snake_case keys with sequence numbers (e.g., 'quill_001', 'coin_pouch_001')
+- Set visibility to OBVIOUS (they're in an opened container)
+- Include position as "in the {container_type}"
+
+If the container should be empty, set is_empty=true and provide a reason."""
+
+        try:
+            response = await self.llm_provider.complete_structured(
+                messages=[Message.user(prompt)],
+                response_schema=ContainerContentsResponse,
+                temperature=0.4,
+            )
+
+            if response.parsed_content:
+                if response.parsed_content.is_empty:
+                    return []
+                return response.parsed_content.items
+
+        except Exception as e:
+            logger.warning(f"Container contents generation failed: {e}")
+
+        return []
+
+    def _get_container_storage(self, container: Item) -> StorageLocation | None:
+        """Get the storage location for a container.
+
+        Args:
+            container: The container item.
+
+        Returns:
+            StorageLocation or None if not set up.
+        """
+        return (
+            self.db.query(StorageLocation)
+            .filter(
+                StorageLocation.session_id == self.session_id,
+                StorageLocation.owner_item_id == container.id,
+                StorageLocation.location_type == StorageLocationType.CONTAINER,
+            )
+            .first()
+        )
+
+    def _items_to_specs(self, items: list[Item]) -> list[ItemSpec]:
+        """Convert Item models to ItemSpec objects.
+
+        Args:
+            items: List of Item models.
+
+        Returns:
+            List of ItemSpec objects.
+        """
+        specs = []
+        for item in items:
+            props = item.properties or {}
+            visibility_str = props.get("visibility", "obvious")
+            try:
+                visibility = ItemVisibility(visibility_str)
+            except ValueError:
+                visibility = ItemVisibility.OBVIOUS
+
+            spec = ItemSpec(
+                item_key=item.item_key,
+                display_name=item.display_name,
+                item_type=str(item.item_type.value),
+                position=props.get("position", "here"),
+                visibility=visibility,
+                material=props.get("material"),
+                condition=props.get("condition"),
+                properties=props,
+                description_hints=props.get("description_hints", []),
+            )
+            specs.append(spec)
+
+        return specs

@@ -1,5 +1,7 @@
 # RPG Game - Claude Code Instructions
 
+> ⚠️ **Before finishing every response**: Check user's English for unnatural phrasing → [SoCal Feedback](#socal-english-feedback)
+
 ## Custom Subagents
 
 This project has specialized subagents in `.claude/agents/`. **Proactively use them** for relevant tasks:
@@ -64,39 +66,6 @@ Read `.claude/docs/realism-principles.md` for the principles that guide realisti
 | Fixed durations (e.g., "sleep always takes 8 hours") | Duration depends on fatigue level, conditions, interruptions |
 | Instant relationships (e.g., "one quest = trusted ally") | Trust builds gradually through multiple interactions |
 | Ignoring environment (e.g., "rain has no effect") | Weather affects comfort, speed, visibility, equipment |
-
----
-
-## Language Learning Feedback (REQUIRED)
-
-The user is a native German speaker learning American English (SoCal dialect, including slang).
-
-**After every response**, review the user's input text for naturalness:
-
-1. **Only comment if something sounds unnatural** - stay silent if it's good
-2. **Be specific**: Quote the exact phrase that sounds off
-3. **Provide the natural alternative**: How a SoCal native would actually say it
-4. **Include slang when appropriate**: Casual speech, contractions, common expressions
-5. **Placement**: Always at the END of your response, after completing the main task
-
-### Format
-Add this section at the end of every response (ONLY if there's feedback to give):
-
-```
----
-**SoCal English Check:**
-- "your phrase" → "native phrasing" - brief explanation
-```
-
-If the user's English sounds completely natural, say nothing about it.
-
-### Examples
-| You wrote | Native would say | Why |
-|-----------|------------------|-----|
-| "I want to to modify" | "I wanna modify" or "I'd like to modify" | Typo + "wanna" is casual SoCal |
-| "the way a native uses the language" | "how natives actually talk" | Grammatically correct but textbook-ish |
-| "if it sounds off or unnatural" | "if it sounds off or weird" | "Unnatural" is fine but "weird" is more casual |
-| "Provide me feedback" | "Give me feedback" or "Let me know" | "Provide" sounds formal; "give" is everyday speech |
 
 ---
 
@@ -181,7 +150,8 @@ rpg/
 
 ## Key Documentation
 
-- `docs/architecture.md` - System architecture
+- `docs/architecture.md` - System architecture (includes all three pipelines)
+- `docs/scene-first-architecture/` - **Scene-first pipeline design docs** (new architecture)
 - `docs/implementation-plan.md` - Implementation checklist
 - `.claude/docs/coding-standards.md` - Code style guide
 - `.claude/docs/agent-prompts.md` - LLM prompt templates
@@ -208,6 +178,28 @@ class GameState(TypedDict):
     gm_response: str | None
     scene_context: str
     next_agent: str
+    # Scene-first fields:
+    scene_manifest: dict | None      # Full scene state
+    narrator_manifest: dict | None   # What narrator can reference
+    resolved_actions: list[dict]     # Actions with resolved entity keys
+    needs_clarification: bool        # Ambiguous reference detected
+```
+
+### Scene-First Pattern
+In scene-first architecture, entities are created BEFORE narration:
+```python
+# WorldMechanics determines what exists
+world_update = await world_mechanics.advance_world(location, time)
+
+# SceneBuilder generates scene contents
+manifest = await scene_builder.build_scene(location, world_update)
+
+# PersistScene saves to DB and builds NarratorManifest
+narrator_manifest = scene_persister.persist_scene(manifest)
+
+# Narrator uses [key] format for entity references
+narrator_output = "[marcus_001] waves at you from [bed_001]."
+# Display strips keys: "Marcus waves at you from the bed."
 ```
 
 ### Database Session Scoping
@@ -354,3 +346,40 @@ The `../story-learning/` project uses similar patterns:
 - Item ownership model
 
 Refer to it for implementation examples.
+
+---
+
+## SoCal English Feedback
+
+The user is a native German speaker learning American English (SoCal dialect, including slang).
+
+**After every response**, review the user's input text for naturalness:
+
+1. **Assess as real conversation**: Compare to how people actually talk in professional settings - coworkers in an office, freelancers collaborating, etc. NOT adjusted for CLI/chat brevity.
+2. **Always give feedback**: If natural, add "✓ English sounds natural". If issues found, list them.
+3. **Be specific**: Quote the exact phrase that sounds off
+4. **Provide the natural alternative**: How a SoCal native would actually say it
+5. **Include slang when appropriate**: Casual speech, contractions, common expressions
+6. **Placement**: Always at the END of your response, after completing the main task
+
+**Format**:
+```
+---
+**SoCal English Check:**
+- "your phrase" → "native phrasing" - brief explanation
+
+✓ Rest sounds natural
+```
+
+Or if everything is natural:
+```
+---
+✓ English sounds natural
+```
+
+### Examples
+| You wrote | Native would say | Why |
+|-----------|------------------|-----|
+| "proceed implementing" | "go ahead and implement" | Need "with" after "proceed", or rephrase |
+| "Does this diminish the quality" | "Does this hurt the quality" | "diminish" is formal; "hurt" is everyday |
+| "Provide me feedback" | "Give me feedback" | "Provide" sounds formal; "give" is casual |

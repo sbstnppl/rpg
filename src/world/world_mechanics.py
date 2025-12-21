@@ -297,6 +297,193 @@ class WorldMechanics(BaseManager):
         return placements
 
     # =========================================================================
+    # Event-Driven NPCs
+    # =========================================================================
+
+    def get_event_driven_npcs(self, location_key: str) -> list[NPCPlacement]:
+        """Get NPCs from active events at a location.
+
+        Events can trigger NPC appearances. For example:
+        - A robbery event might bring guards
+        - A festival event might bring merchants
+        - A delivery event might bring a courier
+
+        Args:
+            location_key: The location to check.
+
+        Returns:
+            List of NPCPlacement for event-driven NPCs.
+        """
+        from src.managers.event_manager import EventManager
+
+        event_manager = EventManager(self.db, self.game_session)
+        events = event_manager.get_events_at_location(location_key, include_processed=False)
+
+        placements = []
+        for event in events:
+            # Check if event has affected entities that should appear
+            if not event.affected_entities:
+                continue
+
+            for entity_key in event.affected_entities:
+                # Check if entity exists
+                entity = self.db.query(Entity).filter(
+                    Entity.session_id == self.session_id,
+                    Entity.entity_key == entity_key,
+                ).first()
+
+                if entity is None:
+                    continue
+
+                # Create placement from event
+                placement = NPCPlacement(
+                    entity_key=entity_key,
+                    presence_reason=PresenceReason.EVENT,
+                    presence_justification=f"Event: {event.summary}",
+                    activity=event.details.get("activity", "responding to event") if event.details else "responding to event",
+                    mood=event.details.get("mood", "concerned") if event.details else "concerned",
+                    position_in_scene=event.details.get("position", "at the scene") if event.details else "at the scene",
+                )
+                placements.append(placement)
+
+        return placements
+
+    # =========================================================================
+    # Story-Driven NPCs (LLM-based)
+    # =========================================================================
+
+    async def get_story_driven_npcs(
+        self,
+        location_key: str,
+        location_type: str,
+        scene_context: str = "",
+    ) -> list[NPCPlacement]:
+        """Get NPCs that should appear based on story needs.
+
+        Uses LLM to determine if narrative pacing or story progression
+        requires an NPC to appear. This is for organic encounters that
+        aren't scheduled or event-driven.
+
+        Args:
+            location_key: The location to check.
+            location_type: Type of location (tavern, shop, etc.).
+            scene_context: Optional context from recent turns.
+
+        Returns:
+            List of NPCPlacement for story-driven NPCs.
+        """
+        if not self.llm_provider:
+            return []
+
+        # Call LLM for story-driven decisions
+        world_update = await self._call_world_mechanics_llm(
+            location_key=location_key,
+            location_type=location_type,
+            scene_context=scene_context,
+        )
+
+        if world_update is None:
+            return []
+
+        # Return story-driven NPCs from the update
+        return [
+            npc for npc in world_update.npcs_at_location
+            if npc.presence_reason == PresenceReason.STORY
+        ]
+
+    async def _call_world_mechanics_llm(
+        self,
+        location_key: str,
+        location_type: str,
+        scene_context: str = "",
+    ) -> WorldUpdate | None:
+        """Call LLM for world mechanics decisions.
+
+        Uses structured output to get WorldUpdate with:
+        - Story-driven NPC appearances
+        - World events
+        - Fact updates
+
+        Args:
+            location_key: The location to check.
+            location_type: Type of location.
+            scene_context: Optional context from recent turns.
+
+        Returns:
+            WorldUpdate from LLM or None if call fails.
+        """
+        if not self.llm_provider:
+            return None
+
+        from jinja2 import Environment, FileSystemLoader
+        from pathlib import Path
+
+        try:
+            # Load the template
+            template_dir = Path(__file__).parent.parent.parent / "data" / "templates"
+            env = Environment(loader=FileSystemLoader(template_dir))
+            template = env.get_template("world_mechanics.jinja2")
+
+            # Get player info
+            player = self._get_player_entity()
+
+            # Get time state
+            time_state = self.get_time_state()
+
+            # Get relationship counts
+            counts = self.get_relationship_counts(player.id) if player else {
+                "close_friends": 0,
+                "casual_friends": 0,
+                "acquaintances": 0,
+                "new_this_week": 0,
+            }
+
+            # Render prompt
+            prompt = template.render(
+                location={
+                    "display_name": location_key.replace("_", " ").title(),
+                    "location_key": location_key,
+                    "location_type": location_type,
+                },
+                game_time={
+                    "display": time_state.current_time,
+                    "day_name": time_state.day_of_week.title(),
+                },
+                player={
+                    "display_name": player.display_name if player else "Unknown",
+                    "personality": player.personality if player else None,
+                },
+                relationships=[],  # Could populate from relationship queries
+                counts=counts,
+                limits=self.social_limits,
+                scheduled_npcs=[],  # Already handled separately
+                resident_npcs=[],  # Already handled separately
+                recent_events=[],  # Could populate from event queries
+                active_plots=[],  # Could populate from task queries
+                recent_turns_summary=scene_context,
+            )
+
+            # Call LLM with structured output
+            from src.llm.schema_models import Message
+
+            response = await self.llm_provider.complete_structured(
+                messages=[Message.user(prompt)],
+                response_schema=WorldUpdate,
+                temperature=0.3,
+            )
+
+            if response and response.parsed_content:
+                # Convert dict to Pydantic model if needed
+                if isinstance(response.parsed_content, dict):
+                    return WorldUpdate.model_validate(response.parsed_content)
+                return response.parsed_content
+
+        except Exception as e:
+            logger.warning(f"World mechanics LLM call failed: {e}")
+
+        return None
+
+    # =========================================================================
     # All NPCs at Location
     # =========================================================================
 
@@ -306,8 +493,9 @@ class WorldMechanics(BaseManager):
         Combines:
         - Scheduled NPCs
         - Resident NPCs
-        - Event-driven NPCs (future)
-        - Story-driven NPCs (future, requires LLM)
+        - Event-driven NPCs
+
+        Note: Story-driven NPCs require async call - use get_npcs_at_location_async().
 
         Args:
             location_key: The location to check.
@@ -326,6 +514,52 @@ class WorldMechanics(BaseManager):
             if resident.entity_key not in existing_keys:
                 placements.append(resident)
                 existing_keys.add(resident.entity_key)
+
+        # Add event-driven NPCs
+        for event_npc in self.get_event_driven_npcs(location_key):
+            if event_npc.entity_key not in existing_keys:
+                placements.append(event_npc)
+                existing_keys.add(event_npc.entity_key)
+
+        return placements
+
+    async def get_npcs_at_location_async(
+        self,
+        location_key: str,
+        location_type: str = "general",
+        scene_context: str = "",
+    ) -> list[NPCPlacement]:
+        """Get all NPCs at a location including story-driven (async version).
+
+        Combines:
+        - Scheduled NPCs
+        - Resident NPCs
+        - Event-driven NPCs
+        - Story-driven NPCs (LLM-based)
+
+        Args:
+            location_key: The location to check.
+            location_type: Type of location.
+            scene_context: Optional context from recent turns.
+
+        Returns:
+            List of NPCPlacement for all NPCs.
+        """
+        # Get sync sources first
+        placements = self.get_npcs_at_location(location_key)
+        existing_keys = {p.entity_key for p in placements}
+
+        # Add story-driven NPCs (requires LLM)
+        if self.llm_provider:
+            story_npcs = await self.get_story_driven_npcs(
+                location_key=location_key,
+                location_type=location_type,
+                scene_context=scene_context,
+            )
+            for story_npc in story_npcs:
+                if story_npc.entity_key not in existing_keys:
+                    placements.append(story_npc)
+                    existing_keys.add(story_npc.entity_key)
 
         return placements
 
