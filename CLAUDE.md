@@ -67,6 +67,39 @@ Read `.claude/docs/realism-principles.md` for the principles that guide realisti
 
 ---
 
+## Language Learning Feedback (REQUIRED)
+
+The user is a native German speaker learning American English (SoCal dialect, including slang).
+
+**After every response**, review the user's input text for naturalness:
+
+1. **Only comment if something sounds unnatural** - stay silent if it's good
+2. **Be specific**: Quote the exact phrase that sounds off
+3. **Provide the natural alternative**: How a SoCal native would actually say it
+4. **Include slang when appropriate**: Casual speech, contractions, common expressions
+5. **Placement**: Always at the END of your response, after completing the main task
+
+### Format
+Add this section at the end of every response (ONLY if there's feedback to give):
+
+```
+---
+**SoCal English Check:**
+- "your phrase" → "native phrasing" - brief explanation
+```
+
+If the user's English sounds completely natural, say nothing about it.
+
+### Examples
+| You wrote | Native would say | Why |
+|-----------|------------------|-----|
+| "I want to to modify" | "I wanna modify" or "I'd like to modify" | Typo + "wanna" is casual SoCal |
+| "the way a native uses the language" | "how natives actually talk" | Grammatically correct but textbook-ish |
+| "if it sounds off or unnatural" | "if it sounds off or weird" | "Unnatural" is fine but "weird" is more casual |
+| "Provide me feedback" | "Give me feedback" or "Let me know" | "Provide" sounds formal; "give" is everyday speech |
+
+---
+
 ## Project Overview
 
 An agentic console-based RPG using LangGraph for multi-agent orchestration. The game features:
