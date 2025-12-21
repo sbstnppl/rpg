@@ -1,5 +1,6 @@
 """EntityManager for entity CRUD and attribute management."""
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from src.database.models.enums import EntityType
@@ -10,6 +11,7 @@ from src.database.models.entities import (
     NPCExtension,
 )
 from src.database.models.session import GameSession
+from src.database.models.world import Location
 from src.managers.base import BaseManager
 
 
@@ -240,6 +242,7 @@ class EntityManager(BaseManager):
         """Get all entities at a location.
 
         Uses NPCExtension.current_location to determine location.
+        Also matches by display_name as fallback for data inconsistencies.
 
         Args:
             location_key: Location key to search.
@@ -247,12 +250,32 @@ class EntityManager(BaseManager):
         Returns:
             List of entities at the location.
         """
+        # Get the location's display name for fallback matching
+        # (handles cases where NPC location was set to display_name instead of key)
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+        display_name = location.display_name if location else None
+
+        # Match by either location_key OR display_name (defensive fix)
+        location_filter = NPCExtension.current_location == location_key
+        if display_name:
+            location_filter = or_(
+                NPCExtension.current_location == location_key,
+                NPCExtension.current_location == display_name,
+            )
+
         return (
             self.db.query(Entity)
             .join(NPCExtension, Entity.id == NPCExtension.entity_id)
             .filter(
                 Entity.session_id == self.session_id,
-                NPCExtension.current_location == location_key,
+                location_filter,
             )
             .all()
         )
@@ -269,13 +292,32 @@ class EntityManager(BaseManager):
         Returns:
             List of NPC entities at the location.
         """
+        # Get the location's display name for fallback matching
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+        display_name = location.display_name if location else None
+
+        # Match by either location_key OR display_name (defensive fix)
+        location_filter = NPCExtension.current_location == location_key
+        if display_name:
+            location_filter = or_(
+                NPCExtension.current_location == location_key,
+                NPCExtension.current_location == display_name,
+            )
+
         query = (
             self.db.query(Entity)
             .join(NPCExtension, Entity.id == NPCExtension.entity_id)
             .filter(
                 Entity.session_id == self.session_id,
                 Entity.entity_type == EntityType.NPC,
-                NPCExtension.current_location == location_key,
+                location_filter,
             )
         )
         if alive_only:

@@ -65,6 +65,14 @@ async def narrative_validator_node(state: GameState) -> dict[str, Any]:
             "narrative_validation_result": {"is_valid": True},
         }
 
+    # Skip validation for INFO mode (direct factual answers, not narration)
+    # INFO responses come from narrator_facts and bypass the constrained narrator
+    if state.get("response_mode") == "info":
+        logger.debug("Skipping validation for INFO mode response")
+        return {
+            "narrative_validation_result": {"is_valid": True},
+        }
+
     # Skip validation if no narrative
     if not narrative:
         logger.debug("Skipping validation - no narrative")

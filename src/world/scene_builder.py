@@ -269,6 +269,13 @@ For each furniture/item:
 - Mark visibility: OBVIOUS (seen on entry), DISCOVERABLE (seen on look), HIDDEN (found on search)
 - Include position in room
 
+IMPORTANT for display_name:
+- Use SIMPLE names: 'cottage', 'barn', 'bed', 'table' (NOT 'Weathered Stone Cottage')
+- Put adjectives in material/condition fields instead:
+  - display_name: 'cottage', material: 'stone', condition: 'weathered'
+  - display_name: 'barn', material: 'wood', condition: 'old'
+- The narrator will add descriptive adjectives when narrating
+
 Keep descriptions grounded and realistic for the setting."""
 
     def _get_scene_builder_system_prompt(self) -> str:
@@ -280,7 +287,14 @@ Key principles:
 - Furniture and items should be appropriate for the location type
 - Consider the time of day for lighting descriptions
 - Hidden items should be rare and logically placed
-- Use unique keys for each element (format: type_001, type_002, etc.)"""
+- Use unique keys for each element (format: type_001, type_002, etc.)
+
+CRITICAL for display_name field:
+- Use SIMPLE, single-word or two-word names: 'cottage', 'oak bar', 'bed', 'sword'
+- Do NOT include adjectives in display_name (NO: 'Weathered Stone Cottage')
+- Put adjectives in material/condition fields:
+  - GOOD: display_name='cottage', material='stone', condition='weathered'
+  - BAD: display_name='Weathered Stone Cottage'"""
 
     # =========================================================================
     # Return Visit Scene Loading

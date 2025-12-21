@@ -1075,20 +1075,40 @@ async def _game_loop(
     compiled, pipeline_name = get_pipeline_graph(pipeline)
     display_info(f"Using {pipeline_name} pipeline")
 
-    # Get player location - use initial_location if provided, otherwise look for home location
+    # Get player location - use initial_location if provided, otherwise find suitable location
     from src.database.models.world import Location
 
     player_location = initial_location
     if not player_location:
-        # Try to find a home location for the player
+        # Try to find player's home_location from NPC extension
+        if player.npc_extension and player.npc_extension.home_location:
+            # Verify the home location exists
+            home_loc = db.query(Location).filter(
+                Location.session_id == game_session.id,
+                Location.location_key == player.npc_extension.home_location,
+            ).first()
+            if home_loc:
+                player_location = home_loc.location_key
+
+    if not player_location:
+        # Try to find a location with category "home" or "residence"
         home_location = db.query(Location).filter(
             Location.session_id == game_session.id,
             Location.category.in_(["home", "residence"])
         ).first()
         if home_location:
             player_location = home_location.location_key
+
+    if not player_location:
+        # Fall back to the first location in the session
+        first_location = db.query(Location).filter(
+            Location.session_id == game_session.id,
+        ).first()
+        if first_location:
+            player_location = first_location.location_key
         else:
-            player_location = "starting_location"
+            display_error("No locations found in game session. Cannot start game.")
+            return
 
     display_info("Type your actions. Use /quit to exit, /help for commands.")
     console.print()

@@ -29,8 +29,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Pattern to match [key] references for stripping
-KEY_PATTERN = re.compile(r"\[([a-z0-9_]+)\]")
+# Pattern to match [key:text] references for stripping
+# Captures: group(1)=key, group(2)=display text
+KEY_PATTERN = re.compile(r"\[([a-z0-9_]+):([^\]]+)\]")
 
 
 class SceneNarrator:
@@ -110,14 +111,14 @@ class SceneNarrator:
                     validation_passed=True,
                 )
 
-            # Collect errors for retry
+            # Collect errors for retry (debug level since output is still usable)
             errors = validation.error_messages
-            logger.warning(
-                f"Narration validation failed (attempt {attempt + 1}): {errors}"
+            logger.debug(
+                f"Narration validation retry (attempt {attempt + 1}): {errors}"
             )
 
-        # All retries failed - use fallback
-        logger.error("All narration attempts failed, using fallback")
+        # All retries failed - use fallback (debug level since fallback is usable)
+        logger.debug("Narration validation exhausted retries, using fallback")
         fallback = self._generate_fallback(narration_type)
         fallback.validation_passed = False
         return fallback
@@ -170,7 +171,7 @@ class SceneNarrator:
         parts.append("")
 
         # Atmosphere
-        parts.append("## Atmosphere Details (use freely, no [key] needed)")
+        parts.append("## Atmosphere Details (use freely, no [key:text] needed)")
         parts.append(f"- Lighting: {self.manifest.atmosphere.lighting}")
         parts.append(f"- Sounds: {', '.join(self.manifest.atmosphere.sounds)}")
         parts.append(f"- Smells: {', '.join(self.manifest.atmosphere.smells)}")
@@ -223,44 +224,62 @@ class SceneNarrator:
 
     def _get_system_prompt(self) -> str:
         """Get the system prompt for narration."""
-        return """MANDATORY OUTPUT FORMAT: Every physical object MUST be written as [key].
+        return """You are a narrator. You MUST use [key:text] format for ALL physical things.
 
-You are a narrator. When describing ANY physical thing (furniture, item, person),
-you MUST wrap it in brackets using its exact key from the manifest.
+## CRITICAL FORMAT REQUIREMENT
 
-EXAMPLE - This is EXACTLY how your output should look:
-"The warmth of [fireplace_001] greets you. Behind [bar_001], [bartender_joe] nods."
+Every physical thing (furniture, item, person, building) MUST be written as:
+[exact_key_from_manifest:display_text]
 
-BAD OUTPUT (will be rejected):
-"The warmth of the fireplace greets you. Behind the bar, the bartender nods."
-↑ This has NO [key] markers and will FAIL validation!
+The key before : must EXACTLY match an entity key from the manifest.
+The text after : is what readers will see.
 
-RULES:
-1. Write [key] for EVERY physical thing - no exceptions
-2. Only reference items from the manifest - don't invent
-3. Atmosphere words (lighting, sounds, smells) don't need [key]
+## EXAMPLE
 
-The [key] markers get stripped before display, so write naturally around them:
-- "the old [bar_001]" becomes "the old weathered oak bar"
-- "[bartender_joe] smiles" becomes "Joe the Bartender smiles"
+Given manifest entities: [cottage_001:cottage], [barn_001:barn], [chicken_001:chicken]
 
-Your output WILL BE VALIDATED. Any physical object without [key] = rejection."""
+CORRECT OUTPUT:
+"A weathered stone [cottage_001:cottage] stands at the center. Behind it, a wooden [barn_001:barn] houses the animals. A [chicken_001:chicken] pecks at the ground."
+
+WRONG OUTPUT (will be rejected):
+"A weathered stone cottage stands at the center. Behind it, a barn houses the animals. A chicken pecks at the ground."
+↑ Missing [key:text] format! This WILL fail validation!
+
+## RULES
+
+1. EVERY physical object mentioned MUST use [key:text] format
+2. The key MUST exactly match an entity from the manifest
+3. Put adjectives BEFORE the bracket: "old wooden [barn_001:barn]" NOT "[barn_001:old wooden barn]"
+4. Only atmosphere words (lighting, sounds, smells) skip [key:text]
+
+## YOUR OUTPUT WILL BE VALIDATED
+
+If you write "the cottage" without [cottage_001:cottage], your output will be REJECTED.
+If you write "the barn" without [barn_001:barn], your output will be REJECTED.
+EVERY physical thing needs [key:text]. No exceptions."""
 
     def _strip_keys(self, text: str) -> str:
-        """Strip [key] markers and replace with display names.
+        """Strip [key:text] markers, replacing with just the text.
+
+        The narrator writes: "a weathered stone [cottage_001:cottage]"
+        This becomes: "a weathered stone cottage"
 
         Args:
-            text: Text with [key] markers.
+            text: Text with [key:text] markers.
 
         Returns:
-            Text with keys replaced by display names.
+            Text with [key:text] replaced by just the text portion.
         """
         def replace_key(match: re.Match) -> str:
-            key = match.group(1)
-            if key in self.manifest.entities:
-                return self.manifest.entities[key].display_name
-            # Unknown key - just remove the brackets
-            return key
+            key = match.group(1)       # e.g., "cottage_001"
+            display = match.group(2)   # e.g., "cottage"
+
+            # Log warning if key doesn't exist (validator should catch this)
+            if key not in self.manifest.entities:
+                logger.warning(f"Unknown key in narration: {key}")
+
+            # Return the display text as-is (narrator controls formatting)
+            return display
 
         return KEY_PATTERN.sub(replace_key, text)
 

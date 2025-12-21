@@ -67,9 +67,10 @@ The player is asking about something. Use the CURRENT STATE provided to answer:
    -> Check character_needs, visible_injuries
    -> Needs scale: 0=critical, 100=satisfied (hunger 20 = very hungry, hunger 80 = well-fed)
 
-4. Perception queries ("What can I see?", "What is X wearing?")
+4. Perception queries ("What can I see?", "What is X wearing?", "Am I alone?", "Is anyone here?")
    -> Check npcs_present, items_at_location
    -> For NPC clothing, only visible_equipment is observable
+   -> For presence queries: if npcs_present is empty = alone, if not empty = list who's there
 
 5. Possibility queries ("Can I go X?", "Is the door locked?")
    -> Check available_exits
@@ -485,6 +486,24 @@ Output: {
   "narrator_facts": ["There is no dragon here - just an empty room"]
 }
 
+Input: "Am I alone here?" or "Is anyone else here?"
+Current: npcs_present = [{key: "widow_brennan", name: "Widow Brennan", mood: "neutral"}]
+Output: {
+  "action_type": "recall",
+  "response_mode": "info",
+  "state_changes": [],
+  "narrator_facts": ["You are not alone - Widow Brennan is here with you"]
+}
+
+Input: "Am I alone?"
+Current: npcs_present = []
+Output: {
+  "action_type": "recall",
+  "response_mode": "info",
+  "state_changes": [],
+  "narrator_facts": ["You are alone here"]
+}
+
 RESPONSE MODE EXAMPLES:
 
 Input: "What color is my shirt?"
@@ -494,6 +513,10 @@ Input: "What color is my shirt?"
 Input: "Am I hungry?"
 -> response_mode: "info", narrative_style: "action"
 (State query - concise answer preferred)
+
+Input: "Anyone around?" or "Am I alone?"
+-> response_mode: "info", narrative_style: "action"
+(Presence query - concise answer about who's here)
 
 Input: "How much gold do I have?"
 -> response_mode: "info", narrative_style: "action"

@@ -161,12 +161,12 @@ class LocationExtractor:
 
         Args:
             llm_provider: LLM provider for extraction. If None, returns empty results.
-            model: Model to use (defaults to haiku for speed/cost).
+            model: Model to use (None = use provider's default).
             temperature: Low temperature for consistent extraction.
             max_tokens: Maximum tokens in response.
         """
         self.llm_provider = llm_provider
-        self.model = model or "claude-3-5-haiku-20241022"
+        self.model = model  # None = use provider's default model
         self.temperature = temperature
         self.max_tokens = max_tokens
 

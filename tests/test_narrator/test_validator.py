@@ -1,7 +1,7 @@
 """Tests for NarratorValidator - Scene-First Architecture Phase 5.
 
 These tests verify:
-- Extracting [key] references from narrator output
+- Extracting [key:text] references from narrator output
 - Validating keys against the manifest
 - Detecting unkeyed entity mentions
 - Handling edge cases (nested brackets, escaped characters)
@@ -82,17 +82,17 @@ def sample_manifest(sample_atmosphere: Atmosphere) -> NarratorManifest:
 
 
 class TestKeyExtraction:
-    """Tests for extracting [key] references from text."""
+    """Tests for extracting [key:text] references from text."""
 
     def test_extract_single_key(
         self,
         sample_manifest: NarratorManifest,
     ) -> None:
-        """Extracts a single [key] reference."""
+        """Extracts a single [key:text] reference."""
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "You see [bartender_001] behind the bar."
+        text = "You see [bartender_001:Tom] behind the bar."
 
         keys = validator._extract_key_references(text)
 
@@ -102,11 +102,11 @@ class TestKeyExtraction:
         self,
         sample_manifest: NarratorManifest,
     ) -> None:
-        """Extracts multiple [key] references."""
+        """Extracts multiple [key:text] references."""
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "[bartender_001] slides [mug_001] across [bar_counter]."
+        text = "[bartender_001:Tom] slides a [mug_001:mug] across the [bar_counter:bar]."
 
         keys = validator._extract_key_references(text)
 
@@ -124,8 +124,8 @@ class TestKeyExtraction:
 
         validator = NarratorValidator(sample_manifest)
         text = (
-            "Warm candlelight illuminates [bar_counter] where "
-            "[bartender_001] works. [sarah_001] waves from her corner."
+            "Warm candlelight illuminates the [bar_counter:bar] where "
+            "[bartender_001:Tom] works. [sarah_001:Sarah] waves from her corner."
         )
 
         keys = validator._extract_key_references(text)
@@ -158,7 +158,7 @@ class TestKeyExtraction:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "[bartender_001][sarah_001] talk together."
+        text = "[bartender_001:Tom] and [sarah_001:Sarah] talk together."
 
         keys = validator._extract_key_references(text)
 
@@ -181,7 +181,7 @@ class TestKeyValidation:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "You see [bartender_001] standing behind [bar_counter]."
+        text = "You see [bartender_001:Tom] standing behind the [bar_counter:bar]."
 
         result = validator.validate(text)
 
@@ -196,7 +196,7 @@ class TestKeyValidation:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "You see [unknown_npc] sitting at the bar."
+        text = "You see [unknown_npc:stranger] sitting at the bar."
 
         result = validator.validate(text)
 
@@ -212,7 +212,7 @@ class TestKeyValidation:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "[ghost_001] floats near [magic_sword]."
+        text = "[ghost_001:ghost] floats near the [magic_sword:sword]."
 
         result = validator.validate(text)
 
@@ -230,7 +230,7 @@ class TestKeyValidation:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "[bartender_001] hands [magic_potion] to [sarah_001]."
+        text = "[bartender_001:Tom] hands a [magic_potion:potion] to [sarah_001:Sarah]."
 
         result = validator.validate(text)
 
@@ -246,7 +246,7 @@ class TestKeyValidation:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "A mysterious [unknown_entity] appears in the shadows."
+        text = "A mysterious [unknown_entity:stranger] appears in the shadows."
 
         result = validator.validate(text)
 
@@ -260,16 +260,17 @@ class TestKeyValidation:
 
 
 class TestUnkeyedReferenceDetection:
-    """Tests for detecting entity mentions without [key] format."""
+    """Tests for detecting entity mentions without [key:text] format."""
 
     def test_detects_unkeyed_npc_mention(
         self,
         sample_manifest: NarratorManifest,
     ) -> None:
-        """Detects when an NPC is mentioned by name without [key]."""
+        """Detects when an NPC is mentioned by name without [key:text]."""
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
+        # "Tom the Bartender" is the display_name, should be flagged
         text = "Tom the Bartender waves at you."
 
         result = validator.validate(text)
@@ -283,7 +284,7 @@ class TestUnkeyedReferenceDetection:
         self,
         sample_manifest: NarratorManifest,
     ) -> None:
-        """Detects partial name matches without [key]."""
+        """Detects partial name matches without [key:text]."""
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
@@ -301,11 +302,12 @@ class TestUnkeyedReferenceDetection:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "[bartender_001], also known as Tom, polishes a glass."
+        # With new format, text after key is what's displayed
+        text = "[bartender_001:Tom], the friendly bartender, polishes a glass."
 
         result = validator.validate(text)
 
-        # Should pass because Tom is accompanied by proper key
+        # Should pass because key is used properly
         assert result.valid is True
 
     def test_ignores_atmosphere_descriptions(
@@ -353,7 +355,7 @@ class TestValidReferenceExtraction:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "[bartender_001] serves [mug_001] from behind [bar_counter]."
+        text = "[bartender_001:Tom] serves a [mug_001:mug] from behind the [bar_counter:bar]."
 
         result = validator.validate(text)
 
@@ -396,7 +398,7 @@ class TestEdgeCases:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "[[bartender_001]] looks confused."
+        text = "[[bartender_001:Tom]] looks confused."
 
         # Should extract bartender_001 from inner brackets
         result = validator.validate(text)
@@ -412,7 +414,7 @@ class TestEdgeCases:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "You see [bartender_001 standing there."
+        text = "You see [bartender_001:Tom standing there."
 
         # Should not crash, may or may not find the key
         result = validator.validate(text)
@@ -426,7 +428,7 @@ class TestEdgeCases:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "[bartender_001] and [mug_001] are here."
+        text = "[bartender_001:Tom] and a [mug_001:mug] are here."
 
         result = validator.validate(text)
 
@@ -442,9 +444,9 @@ class TestEdgeCases:
         validator = NarratorValidator(sample_manifest)
         text = """
         The tavern is warm.
-        [bartender_001] stands behind [bar_counter].
+        [bartender_001:Tom] stands behind the [bar_counter:bar].
 
-        [sarah_001] waves at you.
+        [sarah_001:Sarah] waves at you.
         """
 
         result = validator.validate(text)
@@ -469,7 +471,7 @@ class TestErrorMessages:
         from src.narrator.validator import NarratorValidator
 
         validator = NarratorValidator(sample_manifest)
-        text = "A [mysterious_stranger] enters."
+        text = "A [mysterious_stranger:stranger] enters."
 
         result = validator.validate(text)
 

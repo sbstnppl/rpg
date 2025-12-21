@@ -49,6 +49,21 @@ async def constrained_narrator_node(state: GameState) -> dict[str, Any]:
                 "gm_response": "Could you be more specific about who or what you mean?",
             }
 
+    # Handle INFO mode responses (direct factual answers, bypass SceneNarrator)
+    # INFO responses come from narrator_facts and don't need [key:text] format
+    if state.get("response_mode") == "info":
+        dynamic_plans = state.get("dynamic_plans") or {}
+        all_facts: list[str] = []
+        for plan in dynamic_plans.values():
+            if isinstance(plan, dict):
+                facts = plan.get("narrator_facts", [])
+                if facts:
+                    all_facts.extend(facts)
+        if all_facts:
+            return {
+                "gm_response": " ".join(all_facts),
+            }
+
     # Get narrator manifest
     narrator_manifest_dict = state.get("narrator_manifest")
     if narrator_manifest_dict is None:

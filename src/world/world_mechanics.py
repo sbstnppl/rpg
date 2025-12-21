@@ -17,10 +17,12 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
+from sqlalchemy import or_
+
 from src.database.models.enums import DayOfWeek, EntityType
 from src.database.models.entities import Entity, NPCExtension
 from src.database.models.relationships import Relationship
-from src.database.models.world import Schedule, TimeState
+from src.database.models.world import Location, Schedule, TimeState
 from src.managers.base import BaseManager
 from src.world.constraints import RealisticConstraintChecker
 from src.world.schemas import (
@@ -270,14 +272,34 @@ class WorldMechanics(BaseManager):
         Returns:
             List of NPCPlacement for resident NPCs.
         """
+        # Get the location's display name for fallback matching
+        # (handles cases where NPC location was set to display_name instead of key)
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+        display_name = location.display_name if location else None
+
         # Query entities via their NPC extensions with matching home_location
+        # Match by either location_key OR display_name (defensive fix)
+        location_filter = NPCExtension.home_location == location_key
+        if display_name:
+            location_filter = or_(
+                NPCExtension.home_location == location_key,
+                NPCExtension.home_location == display_name,
+            )
+
         results = (
             self.db.query(Entity, NPCExtension)
             .join(NPCExtension, Entity.id == NPCExtension.entity_id)
             .filter(
                 Entity.session_id == self.session_id,
                 Entity.entity_type == EntityType.NPC,
-                NPCExtension.home_location == location_key,
+                location_filter,
             )
             .all()
         )
@@ -310,7 +332,27 @@ class WorldMechanics(BaseManager):
         Returns:
             List of NPCPlacement for NPCs at this location.
         """
+        # Get the location's display name for fallback matching
+        # (handles cases where NPC location was set to display_name instead of key)
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+        display_name = location.display_name if location else None
+
         # Query entities via their NPC extensions with matching current_location
+        # Match by either location_key OR display_name (defensive fix)
+        location_filter = NPCExtension.current_location == location_key
+        if display_name:
+            location_filter = or_(
+                NPCExtension.current_location == location_key,
+                NPCExtension.current_location == display_name,
+            )
+
         results = (
             self.db.query(Entity, NPCExtension)
             .join(NPCExtension, Entity.id == NPCExtension.entity_id)
@@ -318,7 +360,7 @@ class WorldMechanics(BaseManager):
                 Entity.session_id == self.session_id,
                 Entity.entity_type == EntityType.NPC,
                 Entity.is_alive == True,
-                NPCExtension.current_location == location_key,
+                location_filter,
             )
             .all()
         )

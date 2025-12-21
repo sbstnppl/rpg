@@ -34,6 +34,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key files: `src/agents/graph.py`, `src/agents/nodes/world_mechanics_node.py`, `src/agents/nodes/scene_builder_node.py`
 
 ### Fixed
+- **Narrator [key:text] format** - Changed narrator output from `[key]` to `[key:text]` format for better control
+  - Narrator now writes `[cottage_001:cottage]` instead of just `[cottage_001]`
+  - Display text after `:` is what readers see after stripping
+  - Updated `SceneNarrator`, `NarratorValidator`, and all validation nodes
+  - Key files: `src/narrator/scene_narrator.py`, `src/narrator/validator.py`
+
+- **INFO mode bypass for factual queries** - Presence and state queries skip full narration pipeline
+  - New `response_mode: "info"` bypasses SceneNarrator for direct answers
+  - Supports "Am I alone?", "Who's here?", "What time is it?" type queries
+  - Validation nodes skip validation for INFO mode responses
+  - Key files: `src/agents/nodes/constrained_narrator_node.py`, `src/planner/prompts.py`
+
+- **Entity location matching** - NPCs now found by display_name fallback
+  - Handles data inconsistencies where NPC location was set to display name instead of key
+  - Uses `OR` filter to match by either `location_key` or `display_name`
+  - Key file: `src/managers/entity_manager.py`
+
+- **Personality traits list format** - ContextCompiler now handles both list and dict formats
+  - Supports `["hardworking", "practical"]` (list) and `{"shy": True}` (dict)
+  - Added more observable trait mappings
+  - Key file: `src/managers/context_compiler.py`
+
+- **Game loop starting location** - Improved fallback chain for finding player start
+  - First checks `npc_extension.home_location`, then category, then first location
+  - Exits gracefully if no locations exist
+  - Key file: `src/cli/commands/game.py`
+
+- **Extractor default models** - ItemExtractor, NPCExtractor, LocationExtractor now use provider's default
+  - Pass `model=None` to let provider choose appropriate model
+  - Key files: `src/narrator/item_extractor.py`, `src/narrator/npc_extractor.py`, `src/narrator/location_extractor.py`
+
 - **Character wizard empty responses** - LLM returning only JSON without narrative text now shows debug output
   - Added "CRITICAL: Response Format" section to all 5 wizard templates requiring both narrative + JSON
   - Debug output shows raw response when display content is empty

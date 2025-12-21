@@ -719,8 +719,16 @@ class ContextCompiler(BaseManager):
 
         return lines
 
-    def _get_visible_personality_traits(self, traits: dict) -> str:
-        """Get personality traits that would be observable."""
+    def _get_visible_personality_traits(self, traits: dict | list | None) -> str:
+        """Get personality traits that would be observable.
+
+        Handles both formats:
+        - List: ["hardworking", "practical", "shy"]
+        - Dict: {"shy": True, "outgoing": False}
+        """
+        if not traits:
+            return ""
+
         # Some traits are observable, others are hidden
         observable = {
             "shy": "reserved",
@@ -732,12 +740,27 @@ class ContextCompiler(BaseManager):
             "trusting": "open",
             "fearless": "bold",
             "anxious": "nervous",
+            "hardworking": "industrious",
+            "practical": "pragmatic",
+            "stubborn": "determined",
+            "kind": "kind",
+            "secretly kind": None,  # Hidden trait
+            "religious": "devout",
         }
 
         visible = []
-        for trait, is_active in traits.items():
-            if is_active and trait in observable:
-                visible.append(observable[trait])
+
+        # Handle list format: ["hardworking", "practical"]
+        if isinstance(traits, list):
+            for trait in traits:
+                trait_lower = trait.lower() if isinstance(trait, str) else str(trait).lower()
+                if trait_lower in observable and observable[trait_lower] is not None:
+                    visible.append(observable[trait_lower])
+        # Handle dict format: {"shy": True, "outgoing": False}
+        elif isinstance(traits, dict):
+            for trait, is_active in traits.items():
+                if is_active and trait in observable and observable[trait] is not None:
+                    visible.append(observable[trait])
 
         return ", ".join(visible) if visible else ""
 

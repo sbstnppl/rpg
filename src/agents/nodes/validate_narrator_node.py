@@ -38,6 +38,16 @@ async def validate_narrator_node(state: GameState) -> dict[str, Any]:
     from src.narrator.validator import NarratorValidator
     from src.world.schemas import NarratorManifest
 
+    # Skip validation for INFO mode (direct factual answers)
+    if state.get("response_mode") == "info":
+        return {
+            "narrative_validation_result": {
+                "valid": True,
+                "skipped": True,
+                "reason": "INFO mode",
+            },
+        }
+
     # Get narrator manifest
     narrator_manifest_dict = state.get("narrator_manifest")
     if narrator_manifest_dict is None:

@@ -98,11 +98,11 @@ class StateChange(BaseModel):
     property_name: str = Field(
         description="Name of property to modify (e.g., 'buttoned', 'posture')"
     )
-    old_value: Any | None = Field(
+    old_value: str | int | float | bool | None = Field(
         default=None,
         description="Previous value (for context/validation)"
     )
-    new_value: Any = Field(
+    new_value: str | int | float | bool | None = Field(
         default=None,
         description="New value to set (None for SPAWN_ITEM)"
     )

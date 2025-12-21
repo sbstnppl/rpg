@@ -136,31 +136,29 @@ class TestKeyStripping:
         self,
         sample_manifest: NarratorManifest,
     ) -> None:
-        """Single key is stripped correctly."""
+        """Single key is stripped correctly with [key:text] format."""
         from src.narrator.scene_narrator import SceneNarrator
 
         narrator = SceneNarrator(sample_manifest)
-        text = "You see [bartender_001] behind the bar."
+        text = "You see [bartender_001:Tom] behind the bar."
 
         result = narrator._strip_keys(text)
 
-        assert result == "You see Tom the Bartender behind the bar."
+        assert result == "You see Tom behind the bar."
 
     def test_strip_multiple_keys(
         self,
         sample_manifest: NarratorManifest,
     ) -> None:
-        """Multiple keys are stripped correctly."""
+        """Multiple keys are stripped correctly with [key:text] format."""
         from src.narrator.scene_narrator import SceneNarrator
 
         narrator = SceneNarrator(sample_manifest)
-        text = "[bartender_001] waves at [sarah_001] from behind [bar_counter]."
+        text = "[bartender_001:Tom] waves at [sarah_001:Sarah] from behind the [bar_counter:bar]."
 
         result = narrator._strip_keys(text)
 
-        assert "Tom the Bartender" in result
-        assert "Sarah" in result
-        assert "long oak bar" in result
+        assert result == "Tom waves at Sarah from behind the bar."
         assert "[" not in result
         assert "]" not in result
 
@@ -168,18 +166,16 @@ class TestKeyStripping:
         self,
         sample_manifest: NarratorManifest,
     ) -> None:
-        """Unknown keys are removed but not replaced."""
+        """Unknown keys still show the text portion."""
         from src.narrator.scene_narrator import SceneNarrator
 
         narrator = SceneNarrator(sample_manifest)
-        text = "A [unknown_key] appears."
+        text = "A mysterious [unknown_key:stranger] appears."
 
         result = narrator._strip_keys(text)
 
-        # Unknown key should be removed
-        assert "[unknown_key]" not in result
-        # Should have some placeholder or be stripped
-        assert result in ("A  appears.", "A unknown_key appears.", "A appears.")
+        # Should show the text portion even for unknown keys
+        assert result == "A mysterious stranger appears."
 
     def test_strip_empty_text(
         self,
@@ -193,6 +189,37 @@ class TestKeyStripping:
         result = narrator._strip_keys("")
 
         assert result == ""
+
+    def test_strip_uses_narrator_text_directly(
+        self,
+        sample_atmosphere: Atmosphere,
+    ) -> None:
+        """The text portion is used exactly as the narrator wrote it."""
+        from src.narrator.scene_narrator import SceneNarrator
+        from src.world.schemas import EntityRef, NarratorManifest
+
+        manifest = NarratorManifest(
+            location_key="farm",
+            location_display="A Small Farm",
+            entities={
+                "cottage_001": EntityRef(
+                    key="cottage_001",
+                    display_name="cottage",  # Simple name
+                    entity_type="furniture",
+                    short_description="A cottage",
+                    position="to the north",
+                ),
+            },
+            atmosphere=sample_atmosphere,
+        )
+        narrator = SceneNarrator(manifest)
+        # Narrator adds adjectives and uses key:text format
+        text = "At the center stands a weathered stone [cottage_001:cottage]."
+
+        result = narrator._strip_keys(text)
+
+        # The text should use exactly what the narrator wrote after the colon
+        assert result == "At the center stands a weathered stone cottage."
 
 
 # =============================================================================
@@ -212,15 +239,15 @@ class TestNarrationGeneration:
         """narrate() calls LLM provider."""
         from src.narrator.scene_narrator import SceneNarrator
 
-        # Mock LLM response with valid keys
+        # Mock LLM response with valid [key:text] format
         mock_response = MagicMock()
-        mock_response.content = "You enter [tavern_main]. [bartender_001] waves."
+        mock_response.content = "You enter the [tavern_main:main hall]. [bartender_001:Tom] waves."
         mock_llm_provider.complete.return_value = mock_response
 
         # Add location to manifest
         sample_manifest.entities["tavern_main"] = EntityRef(
             key="tavern_main",
-            display_name="The Main Hall",
+            display_name="main hall",
             entity_type="location",
             short_description="tavern main hall",
         )
@@ -241,7 +268,7 @@ class TestNarrationGeneration:
         from src.narrator.scene_narrator import SceneNarrator
 
         mock_response = MagicMock()
-        mock_response.content = "Candlelight flickers. [bartender_001] nods."
+        mock_response.content = "Candlelight flickers. [bartender_001:Tom] nods warmly."
         mock_llm_provider.complete.return_value = mock_response
 
         narrator = SceneNarrator(sample_manifest, llm_provider=mock_llm_provider)
@@ -262,12 +289,12 @@ class TestNarrationGeneration:
         """narrate() validates LLM output."""
         from src.narrator.scene_narrator import SceneNarrator
 
-        # First response invalid, second valid
+        # First response invalid (bad key), second valid
         invalid_response = MagicMock()
-        invalid_response.content = "You see [invalid_npc] here."
+        invalid_response.content = "You see [invalid_npc:stranger] here."
 
         valid_response = MagicMock()
-        valid_response.content = "[bartender_001] polishes a glass."
+        valid_response.content = "[bartender_001:Tom] polishes a glass."
 
         mock_llm_provider.complete.side_effect = [invalid_response, valid_response]
 
@@ -277,7 +304,7 @@ class TestNarrationGeneration:
 
         # Should retry and use second response
         assert result.validation_passed is True
-        assert "Tom the Bartender" in result.display_text
+        assert "Tom" in result.display_text
 
     @pytest.mark.asyncio
     async def test_narrate_includes_references(
@@ -289,7 +316,7 @@ class TestNarrationGeneration:
         from src.narrator.scene_narrator import SceneNarrator
 
         mock_response = MagicMock()
-        mock_response.content = "[bartender_001] serves [sarah_001]."
+        mock_response.content = "[bartender_001:Tom] serves [sarah_001:Sarah]."
         mock_llm_provider.complete.return_value = mock_response
 
         narrator = SceneNarrator(sample_manifest, llm_provider=mock_llm_provider)
@@ -319,9 +346,9 @@ class TestRetryLogic:
         """Retries when invalid keys are returned."""
         from src.narrator.scene_narrator import SceneNarrator
 
-        # All responses invalid
+        # All responses invalid (key doesn't exist in manifest)
         invalid_response = MagicMock()
-        invalid_response.content = "[ghost_001] appears."
+        invalid_response.content = "[ghost_001:ghost] appears."
         mock_llm_provider.complete.return_value = invalid_response
 
         narrator = SceneNarrator(
@@ -353,11 +380,11 @@ class TestRetryLogic:
             call_count += 1
             response = MagicMock()
             if call_count == 1:
-                # First call - invalid
-                response.content = "[invalid_key] does something."
+                # First call - invalid key
+                response.content = "[invalid_key:stranger] does something."
             else:
                 # Second call - valid
-                response.content = "[bartender_001] waves."
+                response.content = "[bartender_001:Tom] waves."
             return response
 
         mock_llm_provider.complete = AsyncMock(side_effect=check_prompt)
@@ -387,8 +414,9 @@ class TestFallbackGeneration:
         """Generates safe fallback after all retries fail."""
         from src.narrator.scene_narrator import SceneNarrator
 
+        # Invalid: key doesn't exist
         invalid_response = MagicMock()
-        invalid_response.content = "[invalid] appears."
+        invalid_response.content = "[invalid_001:ghost] appears."
         mock_llm_provider.complete.return_value = invalid_response
 
         narrator = SceneNarrator(
@@ -412,8 +440,9 @@ class TestFallbackGeneration:
         """Fallback includes atmosphere details."""
         from src.narrator.scene_narrator import SceneNarrator
 
+        # Invalid: key doesn't exist
         invalid_response = MagicMock()
-        invalid_response.content = "[ghost] spooks you."
+        invalid_response.content = "[ghost_001:ghost] spooks you."
         mock_llm_provider.complete.return_value = invalid_response
 
         narrator = SceneNarrator(

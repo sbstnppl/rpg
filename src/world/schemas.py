@@ -305,9 +305,10 @@ class NarratorManifest(BaseModel):
     clarification_context: dict | None = Field(default=None)
 
     def get_reference_guide(self) -> str:
-        """Format for narrator prompt."""
-        lines = ["## Entities You May Reference (EXACT KEYS)", ""]
-        lines.append("Use EXACTLY these [key] values - do not modify or invent keys:")
+        """Format for narrator prompt showing [key:text] format."""
+        lines = ["## Entities You May Reference", ""]
+        lines.append("Use format: [key:displayed_text]")
+        lines.append("Example: 'a rustic [cottage_001:cottage]' → 'a rustic cottage'")
         lines.append("")
 
         # Group by type
@@ -320,21 +321,21 @@ class NarratorManifest(BaseModel):
             for e in npcs:
                 pronouns = f" ({e.pronouns})" if e.pronouns else ""
                 pos = f" - {e.position}" if e.position else ""
-                lines.append(f"- [{e.key}] {e.display_name}{pronouns}{pos}")
+                lines.append(f"- [{e.key}:{e.display_name}]{pronouns}{pos}")
             lines.append("")
 
         if furniture:
             lines.append("**Furniture:**")
             for e in furniture:
                 pos = f" - {e.position}" if e.position else ""
-                lines.append(f"- [{e.key}] {e.display_name}{pos}")
+                lines.append(f"- [{e.key}:{e.display_name}]{pos}")
             lines.append("")
 
         if items:
             lines.append("**Items:**")
             for e in items:
                 pos = f" - {e.position}" if e.position else ""
-                lines.append(f"- [{e.key}] {e.display_name}{pos}")
+                lines.append(f"- [{e.key}:{e.display_name}]{pos}")
             lines.append("")
 
         return "\n".join(lines)

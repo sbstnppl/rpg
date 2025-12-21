@@ -1,8 +1,8 @@
 """NarratorValidator for Scene-First Architecture.
 
 This module validates narrator output to ensure:
-- All [key] references exist in the manifest
-- Entity names aren't mentioned without [key] format
+- All [key:text] references exist in the manifest
+- Entity names aren't mentioned without [key:text] format
 - Output is suitable for display after key stripping
 
 The validator is deterministic (no LLM) and fast, enabling
@@ -28,16 +28,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Pattern to match [key] references
-KEY_PATTERN = re.compile(r"\[([a-z0-9_]+)\]")
+# Pattern to match [key:text] references
+# Captures: group(1)=key, group(2)=display text
+KEY_PATTERN = re.compile(r"\[([a-z0-9_]+):([^\]]+)\]")
 
 
 class NarratorValidator:
     """Validates narrator output against a manifest.
 
     This class checks that:
-    1. All [key] references exist in the manifest
-    2. Entity names aren't mentioned without [key] format
+    1. All [key:text] references exist in the manifest
+    2. Entity names aren't mentioned without [key:text] format
     3. Output follows the constrained narrator contract
 
     Usage:
@@ -114,7 +115,7 @@ class NarratorValidator:
         )
 
     def _extract_key_references(self, text: str) -> list[tuple[str, int]]:
-        """Extract all [key] references from text.
+        """Extract all [key:text] references from text.
 
         Args:
             text: The text to search.
@@ -124,7 +125,7 @@ class NarratorValidator:
         """
         matches = []
         for match in KEY_PATTERN.finditer(text):
-            key = match.group(1)
+            key = match.group(1)  # Just the key part, not the display text
             position = match.start()
             matches.append((key, position))
         return matches
@@ -153,7 +154,7 @@ class NarratorValidator:
         text: str,
         keyed_refs: list[tuple[str, int]],
     ) -> list[UnkeyedReference]:
-        """Detect entity mentions without [key] format.
+        """Detect entity mentions without [key:text] format.
 
         Args:
             text: The text to check.
@@ -174,42 +175,48 @@ class NarratorValidator:
             if key in used_keys:
                 continue
 
-            # Check for display name mention
+            # Check for display name mention (simple name like "cottage")
             display_lower = entity.display_name.lower()
 
-            if display_lower in text_lower:
-                # Found unkeyed mention
-                errors.append(
-                    UnkeyedReference(
-                        entity_key=key,
-                        display_name=entity.display_name,
-                        error=f"'{entity.display_name}' mentioned without [key] format. Use [{key}].",
-                    )
-                )
-                continue
+            # Use word boundary to find standalone mentions
+            pattern = rf"\b{re.escape(display_lower)}\b"
+            if re.search(pattern, text_lower):
+                # Check it's not inside a [key:text] reference
+                # by looking for the key nearby
+                match = re.search(pattern, text_lower)
+                if match:
+                    pos = match.start()
+                    # Check if there's a [key: pattern within 50 chars before
+                    before_text = text[max(0, pos - 50) : pos]
+                    if f"[{key}:" not in before_text.lower():
+                        errors.append(
+                            UnkeyedReference(
+                                entity_key=key,
+                                display_name=entity.display_name,
+                                error=f"'{entity.display_name}' mentioned without [key:text] format. Use [{key}:{entity.display_name}].",
+                            )
+                        )
+                        continue
 
-            # Check for significant name parts
-            # (first name, last name, title - not just "the")
+            # Check for significant name parts for NPCs
+            # (first name, last name - not just articles)
             name_parts = display_lower.split()
             for part in name_parts:
                 if len(part) > 3 and part not in {"the", "and", "for", "with", "from"}:
                     # Check if this part appears as a standalone word
-                    # Use word boundary pattern
                     pattern = rf"\b{re.escape(part)}\b"
                     if re.search(pattern, text_lower):
-                        # Check it's not already covered by a keyed reference
-                        # by looking for [key] nearby
                         match = re.search(pattern, text_lower)
                         if match:
                             pos = match.start()
-                            # Check if there's a [key] pattern within 50 chars before
+                            # Check if there's a [key: pattern within 50 chars before
                             before_text = text[max(0, pos - 50) : pos]
-                            if f"[{key}]" not in before_text.lower():
+                            if f"[{key}:" not in before_text.lower():
                                 errors.append(
                                     UnkeyedReference(
                                         entity_key=key,
                                         display_name=entity.display_name,
-                                        error=f"'{part}' (from {entity.display_name}) mentioned without [key] format. Use [{key}].",
+                                        error=f"'{part}' (from {entity.display_name}) mentioned without [key:text] format. Use [{key}:{part}].",
                                     )
                                 )
                                 break  # Only report once per entity
