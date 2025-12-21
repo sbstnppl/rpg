@@ -277,6 +277,52 @@ This document tracks the implementation of the Scene-First Architecture. Each se
 
 ---
 
+## Outstanding Bug Fixes
+
+### 1. Narrator Validator False Positives
+
+**Problem**: `NarratorValidator._detect_unkeyed_references()` uses substring matching, causing false positives when entity descriptors appear as partial words in other text.
+
+**Example**:
+- Entity descriptor: "wooden table"
+- Narrator output: "The round wooden table sits in the corner"
+- Validator incorrectly flags "wooden" as an unkeyed reference
+
+**Current Workaround**: Validation is soft-fail (logs warnings, doesn't block)
+
+**Proper Fix**:
+- Use word boundary matching instead of substring matching
+- Or match full entity display names only
+- Or use NLP tokenization to identify noun phrases
+
+**Files to modify**:
+- `src/narrator/validator.py` - `_detect_unkeyed_references()` method
+
+---
+
+### 2. Narrator Entity Invention
+
+**Problem**: The constrained narrator sometimes mentions NPCs or items not in the NarratorManifest, despite instructions to only use `[key]` format for entities.
+
+**Example**:
+- Manifest contains: `[joe_001]` (Joe the Bartender)
+- Narrator outputs: "A mysterious stranger watches from the shadows"
+- "mysterious stranger" is invented, not in manifest
+
+**Current Workaround**: Validation is soft-fail (logs warnings, doesn't block)
+
+**Proper Fix Options**:
+1. **Stricter prompting**: Reinforce [key] requirement with examples and penalties
+2. **Post-processing filter**: Detect and remove sentences with unkeyed entity mentions
+3. **Retry with feedback**: If unkeyed entities detected, retry with explicit correction
+4. **Entity allowlist**: Only allow specific nouns that match manifest entries
+
+**Files to modify**:
+- `src/narrator/scene_narrator.py` - `_get_system_prompt()` and `_build_prompt()`
+- `src/narrator/validator.py` - if adding post-processing filter
+
+---
+
 ## Nice-to-Have Enhancements (Post-MVP)
 
 ### Location Templates
