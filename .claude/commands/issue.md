@@ -27,7 +27,7 @@ Create an **issue documentation folder** for tracking and resolving a detected p
 
 3. **Create folder structure**:
    ```
-   docs/<folder-name>/
+   docs/issues/<folder-name>/
    ├── README.md
    └── TODO.md
    ```
@@ -128,7 +128,7 @@ Create an **issue documentation folder** for tracking and resolving a detected p
 
 7. **Report success**:
    ```
-   Created issue folder: docs/<folder-name>/
+   Created issue folder: docs/issues/<folder-name>/
    - README.md (issue documentation)
    - TODO.md (implementation checklist)
 
@@ -167,7 +167,7 @@ Use these in README.md:
 
 **User runs:** `/issue narrator not using [key] format for entities`
 
-**Creates:** `docs/narrator-key-format/`
+**Creates:** `docs/issues/narrator-key-format/`
 
 **README.md includes:**
 ```markdown

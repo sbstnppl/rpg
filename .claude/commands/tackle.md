@@ -20,9 +20,9 @@ Load and work on an **existing issue** from the docs folder.
 
 ### If no argument provided - List available issues:
 
-1. **Scan docs/ for issue folders** (folders with README.md containing "Status:")
+1. **Scan docs/issues/ for issue folders** (folders with README.md containing "Status:")
    ```bash
-   ls docs/*/README.md
+   ls docs/issues/*/README.md
    ```
 
 2. **For each folder, extract**:
@@ -47,7 +47,7 @@ Load and work on an **existing issue** from the docs folder.
 
 ### If argument provided - Load the issue:
 
-1. **Verify folder exists**: `docs/<issue-name>/README.md`
+1. **Verify folder exists**: `docs/issues/<issue-name>/README.md`
 
 2. **Read README.md** to understand:
    - Problem Statement
