@@ -3516,7 +3516,13 @@ async def _run_section_conversation(
         try:
             messages = [Message(role=MessageRole.USER, content=initial_prompt)]
             response = await provider.complete(messages)
-            display_ai_message(_strip_json_blocks(response.content))
+            display_content = _strip_json_blocks(response.content)
+            if not display_content.strip():
+                # LLM returned only JSON/thinking - show a fallback message
+                console.print(f"[dim yellow]Debug: Raw response was {len(response.content)} chars, stripped to empty[/dim yellow]")
+                console.print(f"[dim yellow]First 300 chars: {response.content[:300]}[/dim yellow]")
+                display_content = "[Waiting for response...]"
+            display_ai_message(display_content)
             section.conversation_history.append(f"Assistant: {response.content}")
         except Exception as e:
             display_error(f"AI error: {e}")
@@ -3546,6 +3552,14 @@ async def _run_section_conversation(
                 return True
             # User provided different input - reset flag and continue to LLM
             pending_confirmation = False
+            # Clear saved content so LLM doesn't see it in completed_data_summary
+            # This forces the LLM to generate fresh content based on feedback
+            if section_name == WizardSectionName.BACKGROUND:
+                wizard_state.character.background = None
+                console.print("[dim]Revising background...[/dim]")
+            elif section_name == WizardSectionName.PERSONALITY:
+                wizard_state.character.personality_notes = None
+                console.print("[dim]Revising personality...[/dim]")
 
         section.conversation_history.append(f"Player: {player_input}")
 
@@ -3594,7 +3608,15 @@ async def _run_section_conversation(
             field_updates, section_data, section_complete = _parse_wizard_response(ai_response)
 
             # Display response (without JSON)
-            display_ai_message(_strip_json_blocks(ai_response))
+            display_content = _strip_json_blocks(ai_response)
+            if not display_content.strip():
+                # LLM returned only JSON/thinking - show debug info
+                console.print(f"[dim yellow]Debug: Raw response was {len(ai_response)} chars, stripped to empty[/dim yellow]")
+                console.print(f"[dim yellow]First 300 chars: {ai_response[:300]}[/dim yellow]")
+                if field_updates:
+                    console.print(f"[dim]Captured: {', '.join(field_updates.keys())}[/dim]")
+            else:
+                display_ai_message(display_content)
 
             # Check for reroll_attributes request (ATTRIBUTES section only)
             if section_name == WizardSectionName.ATTRIBUTES:

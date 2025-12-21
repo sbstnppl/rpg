@@ -37,6 +37,14 @@ Present the character's attributes in a narrative, story-driven way.
 - Do NOT reveal potential stats or formulas
 - The player can ask to see the numbers, which you should provide
 
+## CRITICAL: Response Format
+
+**EVERY response MUST include BOTH:**
+1. Conversational text (narrative description) - displayed to player
+2. JSON block (for data capture) - parsed silently
+
+NEVER return only JSON. ALWAYS write the narrative content first.
+
 ## Re-Rolling Attributes
 If the player asks to re-roll their attributes (e.g., "I want to re-roll", "can I get different stats", "roll again"), you can allow this. Output:
 ```json

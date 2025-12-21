@@ -34,6 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key files: `src/agents/graph.py`, `src/agents/nodes/world_mechanics_node.py`, `src/agents/nodes/scene_builder_node.py`
 
 ### Fixed
+- **Character wizard empty responses** - LLM returning only JSON without narrative text now shows debug output
+  - Added "CRITICAL: Response Format" section to all 5 wizard templates requiring both narrative + JSON
+  - Debug output shows raw response when display content is empty
+  - Key files: `data/templates/wizard/*.md`, `src/cli/commands/character.py`
+
+- **Character wizard ignoring revision requests** - LLM now properly revises content when player asks for changes
+  - Added "CRITICAL: Handling Player Feedback" section to background and personality templates
+  - Clear saved background/personality when player rejects, forcing fresh generation
+  - Key files: `data/templates/wizard/wizard_background.md`, `wizard_personality.md`, `src/cli/commands/character.py`
+
 - **GO action loops back for scene building** - After player moves to new location, graph routes back to `world_mechanics` to build scene
   - New `route_after_state_validator()` checks `location_changed` flag (`src/agents/graph.py`)
   - World mechanics node clears `parsed_actions` on loop-back to prevent re-execution
