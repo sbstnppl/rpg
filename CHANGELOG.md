@@ -19,9 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Non-interactive skill check display in `game turn` command
   - Key files: `src/gm/gm_node.py`, `src/gm/tools.py`, `src/gm/graph.py`
 
-- **Qwen3 Tools Investigation** - Issue documentation for Ollama tool support
-  - Qwen-Agent library handles Hermes-style tool calling for Qwen3
-  - Issue folder: `docs/issues/qwen3-tools-refactor/`
+- **Qwen-Agent LLM Provider** - Tool calling support for Qwen3 via Ollama
+  - New `QwenAgentProvider` class using qwen-agent library (`src/llm/qwen_agent_provider.py`)
+  - Bypasses Ollama's native tool API limitation (which doesn't support Qwen3 tools yet)
+  - Uses Hermes-style tool format templates internally
+  - Environment config: `LLM_PROVIDER=qwen-agent` with existing `OLLAMA_MODEL` setting
+  - Implements full `LLMProvider` protocol: `complete`, `complete_with_tools`, `complete_structured`
+  - Key files: `src/llm/qwen_agent_provider.py`, `src/llm/factory.py`
 
 - **CLI Progress Streaming** - Real-time node-by-node progress during graph execution
   - New `_run_graph_with_progress()` uses LangGraph's `astream(stream_mode="updates")`

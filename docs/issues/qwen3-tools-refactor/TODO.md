@@ -8,18 +8,19 @@
 - [x] Research solutions (Qwen-Agent library handles tool templates internally)
 
 ## Design Phase
-- [ ] Evaluate QwenAgentProvider approach vs Hermes format embedding
-- [ ] Design provider interface changes (if any needed)
-- [ ] Identify files to modify
-- [ ] Define test cases
-- [ ] Review with user (if needed)
+- [x] Evaluate QwenAgentProvider approach vs Hermes format embedding
+- [x] Design provider interface changes (if any needed)
+- [x] Identify files to modify
+- [x] Define test cases
+- [x] Review with user (if needed)
 
 ## Implementation Phase
-- [ ] Add `qwen-agent` dependency
-- [ ] Create `src/llm/qwen_agent_provider.py`
-- [ ] Register provider in `src/llm/factory.py`
-- [ ] Update GM node to select appropriate provider
-- [ ] Add fallback if Qwen-Agent unavailable
+- [x] Add `qwen-agent` dependency
+- [x] Create `src/llm/qwen_agent_provider.py`
+- [x] Register provider in `src/llm/factory.py`
+- [x] Update config to include qwen-agent provider type
+- [x] ~~Update GM node to select appropriate provider~~ (Not needed - factory handles it)
+- [x] ~~Add fallback if Qwen-Agent unavailable~~ (Not needed - standalone provider)
 
 ## Testing Phase
 - [ ] Test skill checks with Qwen3

@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # LLM Providers
     anthropic_api_key: str = ""
     openai_api_key: str = ""
-    llm_provider: Literal["anthropic", "openai", "ollama"] = "anthropic"
+    llm_provider: Literal["anthropic", "openai", "ollama", "qwen-agent"] = "anthropic"
     openai_base_url: str | None = None  # Custom endpoint for vLLM/DeepSeek
 
     # Ollama Settings

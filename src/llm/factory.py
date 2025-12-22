@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from src.llm.logging_provider import LoggingProvider
 
 
-ProviderType = Literal["anthropic", "openai", "ollama"]
+ProviderType = Literal["anthropic", "openai", "ollama", "qwen-agent"]
 
 
 def get_provider(
@@ -75,6 +75,16 @@ def get_provider(
         from src.llm.ollama_provider import OllamaProvider
         llm_provider = OllamaProvider(
             base_url=base_url or settings.ollama_base_url,
+            default_model=model or settings.ollama_model,
+        )
+    elif provider == "qwen-agent":
+        from src.llm.qwen_agent_provider import QwenAgentProvider
+        # qwen-agent expects /v1 endpoint for OpenAI-compatible API
+        ollama_base = base_url or settings.ollama_base_url
+        if not ollama_base.endswith("/v1"):
+            ollama_base = f"{ollama_base}/v1"
+        llm_provider = QwenAgentProvider(
+            base_url=ollama_base,
             default_model=model or settings.ollama_model,
         )
     else:
