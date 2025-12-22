@@ -36,6 +36,24 @@ def display_narrative(text: str) -> None:
     console.print(panel)
 
 
+def display_ooc_response(text: str) -> None:
+    """Display an out-of-character GM response.
+
+    Uses distinct styling to differentiate from narrative.
+
+    Args:
+        text: OOC response text.
+    """
+    panel = Panel(
+        text,
+        title="[bold yellow]GM (Out of Character)[/bold yellow]",
+        title_align="left",
+        border_style="yellow",
+        padding=(1, 2),
+    )
+    console.print(panel)
+
+
 def display_welcome(session_name: str | None = None) -> None:
     """Display welcome message.
 

@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **OOC (Out-of-Character) Handling** - GM now correctly handles meta and lore questions
+  - Explicit OOC prefix detection (`ooc:`, `[ooc]`, etc.) with automatic stripping
+  - Context-aware routing: character knowledge vs active conversation with NPCs
+  - New `is_ooc` field on Turn model for OOC response metadata
+  - New `record_fact` tool for persisting lore during OOC responses
+  - OOC responses skip time advancement and state changes
+  - Yellow-styled display panel for OOC responses in CLI
+  - Key files: `src/gm/gm_node.py`, `src/gm/prompts.py`, `src/gm/tools.py`
+
 - **Simplified GM Pipeline** - New single-LLM pipeline with native tool calling
   - New `src/gm/` module with streamlined Game Master architecture
   - `GMNode` with tool execution loop for skill checks, attacks, entity creation

@@ -224,6 +224,12 @@ class GMResponse(BaseModel):
         description="Narrative text describing what happens"
     )
 
+    # Whether this is an out-of-character response (meta/lore question)
+    is_ooc: bool = Field(
+        default=False,
+        description="True if this is an OOC response - no time passes, different display styling"
+    )
+
     # Grounding: existing entities mentioned in narrative
     referenced_entities: list[str] = Field(
         default_factory=list,

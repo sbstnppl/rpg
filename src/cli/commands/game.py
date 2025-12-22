@@ -14,6 +14,7 @@ from src.cli.display import (
     display_game_wizard_welcome,
     display_info,
     display_narrative,
+    display_ooc_response,
     display_starting_equipment,
     display_success,
     display_welcome,
@@ -1354,7 +1355,10 @@ async def _game_loop(
 
         # Display the response
         if result.get("gm_response"):
-            display_narrative(result["gm_response"])
+            if result.get("is_ooc"):
+                display_ooc_response(result["gm_response"])
+            else:
+                display_narrative(result["gm_response"])
 
             # Immediately persist the turn so it's not lost on quit
             _save_turn_immediately(
@@ -1364,6 +1368,7 @@ async def _game_loop(
                 player_input=player_input,
                 gm_response=result["gm_response"],
                 player_location=result.get("player_location", player_location),
+                is_ooc=result.get("is_ooc", False),
             )
         else:
             display_error("No response from GM (empty narrative). Try rephrasing your action.")
@@ -1434,6 +1439,7 @@ def _save_turn_immediately(
     player_input: str,
     gm_response: str,
     player_location: str,
+    is_ooc: bool = False,
 ) -> None:
     """Save turn record immediately to prevent data loss on quit.
 
@@ -1450,6 +1456,7 @@ def _save_turn_immediately(
         player_input: What the player typed.
         gm_response: The GM's narrative response.
         player_location: Current location key.
+        is_ooc: Whether this is an OOC response.
     """
     from src.database.models.session import Turn
     from src.database.models.world import TimeState
@@ -1476,6 +1483,7 @@ def _save_turn_immediately(
         existing.player_input = player_input
         existing.gm_response = gm_response
         existing.location_at_turn = player_location
+        existing.is_ooc = is_ooc
         # Set date/time if not already set
         if time_state and existing.game_day_at_turn is None:
             existing.game_day_at_turn = time_state.current_day
@@ -1487,6 +1495,7 @@ def _save_turn_immediately(
             turn_number=turn_number,
             player_input=player_input,
             gm_response=gm_response,
+            is_ooc=is_ooc,
             location_at_turn=player_location,
             game_day_at_turn=time_state.current_day if time_state else None,
             game_time_at_turn=time_state.current_time if time_state else None,

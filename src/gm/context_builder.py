@@ -79,6 +79,7 @@ class GMContextBuilder(BaseManager):
         location_key: str,
         player_input: str,
         turn_number: int = 1,
+        is_ooc_hint: bool = False,
     ) -> str:
         """Build the full context prompt for the GM LLM.
 
@@ -87,6 +88,7 @@ class GMContextBuilder(BaseManager):
             location_key: Current location key.
             player_input: The player's input/action.
             turn_number: Current turn number.
+            is_ooc_hint: Whether explicit OOC prefix was detected.
 
         Returns:
             Formatted prompt string.
@@ -114,6 +116,7 @@ class GMContextBuilder(BaseManager):
             recent_turns=self._get_recent_turns(turn_number),
             system_hints=self._get_system_hints(player_id),
             constraints=self._get_constraints(player_id, location_key),
+            ooc_hint=self._get_ooc_hint(is_ooc_hint, player_input),
             player_input=player_input,
         )
 
@@ -435,6 +438,45 @@ class GMContextBuilder(BaseManager):
             constraints.append("- Too exhausted for strenuous physical actions")
 
         return "\n".join(constraints) if constraints else "No special constraints"
+
+    def _get_ooc_hint(self, is_explicit_ooc: bool, player_input: str) -> str:
+        """Generate OOC detection hint for the GM.
+
+        Args:
+            is_explicit_ooc: Whether explicit OOC prefix was detected.
+            player_input: The player's input.
+
+        Returns:
+            OOC hint string for the prompt.
+        """
+        if is_explicit_ooc:
+            return (
+                "[EXPLICIT OOC REQUEST] - Player used 'ooc:' prefix. "
+                "Respond as GM directly to player, not in narrative. "
+                "Start your response with [OOC]."
+            )
+
+        # Check for implicit OOC signals
+        implicit_signals = [
+            "what does my character know",
+            "what do i know about",
+            "tell me about my",
+            "what's my backstory",
+            "what happened to me",
+            "where is my bathroom",
+            "where's my",
+        ]
+        input_lower = player_input.lower()
+
+        for signal in implicit_signals:
+            if signal in input_lower:
+                return (
+                    "[POSSIBLE OOC] - This might be an OOC question about the character's own knowledge. "
+                    "If the player is asking about things their CHARACTER already knows, "
+                    "respond OOC with [OOC] prefix. If it's an in-world action, respond IC."
+                )
+
+        return "No explicit OOC signals detected - respond in-character with narrative unless context suggests OOC."
 
     def get_all_entity_keys(self, player_id: int, location_key: str) -> set[str]:
         """Get all known entity keys for validation.

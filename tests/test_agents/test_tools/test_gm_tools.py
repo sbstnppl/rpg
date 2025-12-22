@@ -529,12 +529,11 @@ class TestToolExecutor:
                           display_name="Torch")
         db_session.flush()
 
-        executor = GMToolExecutor(db_session, game_session)
+        executor = GMToolExecutor(db_session, game_session, current_zone_key="town_square")
         result = executor.execute("drop_item", {
             "entity_key": "player",
             "item_key": "torch",
         })
-
         assert result["success"] is True
         assert result["item_key"] == "torch"
         assert result["dropped"] is True

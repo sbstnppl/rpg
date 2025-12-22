@@ -41,6 +41,7 @@ class GMState(TypedDict, total=False):
 
     # Output (CLI-compatible keys)
     gm_response: str  # Narrative text (CLI displays this)
+    is_ooc: bool  # Whether this is an OOC response
     new_location: str | None
     location_changed: bool
     errors: list[str]
@@ -92,6 +93,7 @@ async def gm_node(state: GMState) -> dict[str, Any]:
         return {
             "_gm_response_obj": response,
             "gm_response": response.narrative,
+            "is_ooc": response.is_ooc,
             "skill_checks": skill_checks,
         }
 
@@ -238,6 +240,7 @@ async def run_gm_graph(
         "roll_mode": roll_mode,
         "_gm_response_obj": None,
         "gm_response": "",
+        "is_ooc": False,
         "new_location": None,
         "location_changed": False,
         "errors": [],

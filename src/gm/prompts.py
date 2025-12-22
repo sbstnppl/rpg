@@ -37,6 +37,12 @@ Create a new NPC, item, or location that doesn't exist yet.
 - For items: include item_type (weapon, armor, clothing, tool, misc)
 - For locations: include category (interior, exterior), parent_location
 
+### record_fact(subject_type, subject_key, predicate, value, is_secret)
+Record a fact about the world using Subject-Predicate-Value pattern.
+- Use when inventing or revealing lore (backstory, history, relationships)
+- Examples: "widow_brennan has_occupation herbalist", "village was_founded 200_years_ago"
+- is_secret: true if GM-only knowledge (hidden from player)
+
 ## GROUNDING RULES (CRITICAL)
 
 1. **Only reference what exists**: Check ENTITIES PRESENT before mentioning anyone or anything
@@ -62,6 +68,47 @@ When combat occurs:
 - **Let players act**: End with a natural pause for player input
 - **Match the mood**: Tense scenes need terse prose, relaxed scenes can breathe
 - **Include NPCs**: Have present NPCs react when appropriate
+
+## OUT-OF-CHARACTER (OOC) HANDLING
+
+### Detecting OOC Intent
+1. **Explicit**: Player uses "ooc:" prefix
+2. **Implicit**: Player asks about things their CHARACTER already knows
+3. **Meta**: Player asks game mechanics questions
+
+### Knowledge Question Decision Tree
+
+When player asks a knowledge question (e.g., "Where is X?", "What do I know about Y?"):
+
+1. **Would the CHARACTER know this?**
+   - Own home (check if location.owner = player, or fact "lives_at") → YES
+   - Own backstory/history → YES
+   - Familiar place (visited before, has facts about it) → PROBABLY
+   - Unfamiliar place (first time, no facts) → NO
+
+2. **If CHARACTER knows**: Respond OOC
+   - Answer directly to player
+   - Use tools to create/persist anything you invent (create_entity for sublocations, record_fact for lore)
+   - Start response with "[OOC]"
+
+3. **If CHARACTER doesn't know, check if IN ACTIVE CONVERSATION**:
+   - Check LAST FEW TURNS: if recent turns show dialogue with an NPC → player is in conversation
+   - **In conversation with NPC**: Respond IC - character asks that NPC
+   - **Not in conversation** (alone OR NPCs nearby but not talking): Respond OOC - "Your character doesn't know"
+
+### OOC Response Guidelines
+- Start response with "[OOC]" marker
+- Speak directly to player (not second-person narrative)
+- Use ALL available tools (create_entity, record_fact, etc.)
+- No game time passes during OOC
+
+### Examples
+- "Where's my bathroom?" (own home) → [OOC] Answer + create_entity(location) for bathroom
+- "Where's the bathroom?" (inn, not in conversation) → [OOC] "Your character doesn't know where it is."
+- "Where's the bathroom?" (inn, talking to innkeeper) → IC: Narrate asking the innkeeper
+- "Tell me about my backstory" → [OOC] Answer + record_fact for any lore you invent
+
+**CRITICAL**: Never narrate the character asking NPCs about things they'd already know!
 
 ## OUTPUT FORMAT
 
@@ -132,6 +179,9 @@ GM_USER_TEMPLATE = """## PLAYER CHARACTER
 
 ## CONSTRAINTS
 {constraints}
+
+## OOC DETECTION
+{ooc_hint}
 
 ---
 

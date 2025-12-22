@@ -190,6 +190,11 @@ class Turn(Base):
     # Input/Output
     player_input: Mapped[str] = mapped_column(Text, nullable=False)
     gm_response: Mapped[str] = mapped_column(Text, nullable=False)
+    is_ooc: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+        comment="True if this is an out-of-character response (meta/lore question)",
+    )
 
     # NPC dialogues extracted
     npc_dialogues: Mapped[list | None] = mapped_column(

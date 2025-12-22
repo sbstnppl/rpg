@@ -110,17 +110,20 @@ class StateApplier:
         """
         new_location = self.location_key
 
-        # Apply state changes
-        for change in response.state_changes:
-            result = self._apply_change(change)
-            if change.change_type == StateChangeType.MOVE and result:
-                new_location = result
+        # For OOC responses, skip state changes and time advancement
+        # (facts recorded by tools are already persisted during tool execution)
+        if not response.is_ooc:
+            # Apply state changes
+            for change in response.state_changes:
+                result = self._apply_change(change)
+                if change.change_type == StateChangeType.MOVE and result:
+                    new_location = result
 
-        # Advance time based on time_passed
-        if response.time_passed_minutes > 0:
-            self._advance_time(response.time_passed_minutes)
+            # Advance time based on time_passed
+            if response.time_passed_minutes > 0:
+                self._advance_time(response.time_passed_minutes)
 
-        # Persist the turn
+        # Persist the turn (always, including OOC)
         self._persist_turn(response, player_input, turn_number)
 
         self.db.commit()
@@ -346,9 +349,10 @@ class StateApplier:
             turn_number=turn_number,
             player_input=player_input,
             gm_response=response.narrative,
+            is_ooc=response.is_ooc,
         )
         self.db.add(turn)
-        logger.debug(f"Persisted turn {turn_number}")
+        logger.debug(f"Persisted turn {turn_number} (OOC: {response.is_ooc})")
 
 
 def apply_response(

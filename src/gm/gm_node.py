@@ -31,6 +31,7 @@ class GMNode:
     """
 
     MAX_TOOL_ITERATIONS = 10  # Safety limit
+    OOC_PREFIXES = ("ooc:", "ooc ", "[ooc]", "(ooc)")
 
     def __init__(
         self,
@@ -100,6 +101,21 @@ class GMNode:
 
         return definitions
 
+    def _detect_explicit_ooc(self, player_input: str) -> tuple[bool, str]:
+        """Detect explicit OOC prefix and strip it.
+
+        Args:
+            player_input: The raw player input.
+
+        Returns:
+            Tuple of (is_ooc, cleaned_input).
+        """
+        input_lower = player_input.lower().strip()
+        for prefix in self.OOC_PREFIXES:
+            if input_lower.startswith(prefix):
+                return True, player_input[len(prefix):].strip()
+        return False, player_input
+
     async def run(
         self,
         player_input: str,
@@ -114,12 +130,16 @@ class GMNode:
         Returns:
             GMResponse with narrative and state changes.
         """
-        # Build context
+        # Detect explicit OOC prefix
+        is_explicit_ooc, cleaned_input = self._detect_explicit_ooc(player_input)
+
+        # Build context with OOC hint
         context = self.context_builder.build(
             player_id=self.player_id,
             location_key=self.location_key,
-            player_input=player_input,
+            player_input=cleaned_input,
             turn_number=turn_number,
+            is_ooc_hint=is_explicit_ooc,
         )
 
         # Build initial messages
@@ -261,16 +281,26 @@ class GMNode:
         """
         narrative = response.content.strip()
 
+        # Detect if GM responded OOC (marked with [OOC] prefix)
+        is_ooc = narrative.startswith("[OOC]")
+        if is_ooc:
+            # Strip the marker - display layer will handle styling
+            narrative = narrative[5:].strip()
+
         # Extract state changes from tool results
         state_changes = self._extract_state_changes()
         new_entities = self._extract_new_entities()
         referenced_entities = self._extract_referenced_entities(narrative)
 
-        # Estimate time passed based on action type
-        time_passed = self._estimate_time_passed(player_input, state_changes)
+        # For OOC responses, no time passes; otherwise estimate
+        if is_ooc:
+            time_passed = 0
+        else:
+            time_passed = self._estimate_time_passed(player_input, state_changes)
 
         return GMResponse(
             narrative=narrative,
+            is_ooc=is_ooc,
             referenced_entities=referenced_entities,
             new_entities=new_entities,
             state_changes=state_changes,

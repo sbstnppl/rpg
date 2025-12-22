@@ -202,6 +202,41 @@ class GMTools:
                     "required": ["entity_type", "name", "description"],
                 },
             },
+            {
+                "name": "record_fact",
+                "description": (
+                    "Record a fact about the world using Subject-Predicate-Value pattern. "
+                    "Use this when inventing or revealing lore, especially during OOC responses. "
+                    "Examples: 'widow_brennan has_occupation herbalist', 'village was_founded 200_years_ago'."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "subject_type": {
+                            "type": "string",
+                            "enum": ["entity", "location", "world", "item", "group"],
+                            "description": "Type of thing the fact is about",
+                        },
+                        "subject_key": {
+                            "type": "string",
+                            "description": "Key of the subject (e.g., npc_marcus, village_eldoria)",
+                        },
+                        "predicate": {
+                            "type": "string",
+                            "description": "What aspect this describes (e.g., has_occupation, was_born_in, knows_secret)",
+                        },
+                        "value": {
+                            "type": "string",
+                            "description": "The value of the fact",
+                        },
+                        "is_secret": {
+                            "type": "boolean",
+                            "description": "Whether this is GM-only knowledge (hidden from player)",
+                        },
+                    },
+                    "required": ["subject_type", "subject_key", "predicate", "value"],
+                },
+            },
         ]
 
     def execute_tool(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
@@ -222,6 +257,8 @@ class GMTools:
             return self.damage_entity(**tool_input).model_dump()
         elif tool_name == "create_entity":
             return self.create_entity(**tool_input).model_dump()
+        elif tool_name == "record_fact":
+            return self.record_fact(**tool_input)
         else:
             return {"error": f"Unknown tool: {tool_name}"}
 
@@ -654,3 +691,68 @@ class GMTools:
             self.db.add(new_attr)
 
         self.db.commit()
+
+    def record_fact(
+        self,
+        subject_type: str,
+        subject_key: str,
+        predicate: str,
+        value: str,
+        is_secret: bool = False,
+    ) -> dict[str, Any]:
+        """Record a fact about the world using SPV pattern.
+
+        Args:
+            subject_type: Type of subject (entity, location, world, item, group).
+            subject_key: Key of the subject.
+            predicate: What aspect this describes.
+            value: The value of the fact.
+            is_secret: Whether this is GM-only knowledge.
+
+        Returns:
+            Result dict with success status.
+        """
+        from src.database.models.world import Fact
+        from src.database.models.enums import FactCategory
+
+        # Check for existing fact with same subject and predicate
+        existing = (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.session_id,
+                Fact.subject_key == subject_key,
+                Fact.predicate == predicate,
+            )
+            .first()
+        )
+
+        if existing:
+            # Update existing fact
+            existing.value = value
+            existing.is_secret = is_secret
+            self.db.flush()
+            return {
+                "success": True,
+                "updated": True,
+                "message": f"Updated: {subject_key}.{predicate} = {value}",
+            }
+
+        # Create new fact
+        fact = Fact(
+            session_id=self.session_id,
+            subject_type=subject_type,
+            subject_key=subject_key,
+            predicate=predicate,
+            value=value,
+            category=FactCategory.PERSONAL,
+            is_secret=is_secret,
+            confidence=80,
+        )
+        self.db.add(fact)
+        self.db.flush()
+
+        return {
+            "success": True,
+            "created": True,
+            "message": f"Recorded: {subject_key}.{predicate} = {value}",
+        }
