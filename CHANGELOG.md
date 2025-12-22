@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Simplified GM Pipeline** - New single-LLM pipeline with native tool calling
+  - New `src/gm/` module with streamlined Game Master architecture
+  - `GMNode` with tool execution loop for skill checks, attacks, entity creation
+  - `GMContextBuilder` for rich context with player state, location, NPCs, items
+  - `GMTools` with `skill_check`, `attack_roll`, `damage_entity`, `create_entity`
+  - `ResponseValidator` and `StateApplier` for grounding and persistence
+  - `--pipeline gm` is now the default (replaces system-authority)
+  - `--roll-mode auto|manual` for background or interactive dice rolls
+  - Non-interactive skill check display in `game turn` command
+  - Key files: `src/gm/gm_node.py`, `src/gm/tools.py`, `src/gm/graph.py`
+
+- **Qwen3 Tools Investigation** - Issue documentation for Ollama tool support
+  - Qwen-Agent library handles Hermes-style tool calling for Qwen3
+  - Issue folder: `docs/issues/qwen3-tools-refactor/`
+
 - **CLI Progress Streaming** - Real-time node-by-node progress during graph execution
   - New `_run_graph_with_progress()` uses LangGraph's `astream(stream_mode="updates")`
   - Progress spinner shows which node is running: "Building scene...", "Executing actions...", etc.

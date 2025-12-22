@@ -67,17 +67,23 @@ NODE_PROGRESS_MESSAGES: dict[str, str] = {
     "entity_extractor": "Extracting entities...",
     "world_simulator": "Simulating world...",
     "combat_resolver": "Resolving combat...",
+    # GM (simplified) pipeline nodes
+    "gm": "The GM considers your action...",
+    "validator": "Checking consistency...",
+    "applier": "Updating world state...",
 }
 
 # Valid pipeline options and their aliases
 PIPELINE_ALIASES = {
     "system-authority": "system-authority",
     "system": "system-authority",
-    "new": "system-authority",
     "legacy": "legacy",
     "old": "legacy",
     "scene-first": "scene-first",
     "scene": "scene-first",
+    "gm": "gm",
+    "new": "gm",  # "new" now points to gm pipeline
+    "simplified": "gm",
 }
 
 
@@ -85,11 +91,16 @@ def get_pipeline_graph(pipeline: str):
     """Get the appropriate graph builder for the pipeline.
 
     Args:
-        pipeline: Normalized pipeline name (legacy, system-authority, scene-first)
+        pipeline: Normalized pipeline name (legacy, system-authority, scene-first, gm)
 
     Returns:
         Tuple of (compiled_graph, pipeline_display_name)
     """
+    if pipeline == "gm":
+        from src.gm.graph import build_gm_graph
+        graph = build_gm_graph()
+        return graph, "GM (Simplified)"
+
     from src.agents.graph import (
         build_game_graph,
         build_system_authority_graph,
@@ -125,6 +136,64 @@ def validate_pipeline(pipeline: str) -> str:
         display_error(f"Unknown pipeline: {pipeline}. Use one of: {valid_options}")
         raise typer.Exit(1)
     return normalized
+
+
+def _create_turn_state(
+    pipeline: str,
+    db,
+    game_session: GameSession,
+    player_id: int,
+    player_location: str,
+    player_input: str,
+    turn_number: int,
+    roll_mode: str = "auto",
+) -> dict:
+    """Create initial state for a turn based on pipeline type.
+
+    Args:
+        pipeline: The pipeline being used (gm, legacy, etc.).
+        db: Database session.
+        game_session: Current game session.
+        player_id: Player entity ID.
+        player_location: Current location key.
+        player_input: Player's input.
+        turn_number: Turn number.
+        roll_mode: Roll mode for GM pipeline.
+
+    Returns:
+        State dict appropriate for the pipeline.
+    """
+    if pipeline == "gm":
+        # GM pipeline uses its own state structure
+        return {
+            "session_id": game_session.id,
+            "player_id": player_id,
+            "player_location": player_location,
+            "player_input": player_input,
+            "turn_number": turn_number,
+            "_db": db,
+            "_game_session": game_session,
+            "roll_mode": roll_mode,
+            "_gm_response_obj": None,
+            "gm_response": "",
+            "new_location": None,
+            "location_changed": False,
+            "errors": [],
+            "skill_checks": [],
+        }
+    else:
+        # Legacy pipelines use create_initial_state
+        from src.agents.state import create_initial_state
+        state = create_initial_state(
+            session_id=game_session.id,
+            player_id=player_id,
+            player_location=player_location,
+            player_input=player_input,
+            turn_number=turn_number,
+        )
+        state["_db"] = db
+        state["_game_session"] = game_session
+        return state
 
 
 def _detect_action(player_input: str) -> tuple[str | None, str | None, str | None]:
@@ -875,15 +944,26 @@ def delete(
 def play(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
     pipeline: str = typer.Option(
-        "system-authority",
+        "gm",
         "--pipeline",
         "-p",
-        help="Pipeline: 'system-authority' (default), 'scene-first' (new), or 'legacy'",
+        help="Pipeline: 'gm' (default), 'system-authority', 'scene-first', or 'legacy'",
+    ),
+    roll_mode: str = typer.Option(
+        "auto",
+        "--roll-mode",
+        "-r",
+        help="Roll mode: 'auto' (background) or 'manual' (player rolls)",
     ),
 ) -> None:
     """Start the interactive game loop."""
     # Validate pipeline option
     normalized_pipeline = validate_pipeline(pipeline)
+
+    # Validate roll mode
+    if roll_mode not in ("auto", "manual"):
+        display_error(f"Invalid roll mode: {roll_mode}. Use 'auto' or 'manual'.")
+        raise typer.Exit(1)
 
     # First check for session and player
     game_session_id = None
@@ -929,7 +1009,11 @@ def play(
                 raise typer.Exit(1)
 
             # Run the async game loop
-            asyncio.run(_game_loop(db, game_session, player, pipeline=normalized_pipeline))
+            asyncio.run(_game_loop(
+                db, game_session, player,
+                pipeline=normalized_pipeline,
+                roll_mode=roll_mode,
+            ))
 
     except KeyboardInterrupt:
         display_info("\nGame paused. Use 'rpg game play' to continue.")
@@ -1055,8 +1139,9 @@ async def _game_loop(
     db,
     game_session: GameSession,
     player: Entity,
-    pipeline: str = "system-authority",
+    pipeline: str = "gm",
     initial_location: str | None = None,
+    roll_mode: str = "auto",
 ) -> None:
     """Main game loop.
 
@@ -1064,11 +1149,10 @@ async def _game_loop(
         db: Database session.
         game_session: Current game session.
         player: Player entity.
-        pipeline: Pipeline to use (legacy, system-authority, scene-first).
+        pipeline: Pipeline to use (gm, legacy, system-authority, scene-first).
         initial_location: Optional starting location key from character creation.
+        roll_mode: "auto" or "manual" for dice rolls (GM pipeline only).
     """
-    from src.agents.state import create_initial_state
-
     display_welcome(game_session.session_name)
 
     # Build and compile the appropriate graph
@@ -1130,15 +1214,16 @@ async def _game_loop(
         # NEW GAME: Generate initial scene
         game_session.total_turns += 1  # Increment for first turn
 
-        initial_state = create_initial_state(
-            session_id=game_session.id,
+        initial_state = _create_turn_state(
+            pipeline=pipeline,
+            db=db,
+            game_session=game_session,
             player_id=player.id,
             player_location=player_location,
             player_input="[FIRST TURN: Introduce the player character - describe who they are, what they look like, what they're wearing, and how they feel. Then describe the scene they find themselves in.]",
-            turn_number=game_session.total_turns,  # Already incremented above
+            turn_number=game_session.total_turns,
+            roll_mode=roll_mode,
         )
-        initial_state["_db"] = db
-        initial_state["_game_session"] = game_session
 
         with progress_spinner("Setting the scene...") as (progress, task):
             try:
@@ -1243,15 +1328,16 @@ async def _game_loop(
         # Process player input through the agent graph
         game_session.total_turns += 1
 
-        state = create_initial_state(
-            session_id=game_session.id,
+        state = _create_turn_state(
+            pipeline=pipeline,
+            db=db,
+            game_session=game_session,
             player_id=player.id,
             player_location=player_location,
             player_input=enhanced_input,  # Use validated/enhanced input
-            turn_number=game_session.total_turns,  # Already incremented above
+            turn_number=game_session.total_turns,
+            roll_mode=roll_mode,
         )
-        state["_db"] = db
-        state["_game_session"] = game_session
 
         with progress_spinner("Starting...") as (progress, task):
             try:
@@ -1677,6 +1763,18 @@ async def _single_turn(
 
     with progress_spinner("Processing...") as (progress, task):
         result = await _run_graph_with_progress(compiled, state, progress, task)
+
+    # Display skill checks non-interactively (turn command is for scripting)
+    skill_checks = result.get("skill_checks", [])
+    for check in skill_checks:
+        skill = check.get("skill", "unknown")
+        dc = check.get("dc", 10)
+        roll = check.get("roll", 0)
+        modifier = check.get("modifier", 0)
+        total = check.get("total", roll + modifier)
+        success = check.get("success", False)
+        result_str = "✓ Success" if success else "✗ Failure"
+        display_info(f"[{skill.title()} Check] DC {dc}: {roll} + {modifier} = {total} → {result_str}")
 
     if result.get("gm_response"):
         display_narrative(result["gm_response"])

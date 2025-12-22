@@ -13,9 +13,46 @@ The RPG uses a LangGraph-based multi-agent architecture where specialized agents
 
 ## Game Pipelines
 
-The RPG supports three game pipelines, selectable via `--pipeline` flag on CLI commands.
+The RPG supports four game pipelines, selectable via `--pipeline` flag on CLI commands.
 
-### System-Authority Pipeline (Default, Recommended)
+### GM Pipeline (Default, Recommended)
+
+```
+START → GMNode (with Tools) → Validator → Applier → END
+              ↓
+     [Tool Execution Loop]
+     ├── skill_check
+     ├── attack_roll
+     ├── damage_entity
+     └── create_entity
+```
+
+**Philosophy**: "Single LLM call with native tool use for mechanics"
+
+**Benefits**:
+- **Simplicity**: One LLM call per turn (vs 3-5 in other pipelines)
+- **Natural flow**: GM calls tools mid-generation for dice rolls
+- **Rich context**: Full player state, location, NPCs, items in prompt
+- **Tool calling**: Native Claude `tool_use` for skill checks, combat, entity creation
+
+**Components**:
+1. **GMContextBuilder** - Builds rich prompt from player state, location, entities
+2. **GMNode** - Single LLM with tool execution loop
+3. **GMTools** - skill_check, attack_roll, damage_entity, create_entity
+4. **ResponseValidator** - Checks entity references and grounding
+5. **StateApplier** - Persists state changes, time advancement, turns
+
+**Key files**: `src/gm/gm_node.py`, `src/gm/tools.py`, `src/gm/context_builder.py`
+
+**CLI**: `rpg game play --pipeline gm` (default)
+
+**Roll modes**:
+- `--roll-mode auto` (default): Dice rolls happen in background
+- `--roll-mode manual`: Player sees roll animation (pending implementation)
+
+---
+
+### System-Authority Pipeline
 
 ```
 START → ContextCompiler → ParseIntent → ValidateActions → ComplicationOracle
