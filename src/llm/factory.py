@@ -103,7 +103,8 @@ def get_provider(
 def _get_model_for_provider(model_setting: str) -> str | None:
     """Get the appropriate model for the current provider.
 
-    For Ollama, uses ollama_model from settings (ignores Anthropic/OpenAI model names).
+    For Ollama-based providers (ollama, qwen-agent), uses ollama_model from settings
+    (ignores Anthropic/OpenAI model names).
     For other providers, uses the specified model setting.
 
     Args:
@@ -112,8 +113,8 @@ def _get_model_for_provider(model_setting: str) -> str | None:
     Returns:
         Model name to use, or None to use provider default.
     """
-    if settings.llm_provider == "ollama":
-        # Ollama uses its own model setting, ignore Anthropic/OpenAI model names
+    if settings.llm_provider in ("ollama", "qwen-agent"):
+        # Ollama-based providers use their own model setting
         return None
     return model_setting
 

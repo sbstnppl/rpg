@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **QwenAgentProvider model selection** - Provider now correctly uses `ollama_model` setting
+  - `_get_model_for_provider()` now includes `qwen-agent` in Ollama-based providers check
+  - Prevents qwen-agent from trying to use Claude/OpenAI model names
+  - Key file: `src/llm/factory.py`
+- **QwenAgentProvider response parsing** - Handles varied response formats from qwen-agent
+  - Response iterator now handles strings, dicts, lists, and Message objects
+  - Wraps raw string responses in proper assistant message format
+  - Key file: `src/llm/qwen_agent_provider.py`
+
 ### Added
 - **OOC (Out-of-Character) Handling** - GM now correctly handles meta and lore questions
   - Explicit OOC prefix detection (`ooc:`, `[ooc]`, etc.) with automatic stripping

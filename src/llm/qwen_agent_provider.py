@@ -216,7 +216,18 @@ class QwenAgentProvider:
                 messages=qwen_messages,
                 stream=False,
             ):
-                response_messages.extend(response)
+                # Handle both list and single message responses
+                if isinstance(response, list):
+                    response_messages.extend(response)
+                elif isinstance(response, dict):
+                    response_messages.append(response)
+                elif isinstance(response, str):
+                    response_messages.append({"role": "assistant", "content": response})
+                else:
+                    if hasattr(response, "__iter__") and not isinstance(response, str):
+                        response_messages.extend(response)
+                    else:
+                        response_messages.append({"role": "assistant", "content": str(response)})
 
             return self._parse_response(response_messages, model_name)
         except Exception as e:
@@ -258,7 +269,25 @@ class QwenAgentProvider:
                 functions=functions,
                 stream=False,
             ):
-                response_messages.extend(response)
+                # Debug: log what we're getting
+                import logging
+                logging.getLogger(__name__).debug(
+                    f"qwen-agent response type: {type(response)}, value: {response!r}"
+                )
+                # Handle both list and single message responses
+                if isinstance(response, list):
+                    response_messages.extend(response)
+                elif isinstance(response, dict):
+                    response_messages.append(response)
+                elif isinstance(response, str):
+                    # Response is raw text - wrap it in assistant message format
+                    response_messages.append({"role": "assistant", "content": response})
+                else:
+                    # Try to handle Message objects from qwen-agent
+                    if hasattr(response, "__iter__") and not isinstance(response, str):
+                        response_messages.extend(response)
+                    else:
+                        response_messages.append({"role": "assistant", "content": str(response)})
 
             return self._parse_response(response_messages, model_name)
         except Exception as e:
