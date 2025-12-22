@@ -111,6 +111,7 @@ class GMContextBuilder(BaseManager):
             exits=self._get_exits(location_key),
             relationships=self._get_relationships(player_id),
             known_facts=self._get_known_facts(),
+            familiarity=self._get_familiarity_context(player_id, location_key),
             story_summary=self._get_story_summary(),
             recent_summary=self._get_recent_summary(),
             recent_turns=self._get_recent_turns(turn_number),
@@ -344,6 +345,79 @@ class GMContextBuilder(BaseManager):
 
         return "\n".join(lines)
 
+    def _get_familiarity_context(self, player_id: int, location_key: str) -> str:
+        """Determine what the character is familiar with at current location.
+
+        Returns context that helps the LLM decide OOC vs IC for knowledge questions.
+        Questions about familiar things should be answered OOC (player asking about
+        character knowledge, not character asking in-world).
+
+        Args:
+            player_id: The player entity ID.
+            location_key: Current location key.
+
+        Returns:
+            Familiarity context string for the prompt.
+        """
+        lines = []
+        player = self.db.query(Entity).filter(Entity.id == player_id).first()
+        if not player:
+            return "**Unfamiliar with current location** - character doesn't know details"
+
+        # 1. Check if this is player's home (via lives_at fact)
+        lives_at = (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.session_id,
+                Fact.subject_key == player.entity_key,
+                Fact.predicate == "lives_at",
+            )
+            .first()
+        )
+
+        if lives_at and location_key.startswith(lives_at.value):
+            lines.append(
+                f"- **This is {player.display_name}'s home** - "
+                "knows all routines, locations, items"
+            )
+
+        # 2. Check player-owned items at location
+        try:
+            location_items = self.item_manager.get_items_at_location(location_key)
+            owned_items = [i for i in location_items if i.owner_id == player_id]
+            if owned_items:
+                item_names = ", ".join(i.display_name for i in owned_items[:5])
+                lines.append(f"- Owns items here: {item_names}")
+        except Exception:
+            pass  # Item lookup failed, skip this check
+
+        # 3. Check facts about this location
+        location_facts = (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.session_id,
+                Fact.subject_key == location_key,
+                Fact.is_secret == False,
+            )
+            .all()
+        )
+        if location_facts:
+            lines.append(f"- Has {len(location_facts)} known facts about this location")
+
+        # Format output
+        if lines:
+            lines.insert(0, "**Familiar with current location:**")
+            lines.append(
+                "\n→ Questions about familiar things = OOC "
+                "(player asking, not character)"
+            )
+        else:
+            lines.append(
+                "**Unfamiliar with current location** - character doesn't know details"
+            )
+
+        return "\n".join(lines)
+
     def _get_story_summary(self) -> str:
         """Get story summary from start to last milestone."""
         return self.summary_manager.get_story_summary() or "Story just beginning"
@@ -458,6 +532,7 @@ class GMContextBuilder(BaseManager):
 
         # Check for implicit OOC signals
         implicit_signals = [
+            # Character knowledge questions
             "what does my character know",
             "what do i know about",
             "tell me about my",
@@ -465,6 +540,15 @@ class GMContextBuilder(BaseManager):
             "what happened to me",
             "where is my bathroom",
             "where's my",
+            # Routine/habit questions (character would know their own habits)
+            "where do i usually",
+            "how do i usually",
+            "what's my usual",
+            "what do i normally",
+            "when do i usually",
+            "where do i sleep",
+            "where do i wash",
+            "where do i eat",
         ]
         input_lower = player_input.lower()
 

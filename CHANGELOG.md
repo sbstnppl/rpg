@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `src/llm/qwen_agent_provider.py`
 
 ### Added
+- **Character Familiarity Context** - GM now understands what the character is familiar with
+  - New `_get_familiarity_context()` method detects home location via `lives_at` fact
+  - Expanded implicit OOC signals for routine/habit questions ("where do I usually", "how do I normally")
+  - Familiarity section in prompt helps LLM correctly classify OOC vs IC questions
+  - Key files: `src/gm/context_builder.py`, `src/gm/prompts.py`
+
 - **OOC (Out-of-Character) Handling** - GM now correctly handles meta and lore questions
   - Explicit OOC prefix detection (`ooc:`, `[ooc]`, etc.) with automatic stripping
   - Context-aware routing: character knowledge vs active conversation with NPCs

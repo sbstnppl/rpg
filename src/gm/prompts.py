@@ -159,6 +159,9 @@ GM_USER_TEMPLATE = """## PLAYER CHARACTER
 ### Known Facts
 {known_facts}
 
+### Character Familiarity
+{familiarity}
+
 ---
 
 ## STORY CONTEXT
