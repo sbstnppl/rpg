@@ -60,7 +60,7 @@ class GMNode:
         self.llm_provider = llm_provider or get_gm_provider()
 
         self.context_builder = GMContextBuilder(db, game_session)
-        self.tools = GMTools(db, game_session, player_id, roll_mode)
+        self.tools = GMTools(db, game_session, player_id, roll_mode, location_key)
 
         # Track tool results and state changes
         self.tool_results: list[dict[str, Any]] = []

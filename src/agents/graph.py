@@ -94,6 +94,7 @@ from src.agents.nodes.npc_generator_node import npc_generator_node
 from src.agents.nodes.persistence_node import persistence_node
 from src.agents.nodes.world_simulator_node import world_simulator_node
 from src.agents.nodes.combat_resolver_node import combat_resolver_node
+from src.agents.nodes.needs_validator_node import needs_validator_node
 
 # System-Authority pipeline nodes
 from src.agents.nodes.parse_intent_node import parse_intent_node
@@ -114,6 +115,7 @@ from src.agents.nodes.narrative_validator_node import narrative_validator_node
 AGENT_NODES = {
     "context_compiler": context_compiler_node,
     "game_master": game_master_node,
+    "needs_validator": needs_validator_node,
     "entity_extractor": entity_extractor_node,
     "npc_generator": npc_generator_node,
     "combat_resolver": combat_resolver_node,
@@ -198,6 +200,9 @@ def build_game_graph() -> StateGraph:
         game_master
           |
           v
+        needs_validator (catches missed satisfy_need calls)
+          |
+          v
         [route_after_gm]
          /     |      \\
         v      v       v
@@ -230,9 +235,12 @@ def build_game_graph() -> StateGraph:
     # context_compiler -> game_master
     graph.add_edge("context_compiler", "game_master")
 
-    # game_master -> conditional routing
+    # game_master -> needs_validator (catches missed satisfy_need calls)
+    graph.add_edge("game_master", "needs_validator")
+
+    # needs_validator -> conditional routing
     graph.add_conditional_edges(
-        "game_master",
+        "needs_validator",
         route_after_gm,
         {
             "combat_resolver": "combat_resolver",

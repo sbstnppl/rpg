@@ -33,6 +33,39 @@ Deferred. Revisit if we see problems with LLM-generated scene contents (inconsis
 
 ---
 
+## Needs Validator (Post-Processing Fallback)
+
+**Status**: Deferred (keyword approach doesn't work)
+**Origin**: GM Time Awareness issue (sessions 79-81)
+
+### The Idea
+A post-processing node that scans GM narrative for action keywords (wash, eat, drink) and auto-applies need updates if the GM forgot to call `satisfy_need`.
+
+### What Was Tried
+Created `src/agents/nodes/needs_validator_node.py` with regex patterns like `r"\bwash\w*\b"`. This was integrated into the GM pipeline after the applier node.
+
+### Why It Failed
+Keyword matching is too naive. False positives everywhere:
+- "clean clothes" triggered hygiene (just looking at clothes)
+- "I remember bathing 3 weeks ago" would trigger hygiene (past tense memory)
+- "the water is clean" would trigger thirst (describing water)
+- "I ate my words" would trigger hunger (idiom)
+
+### Possible Future Approaches
+1. **LLM verification call**: After keyword match, ask a small/fast LLM "Did the player actually perform this action right now?" Adds latency but accurate.
+2. **Tool call tracking**: Check if GM actually called `satisfy_need` during tool execution, only warn if not. Requires better tool result tracking.
+3. **Prompt-only**: Just improve GM prompts and accept occasional misses.
+
+### Current State
+- Code exists at `src/agents/nodes/needs_validator_node.py` (not integrated)
+- Tests exist at `tests/test_agents/test_needs_validator.py`
+- Disabled from GM pipeline, relying on GM prompts only
+
+### Decision
+Deferred. The keyword approach is fundamentally flawed. Revisit if GM consistently forgets to call tools, consider LLM-based verification.
+
+---
+
 ## Template for New Ideas
 
 ```markdown

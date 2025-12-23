@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **GM create_entity NPC bug** - Fixed broken `create_npc()` call in tools
+  - Changed to use `create_entity()` with proper `EntityType.NPC`
+  - Creates `NPCExtension` for location and activity tracking
+  - Key file: `src/gm/tools.py`
+- **GM create_entity items lack location** - Items now placed at current location
+  - Items created via `create_entity` get `owner_location_id` set automatically
+  - Key file: `src/gm/tools.py`
 - **QwenAgentProvider model selection** - Provider now correctly uses `ollama_model` setting
   - `_get_model_for_provider()` now includes `qwen-agent` in Ollama-based providers check
   - Prevents qwen-agent from trying to use Claude/OpenAI model names

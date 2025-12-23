@@ -9,9 +9,10 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
-from src.database.models.entities import Entity, EntityAttribute, EntitySkill
+from src.database.models.entities import Entity, EntityAttribute, EntitySkill, NPCExtension
 from src.database.models.enums import EntityType
 from src.database.models.items import Item
+from src.database.models.world import Location
 from src.database.models.session import GameSession
 from src.dice.checks import (
     make_skill_check,
@@ -44,6 +45,7 @@ class GMTools:
         game_session: GameSession,
         player_id: int,
         roll_mode: str = "auto",
+        location_key: str | None = None,
     ) -> None:
         """Initialize tools.
 
@@ -52,12 +54,14 @@ class GMTools:
             game_session: Current game session.
             player_id: Player entity ID.
             roll_mode: "auto" for background rolls, "manual" for player animation.
+            location_key: Current location key (for placing created items).
         """
         self.db = db
         self.game_session = game_session
         self.session_id = game_session.id
         self.player_id = player_id
         self.roll_mode = roll_mode
+        self.location_key = location_key
 
         self._entity_manager: EntityManager | None = None
         self._item_manager: ItemManager | None = None
@@ -467,13 +471,22 @@ class GMTools:
 
         try:
             if entity_type == "npc":
-                entity = self.entity_manager.create_npc(
+                # Create the entity with proper EntityType
+                entity = self.entity_manager.create_entity(
                     entity_key=entity_key,
                     display_name=name,
+                    entity_type=EntityType.NPC,
                     gender=gender or "unknown",
-                    occupation=occupation,
                 )
-                # Add description as a note or in extension
+                # Create NPCExtension for location/activity tracking
+                npc_extension = NPCExtension(
+                    entity_id=entity.id,
+                    job=occupation,
+                    current_location=self.location_key,
+                )
+                self.db.add(npc_extension)
+                self.db.flush()
+
                 return CreateEntityResult(
                     entity_key=entity_key,
                     entity_type=GMEntityType.NPC,
@@ -482,11 +495,22 @@ class GMTools:
                 )
 
             elif entity_type == "item":
+                # Get current location ID for placing the item
+                owner_location_id = None
+                if self.location_key:
+                    location = self.db.query(Location).filter(
+                        Location.session_id == self.session_id,
+                        Location.location_key == self.location_key,
+                    ).first()
+                    if location:
+                        owner_location_id = location.id
+
                 item = self.item_manager.create_item(
                     item_key=entity_key,
                     display_name=name,
                     description=description,
                     item_type=item_type or "misc",
+                    owner_location_id=owner_location_id,
                 )
                 return CreateEntityResult(
                     entity_key=entity_key,
