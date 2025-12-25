@@ -74,10 +74,18 @@ Examples:
 
 ## NARRATIVE
 
-- 2-5 sentences, second person ("you")
+Continue the conversation naturally in second person ("you"):
+- 2-5 sentences of pure prose
 - Show, don't tell
 - End with natural pause for player input
-- Just write prose - no JSON or metadata
+
+FORBIDDEN in output:
+- Markdown headers (no **Section:** or ## headers)
+- Bullet lists or numbered lists
+- Inventory summaries
+- Any structured formatting
+
+Just write the next part of the story.
 """
 
 GM_USER_TEMPLATE = """## RECENT CONVERSATION

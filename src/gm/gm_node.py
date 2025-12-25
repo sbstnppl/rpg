@@ -33,6 +33,98 @@ class GMNode:
     MAX_TOOL_ITERATIONS = 10  # Safety limit
     OOC_PREFIXES = ("ooc:", "ooc ", "[ooc]", "(ooc)")
 
+    # Patterns for markdown formatting that should be stripped from narrative
+    _MARKDOWN_HEADER_PATTERNS = (
+        r"^\*\*[A-Za-z ]+(\([^)]+\))?:\*\*\s*$",  # **Section:** or **Updated Inventory (Finn):**
+        r"^#+\s+.*$",  # ## Header or # Header
+    )
+
+    @staticmethod
+    def _clean_narrative_static(narrative: str) -> str:
+        """Clean markdown formatting from GM narrative output.
+
+        The LLM sometimes outputs structured markdown sections like:
+        - **Response:** headers
+        - **Updated Inventory:** sections with bullet lists
+        - **New Storage Container:** sections
+
+        This method strips those while preserving pure prose narrative.
+
+        Args:
+            narrative: Raw narrative text from LLM.
+
+        Returns:
+            Cleaned narrative with markdown formatting removed.
+        """
+        import re
+
+        if not narrative or not narrative.strip():
+            return ""
+
+        lines = narrative.split("\n")
+        cleaned_lines = []
+        in_structured_section = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Empty lines reset structured section tracking
+            if not stripped:
+                in_structured_section = False
+                # Only keep blank line if we have content before it
+                if cleaned_lines and cleaned_lines[-1].strip():
+                    cleaned_lines.append("")
+                continue
+
+            # Check for markdown header patterns
+            is_header = False
+            for pattern in GMNode._MARKDOWN_HEADER_PATTERNS:
+                if re.match(pattern, stripped):
+                    is_header = True
+                    break
+
+            if is_header:
+                # Check if this is a "section with structured content" header
+                # like **Updated Inventory:** - these are followed by bullet lists
+                if "**" in stripped and stripped.endswith(":**"):
+                    # Check if header name suggests structured content
+                    header_name = stripped.lower()
+                    if any(
+                        keyword in header_name
+                        for keyword in [
+                            "inventory",
+                            "items",
+                            "storage",
+                            "container",
+                            "equipment",
+                            "added",
+                            "removed",
+                        ]
+                    ):
+                        in_structured_section = True
+                # Skip the header line itself
+                continue
+
+            # Skip bullet points and numbered lists
+            if re.match(r"^[-*]\s+", stripped) or re.match(r"^\d+\.\s+", stripped):
+                continue
+
+            # If in a structured section, skip until we hit a blank line
+            if in_structured_section:
+                continue
+
+            cleaned_lines.append(line)
+
+        # Join and clean up multiple blank lines
+        result = "\n".join(cleaned_lines).strip()
+        result = re.sub(r"\n{3,}", "\n\n", result)
+
+        return result
+
+    def _clean_narrative(self, narrative: str) -> str:
+        """Instance method wrapper for _clean_narrative_static."""
+        return self._clean_narrative_static(narrative)
+
     def __init__(
         self,
         db: Session,
@@ -319,6 +411,9 @@ class GMNode:
             # Strip the marker - display layer will handle styling
             narrative = narrative[5:].strip()
 
+        # Clean any hallucinated markdown formatting from the narrative
+        narrative = self._clean_narrative(narrative)
+
         # Extract state changes from tool results
         state_changes = self._extract_state_changes()
         new_entities = self._extract_new_entities()
@@ -508,7 +603,7 @@ class GMNode:
             ).first()
 
             if not storage:
-                logger.warning(f"Storage not found: {storage_key}")
+                logger.debug(f"Storage not found: {storage_key}")
                 continue
 
             # Check if already observed (skip if so)

@@ -49,6 +49,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `src/gm/gm_node.py`
 
 ### Fixed
+- **GM Structured Output Cleanup** - Strip hallucinated markdown formatting from GM responses
+  - Added `_clean_narrative_static()` to remove `**Section:**` headers, bullet lists, inventory summaries
+  - Updated NARRATIVE prompt section with explicit FORBIDDEN list
+  - 13 unit tests for cleanup edge cases
+  - Key files: `src/gm/gm_node.py`, `src/gm/prompts.py`
+
 - **Skill Check Display Compatibility** - CLI now handles both legacy and new GM pipeline formats
   - Maps field names between legacy executor and new GM pipeline
   - Calculates outcome_tier from margin when not provided
