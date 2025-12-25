@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Needs Validator Node** - Fallback mechanism for missed needs updates
+  - Scans GM response for keywords (wash, eat, drink, rest, talk)
+  - Auto-applies reasonable defaults when GM forgets to call `satisfy_need`
+  - Tracks `last_*_turn` fields to avoid duplicate updates
+  - Key file: `src/agents/nodes/needs_validator_node.py`
+
 - **Storage Observation Tracking** - First-time vs revisit detection for containers
   - New `StorageObservation` model tracks when player first observes storage contents
   - `StorageObservationManager` for observation CRUD operations
