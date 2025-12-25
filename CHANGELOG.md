@@ -57,6 +57,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `src/gm/gm_node.py`
 
 ### Fixed
+- **GM Player Agency Over-Interpretation** - GM no longer infers acquisition from observation verbs
+  - Added PLAYER AGENCY section to GM prompts distinguishing observation vs acquisition intent
+  - "find clothes" now describes items without adding to inventory
+  - "take the shirt" correctly triggers acquisition
+  - Trust LLM to understand natural language instead of word lists
+  - Key files: `src/gm/prompts.py`, `data/templates/game_master.md`
+
 - **GM Structured Output Cleanup** - Strip hallucinated markdown formatting from GM responses
   - Added `_clean_narrative_static()` to remove `**Section:**` headers, bullet lists, inventory summaries
   - Updated NARRATIVE prompt section with explicit FORBIDDEN list
