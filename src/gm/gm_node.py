@@ -159,7 +159,7 @@ class GMNode:
                 raise
 
         # Parse response into GMResponse
-        return self._parse_response(response, player_input)
+        return self._parse_response(response, player_input, turn_number)
 
     async def _run_simple(self, messages: list[Message]) -> LLMResponse:
         """Run without tools for providers that don't support them.
@@ -295,12 +295,18 @@ class GMNode:
 
         return result
 
-    def _parse_response(self, response: LLMResponse, player_input: str) -> GMResponse:
+    def _parse_response(
+        self,
+        response: LLMResponse,
+        player_input: str,
+        turn_number: int = 1,
+    ) -> GMResponse:
         """Parse LLM response into GMResponse.
 
         Args:
             response: The LLM response.
             player_input: Original player input.
+            turn_number: Current turn number for observation recording.
 
         Returns:
             Parsed GMResponse.
@@ -317,6 +323,9 @@ class GMNode:
         state_changes = self._extract_state_changes()
         new_entities = self._extract_new_entities()
         referenced_entities = self._extract_referenced_entities(narrative)
+
+        # Record observations for any storages that had items created
+        self._record_storage_observations(new_entities, turn_number)
 
         # For OOC responses, no time passes; otherwise estimate
         if is_ooc:
@@ -386,6 +395,7 @@ class GMNode:
                     gender=args.get("gender"),
                     occupation=args.get("occupation"),
                     item_type=args.get("item_type"),
+                    storage_location_key=res.get("storage_location_key"),
                     category=args.get("category"),
                     parent_location=args.get("parent_location"),
                 ))
@@ -453,6 +463,78 @@ class GMNode:
 
         # Default
         return 1
+
+    def _record_storage_observations(
+        self,
+        new_entities: list[NewEntity],
+        turn_number: int,
+    ) -> None:
+        """Record observations for storages that had items created.
+
+        When items are created in a storage via create_entity, this records
+        the observation so the GM knows to reference established contents
+        on future visits.
+
+        Args:
+            new_entities: Newly created entities from the response.
+            turn_number: Current turn number.
+        """
+        from src.database.models.items import StorageLocation, Item
+        from src.managers.storage_observation_manager import StorageObservationManager
+        from src.managers.time_manager import TimeManager
+
+        # Find unique storage location keys from new entities
+        storage_keys = set()
+        for entity in new_entities:
+            if entity.storage_location_key:
+                storage_keys.add(entity.storage_location_key)
+
+        if not storage_keys:
+            return
+
+        # Get current game time for the observation
+        time_manager = TimeManager(self.db, self.game_session)
+        game_day, game_time = time_manager.get_current_time()
+
+        # Initialize observation manager
+        obs_manager = StorageObservationManager(self.db, self.game_session)
+
+        # Record observation for each accessed storage
+        for storage_key in storage_keys:
+            # Look up storage location
+            storage = self.db.query(StorageLocation).filter(
+                StorageLocation.session_id == self.game_session.id,
+                StorageLocation.location_key == storage_key,
+            ).first()
+
+            if not storage:
+                logger.warning(f"Storage not found: {storage_key}")
+                continue
+
+            # Check if already observed (skip if so)
+            if obs_manager.has_observed(self.player_id, storage.id):
+                continue
+
+            # Get current items in storage
+            items = self.db.query(Item).filter(
+                Item.session_id == self.game_session.id,
+                Item.storage_location_id == storage.id,
+            ).all()
+            contents = [item.item_key for item in items]
+
+            # Record the observation
+            obs_manager.record_observation(
+                observer_id=self.player_id,
+                storage_location_id=storage.id,
+                contents=contents,
+                turn=turn_number,
+                game_day=game_day,
+                game_time=game_time,
+            )
+            logger.debug(
+                f"Recorded observation: player={self.player_id} "
+                f"storage={storage_key} contents={contents}"
+            )
 
 
 async def run_gm_node(

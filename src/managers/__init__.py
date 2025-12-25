@@ -30,6 +30,7 @@ from src.managers.grief import GriefManager, GriefStageInfo
 from src.managers.injuries import ActivityImpact, InjuryManager, InjuryRecoveryTime
 from src.managers.item_manager import ItemManager
 from src.managers.storage_manager import StorageManager
+from src.managers.storage_observation_manager import StorageObservationManager
 from src.managers.magic_manager import CastResult, MagicManager, SpellInfo
 from src.managers.location_manager import LocationManager
 from src.managers.memory_manager import MemoryManager
@@ -102,6 +103,7 @@ __all__ = [
     "FactManager",
     "ItemManager",
     "StorageManager",
+    "StorageObservationManager",
     "ScheduleManager",
     "EventManager",
     "TaskManager",

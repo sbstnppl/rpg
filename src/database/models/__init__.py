@@ -57,6 +57,7 @@ from src.database.models.world import (
     Location,
     LocationVisit,
     Schedule,
+    StorageObservation,
     TimeState,
     WorldEvent,
 )
@@ -244,6 +245,7 @@ __all__ = [
     "Location",
     "LocationVisit",
     "Schedule",
+    "StorageObservation",
     "TimeState",
     "Fact",
     "WorldEvent",

@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Storage Observation Tracking** - First-time vs revisit detection for containers
+  - New `StorageObservation` model tracks when player first observes storage contents
+  - `StorageObservationManager` for observation CRUD operations
+  - GM context shows `[FIRST TIME]` or `[REVISIT]` tags for storage containers
+  - Items created in storage via `storage_location` parameter on `create_entity`
+  - Key files: `src/database/models/world.py`, `src/managers/storage_observation_manager.py`
+
+- **Conversation-First GM Context** - Restructured prompt for better comprehension
+  - Recent turns now PRIMARY context (before scene/database info)
+  - Reduced system prompt from ~150 to ~75 lines
+  - Added INTENT ANALYSIS section (question/action/dialogue classification)
+  - Added FIRST-TIME vs REVISIT rules for storage containers
+  - Key files: `src/gm/prompts.py`, `src/gm/context_builder.py`
+
 - **Multi-Model LLM Configuration** - Task-specific provider:model routing
   - New `provider:model` format in `.env` (e.g., `NARRATOR=ollama:magmell:32b`)
   - Three task-specific settings: `NARRATOR`, `REASONING`, `CHEAP`

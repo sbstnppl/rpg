@@ -194,6 +194,10 @@ class GMTools:
                             "type": "string",
                             "description": "For items: weapon, armor, clothing, tool, misc",
                         },
+                        "storage_location": {
+                            "type": "string",
+                            "description": "For items: storage container key where item is placed (e.g., clothes_chest_001)",
+                        },
                         "category": {
                             "type": "string",
                             "description": "For locations: interior, exterior, underground",
@@ -447,6 +451,7 @@ class GMTools:
         gender: str | None = None,
         occupation: str | None = None,
         item_type: str | None = None,
+        storage_location: str | None = None,
         category: str | None = None,
         parent_location: str | None = None,
     ) -> CreateEntityResult:
@@ -459,6 +464,7 @@ class GMTools:
             gender: For NPCs.
             occupation: For NPCs.
             item_type: For items.
+            storage_location: For items - key of storage container.
             category: For locations.
             parent_location: For locations.
 
@@ -497,6 +503,8 @@ class GMTools:
             elif entity_type == "item":
                 # Get current location ID for placing the item
                 owner_location_id = None
+                storage_location_id = None
+
                 if self.location_key:
                     location = self.db.query(Location).filter(
                         Location.session_id == self.session_id,
@@ -505,18 +513,34 @@ class GMTools:
                     if location:
                         owner_location_id = location.id
 
+                # Handle storage location if specified
+                if storage_location:
+                    from src.database.models.items import StorageLocation
+                    storage = self.db.query(StorageLocation).filter(
+                        StorageLocation.session_id == self.session_id,
+                        StorageLocation.location_key == storage_location,
+                    ).first()
+                    if storage:
+                        storage_location_id = storage.id
+                        # Track this storage for observation recording
+                        if not hasattr(self, '_accessed_storages'):
+                            self._accessed_storages = []
+                        self._accessed_storages.append(storage.id)
+
                 item = self.item_manager.create_item(
                     item_key=entity_key,
                     display_name=name,
                     description=description,
                     item_type=item_type or "misc",
                     owner_location_id=owner_location_id,
+                    storage_location_id=storage_location_id,
                 )
                 return CreateEntityResult(
                     entity_key=entity_key,
                     entity_type=GMEntityType.ITEM,
                     display_name=name,
                     success=True,
+                    storage_location_key=storage_location,
                 )
 
             elif entity_type == "location":

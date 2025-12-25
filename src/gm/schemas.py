@@ -147,6 +147,9 @@ class CreateEntityResult(BaseModel):
     # Error message if failed
     error: str | None = None
 
+    # For items: storage location key if placed in storage
+    storage_location_key: str | None = None
+
 
 # =============================================================================
 # State Change Schemas
@@ -195,6 +198,7 @@ class NewEntity(BaseModel):
     # Item-specific
     item_type: str | None = None  # weapon, armor, clothing, tool, misc
     properties: dict[str, Any] | None = None
+    storage_location_key: str | None = None  # Storage container key
 
     # Location-specific
     category: str | None = None  # interior, exterior, underground

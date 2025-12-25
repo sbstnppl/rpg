@@ -247,4 +247,7 @@ class TestContextBuildIntegration:
             turn_number=1,
         )
 
-        assert "### Character Familiarity" in result
+        # Familiarity info is now in SYSTEM NOTES section (no separate header)
+        assert "## SYSTEM NOTES" in result
+        # Check for familiarity content (unfamiliar in this case)
+        assert "Unfamiliar with current location" in result or "Familiar with current location" in result

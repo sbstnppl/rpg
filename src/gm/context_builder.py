@@ -17,6 +17,7 @@ from src.managers.item_manager import ItemManager
 from src.managers.location_manager import LocationManager
 from src.managers.needs import NeedsManager
 from src.managers.relationship_manager import RelationshipManager
+from src.managers.storage_observation_manager import StorageObservationManager
 from src.managers.summary_manager import SummaryManager
 from src.gm.prompts import GM_USER_TEMPLATE
 
@@ -35,6 +36,7 @@ class GMContextBuilder(BaseManager):
         self._location_manager: LocationManager | None = None
         self._needs_manager: NeedsManager | None = None
         self._relationship_manager: RelationshipManager | None = None
+        self._storage_observation_manager: StorageObservationManager | None = None
         self._summary_manager: SummaryManager | None = None
 
     @property
@@ -66,6 +68,14 @@ class GMContextBuilder(BaseManager):
         if self._relationship_manager is None:
             self._relationship_manager = RelationshipManager(self.db, self.game_session)
         return self._relationship_manager
+
+    @property
+    def storage_observation_manager(self) -> StorageObservationManager:
+        if self._storage_observation_manager is None:
+            self._storage_observation_manager = StorageObservationManager(
+                self.db, self.game_session
+            )
+        return self._storage_observation_manager
 
     @property
     def summary_manager(self) -> SummaryManager:
@@ -109,6 +119,7 @@ class GMContextBuilder(BaseManager):
             npcs_present=self._get_npcs_present(location_key, player_id),
             items_present=self._get_items_present(location_key),
             exits=self._get_exits(location_key),
+            storage_context=self._get_storage_context(player_id, location_key),
             relationships=self._get_relationships(player_id),
             known_facts=self._get_known_facts(),
             familiarity=self._get_familiarity_context(player_id, location_key),
@@ -294,6 +305,64 @@ class GMContextBuilder(BaseManager):
             return "\n".join(lines)
         except Exception:
             return "None apparent"
+
+    def _get_storage_context(self, player_id: int, location_key: str) -> str:
+        """Get storage containers at location with first-time/revisit status.
+
+        This helps the GM know whether to freely invent contents (first time)
+        or reference established contents (revisit).
+
+        Args:
+            player_id: Player entity ID.
+            location_key: Current location key.
+
+        Returns:
+            Storage context string with [FIRST TIME] or [REVISIT] tags.
+        """
+        from src.database.models.items import StorageLocation
+
+        # Get the Location entity to get its ID
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+
+        if not location:
+            return "No storage containers"
+
+        # Get storages with observation status
+        storages_with_status = (
+            self.storage_observation_manager.get_storages_at_location_with_status(
+                observer_id=player_id,
+                location_id=location.id,
+            )
+        )
+
+        if not storages_with_status:
+            return "No storage containers"
+
+        lines = []
+        for storage_info in storages_with_status:
+            storage_key = storage_info["storage_key"]
+            first_time = storage_info["first_time"]
+            original_contents = storage_info["original_contents"]
+
+            if first_time:
+                lines.append(f"- {storage_key}: **[FIRST TIME]** - freely invent reasonable contents")
+            else:
+                if original_contents:
+                    contents_str = ", ".join(original_contents[:5])
+                    if len(original_contents) > 5:
+                        contents_str += f" (+{len(original_contents) - 5} more)"
+                    lines.append(f"- {storage_key}: **[REVISIT]** - established contents: {contents_str}")
+                else:
+                    lines.append(f"- {storage_key}: **[REVISIT]** - was empty when first observed")
+
+        return "\n".join(lines) if lines else "No storage containers"
 
     def _get_relationships(self, player_id: int) -> str:
         """Get player's relationships with known NPCs."""

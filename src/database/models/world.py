@@ -492,3 +492,74 @@ class LocationVisit(Base, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<LocationVisit {self.location_key} turn={self.last_visit_turn}>"
+
+
+class StorageObservation(Base, TimestampMixin):
+    """Track player observations of storage containers.
+
+    Records when a player first observed a container's contents,
+    enabling first-time discovery vs revisit behavior for the GM.
+
+    First observation: GM can freely invent reasonable contents.
+    Revisit: GM references established contents only (unless world event changed them).
+    """
+
+    __tablename__ = "storage_observations"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("game_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Observer (usually player, but flexible for future NPC awareness)
+    observer_id: Mapped[int] = mapped_column(
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Entity that observed this storage (usually player)",
+    )
+
+    # Storage observed
+    storage_location_id: Mapped[int] = mapped_column(
+        ForeignKey("storage_locations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="The storage container that was observed",
+    )
+
+    # When observed
+    observed_at_turn: Mapped[int] = mapped_column(
+        nullable=False,
+        comment="Turn number when first observed",
+    )
+    observed_at_game_day: Mapped[int] = mapped_column(
+        nullable=False,
+        comment="In-game day when first observed",
+    )
+    observed_at_game_time: Mapped[str | None] = mapped_column(
+        String(5),
+        nullable=True,
+        comment="In-game time when first observed (HH:MM)",
+    )
+
+    # Snapshot of contents at observation
+    contents_snapshot: Mapped[list | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="List of item_keys present when first observed",
+    )
+
+    # Unique constraint: one observation record per observer per storage per session
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "observer_id",
+            "storage_location_id",
+            name="uq_storage_observation_session_observer_storage",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return f"<StorageObservation storage={self.storage_location_id} turn={self.observed_at_turn}>"
