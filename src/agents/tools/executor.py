@@ -1396,11 +1396,21 @@ class GMToolExecutor:
                 "suggestion": "Drop something heavy first",
             }
 
+        # Extract state adjectives from display name
+        from src.services.item_state_extractor import extract_state_from_name
+        import re
+
+        extraction = extract_state_from_name(display_name)
+        base_name = extraction.base_name
+        extracted_state = extraction.state
+
+        # Use base name as display name (state lives in properties)
+        display_name = base_name
+
         # Generate item key if not provided
         if not item_key:
-            # Create key from display name
-            import re
-            base_key = re.sub(r'[^a-z0-9]+', '_', display_name.lower()).strip('_')
+            # Create key from base name (without state adjectives)
+            base_key = re.sub(r'[^a-z0-9]+', '_', base_name.lower()).strip('_')
             item_key = f"{entity_key}_{base_key}"
 
         # Check if item already exists
@@ -1426,6 +1436,11 @@ class GMToolExecutor:
         except ValueError:
             item_type = ItemType.MISC
 
+        # Build properties with extracted state
+        item_properties = {}
+        if extracted_state:
+            item_properties["state"] = dict(extracted_state)
+
         # Create new item
         try:
             item = item_mgr.create_item(
@@ -1438,6 +1453,7 @@ class GMToolExecutor:
                 weight=weight if weight > 0 else None,
                 quantity=quantity,
                 is_stackable=quantity > 1,
+                properties=item_properties if item_properties else None,
             )
 
             # Assign to slot
@@ -1703,10 +1719,20 @@ class GMToolExecutor:
                 "suggestion": f"Call spawn_storage(container_type='{surface}') first",
             }
 
+        # Extract state adjectives from display name
+        from src.services.item_state_extractor import extract_state_from_name
+
+        extraction = extract_state_from_name(display_name)
+        base_name = extraction.base_name
+        extracted_state = extraction.state
+
+        # Use base name as display name (state lives in properties)
+        display_name = base_name
+
         # Generate item key if not provided
         if not item_key:
-            # Create slug from display name
-            slug = display_name.lower().replace(" ", "_").replace("'", "")[:30]
+            # Create slug from base name (without state adjectives)
+            slug = base_name.lower().replace(" ", "_").replace("'", "")[:30]
             # Count existing items with similar prefix
             existing_count = (
                 self.db.query(Item)
@@ -1740,6 +1766,11 @@ class GMToolExecutor:
         except ValueError:
             item_type = ItemType.MISC
 
+        # Build properties with description and extracted state
+        item_properties = {"description": description}
+        if extracted_state:
+            item_properties["state"] = dict(extracted_state)
+
         # Create the item
         item = Item(
             session_id=self.game_session.id,
@@ -1750,7 +1781,7 @@ class GMToolExecutor:
             owner_location_id=location.id,  # Owned by the location
             weight=weight,
             quantity=quantity,
-            properties={"description": description},
+            properties=item_properties,
         )
         self.db.add(item)
         self.db.flush()

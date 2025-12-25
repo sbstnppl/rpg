@@ -181,6 +181,50 @@ class ItemManager(BaseManager):
         self.db.flush()
         return item
 
+    def update_item_state(
+        self,
+        item_key: str,
+        state_key: str,
+        value: str,
+    ) -> Item:
+        """Update a state property in item's properties.state dict.
+
+        State properties track mutable item characteristics like cleanliness,
+        condition, freshness, etc. This method handles initialization of the
+        state dict if it doesn't exist.
+
+        Args:
+            item_key: Item key.
+            state_key: State category (e.g., "cleanliness", "condition").
+            value: New value for the state.
+
+        Returns:
+            Updated Item.
+
+        Raises:
+            ValueError: If item not found.
+        """
+        from sqlalchemy.orm.attributes import flag_modified
+
+        item = self.get_item(item_key)
+        if item is None:
+            raise ValueError(f"Item not found: {item_key}")
+
+        # Initialize properties and state dict if needed
+        if item.properties is None:
+            item.properties = {}
+        if "state" not in item.properties:
+            item.properties["state"] = {}
+
+        # Update the state
+        item.properties["state"][state_key] = value
+
+        # Mark as modified for SQLAlchemy JSON tracking
+        flag_modified(item, "properties")
+
+        self.db.flush()
+        return item
+
     def create_item(
         self,
         item_key: str,

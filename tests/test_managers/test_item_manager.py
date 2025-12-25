@@ -1579,3 +1579,86 @@ class TestItemManagerTemporaryStorage:
         )
 
         assert second.id == first_id
+
+
+class TestItemManagerState:
+    """Tests for item state management."""
+
+    def test_update_item_state_sets_state(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify update_item_state sets state in properties."""
+        item = create_item(
+            db_session, game_session,
+            item_key="linen_shirt",
+            display_name="Linen Shirt",
+            properties={"state": {"cleanliness": "clean"}}
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.update_item_state("linen_shirt", "cleanliness", "dirty")
+
+        assert result.properties["state"]["cleanliness"] == "dirty"
+
+    def test_update_item_state_initializes_state_dict(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify update_item_state creates state dict if missing."""
+        item = create_item(
+            db_session, game_session,
+            item_key="old_sword",
+            display_name="Iron Sword",
+            properties=None
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.update_item_state("old_sword", "condition", "rusty")
+
+        assert result.properties is not None
+        assert result.properties["state"]["condition"] == "rusty"
+
+    def test_update_item_state_preserves_other_properties(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify update_item_state doesn't overwrite other properties."""
+        item = create_item(
+            db_session, game_session,
+            item_key="fancy_hat",
+            display_name="Top Hat",
+            properties={
+                "visual": {"color": "black"},
+                "state": {"cleanliness": "clean"}
+            }
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.update_item_state("fancy_hat", "cleanliness", "dusty")
+
+        assert result.properties["visual"]["color"] == "black"
+        assert result.properties["state"]["cleanliness"] == "dusty"
+
+    def test_update_item_state_adds_new_state_key(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify update_item_state can add new state keys."""
+        item = create_item(
+            db_session, game_session,
+            item_key="bread",
+            display_name="Bread",
+            properties={"state": {"freshness": "fresh"}}
+        )
+        manager = ItemManager(db_session, game_session)
+
+        result = manager.update_item_state("bread", "condition", "damaged")
+
+        assert result.properties["state"]["freshness"] == "fresh"
+        assert result.properties["state"]["condition"] == "damaged"
+
+    def test_update_item_state_raises_for_nonexistent_item(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Verify update_item_state raises ValueError for missing item."""
+        manager = ItemManager(db_session, game_session)
+
+        with pytest.raises(ValueError, match="Item not found"):
+            manager.update_item_state("nonexistent", "cleanliness", "dirty")

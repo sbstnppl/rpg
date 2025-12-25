@@ -344,8 +344,13 @@ class EmergentItemGenerator:
         template = ITEM_TEMPLATES.get(item_type, ITEM_TEMPLATES["misc"])
         subtype_data = template.get("subtypes", {}).get(subtype, {})
 
-        # Generate identity
-        display_name = constraints.name if constraints and constraints.name else self._generate_name(item_type, subtype, context)
+        # Generate identity - extract state adjectives for clean key and display
+        from src.services.item_state_extractor import extract_state_from_name
+
+        raw_name = constraints.name if constraints and constraints.name else self._generate_name(item_type, subtype, context)
+        extraction = extract_state_from_name(raw_name)
+        display_name = extraction.base_name  # Use base name without state adjectives
+        extracted_state = extraction.state
         item_key = self._generate_item_key(item_type, display_name)
 
         # Generate quality and condition (emergent)
@@ -371,6 +376,10 @@ class EmergentItemGenerator:
         # Generate properties from template
         properties = dict(subtype_data)
         properties.pop("base_value", None)
+
+        # Add extracted state to properties
+        if extracted_state:
+            properties["state"] = dict(extracted_state)
 
         # Get need triggers
         need_triggers = template.get("need_triggers", [])
@@ -455,8 +464,17 @@ class EmergentItemGenerator:
         return base_name
 
     def _generate_item_key(self, item_type: str, display_name: str) -> str:
-        """Generate unique item key."""
-        name_clean = display_name.lower().replace(" ", "_")[:20]
+        """Generate unique item key.
+
+        Extracts state adjectives from display name to create a clean key
+        that won't become misleading when item state changes.
+        """
+        from src.services.item_state_extractor import extract_state_from_name
+
+        extraction = extract_state_from_name(display_name)
+        base_name = extraction.base_name
+
+        name_clean = base_name.lower().replace(" ", "_")[:20]
         unique_id = uuid.uuid4().hex[:6]
         return f"{item_type}_{name_clean}_{unique_id}"
 

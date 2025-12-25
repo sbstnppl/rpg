@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Item State Extraction** - Separate item identity from state in keys and properties
+  - New `ItemStateExtractor` utility extracts state adjectives from display names
+  - Keys now based on base name only (e.g., `linen_shirt` not `clean_linen_shirt`)
+  - State stored in `properties.state` dict (cleanliness, condition, freshness, quality, age)
+  - New `ItemManager.update_item_state()` method for state changes
+  - Updated `spawn_item`, `acquire_item`, `create_entity`, and emergent item generation
+  - Key files: `src/services/item_state_extractor.py`, `src/managers/item_manager.py`
+
 - **Needs Validator Node** - Fallback mechanism for missed needs updates
   - Scans GM response for keywords (wash, eat, drink, rest, talk)
   - Auto-applies reasonable defaults when GM forgets to call `satisfy_need`

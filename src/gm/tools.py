@@ -471,6 +471,16 @@ class GMTools:
         Returns:
             CreateEntityResult with the new entity key.
         """
+        # For items, extract state adjectives first to get clean base name
+        extracted_state = None
+        if entity_type == "item":
+            from src.services.item_state_extractor import extract_state_from_name
+            extraction = extract_state_from_name(name)
+            base_name = extraction.base_name
+            extracted_state = extraction.state
+            # Use base name for key and display
+            name = base_name
+
         # Generate a unique key
         base_key = name.lower().replace(" ", "_").replace("'", "")
         entity_key = f"{base_key}_{random.randint(100, 999)}"
@@ -527,6 +537,11 @@ class GMTools:
                             self._accessed_storages = []
                         self._accessed_storages.append(storage.id)
 
+                # Build properties with extracted state
+                item_properties = {}
+                if extracted_state:
+                    item_properties["state"] = dict(extracted_state)
+
                 item = self.item_manager.create_item(
                     item_key=entity_key,
                     display_name=name,
@@ -534,6 +549,7 @@ class GMTools:
                     item_type=item_type or "misc",
                     owner_location_id=owner_location_id,
                     storage_location_id=storage_location_id,
+                    properties=item_properties if item_properties else None,
                 )
                 return CreateEntityResult(
                     entity_key=entity_key,
