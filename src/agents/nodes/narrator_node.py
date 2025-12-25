@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from src.agents.state import GameState
 from src.database.models.session import GameSession
 from src.executor.subturn_processor import ChainedTurnResult
-from src.llm.factory import get_gm_provider
+from src.llm.factory import get_narrator_provider
 from src.llm.message_types import Message, MessageRole
 from src.narrator.narrator import ConstrainedNarrator
 
@@ -84,7 +84,7 @@ async def _generate_scene_intro(scene_context: str) -> str:
         Narrative introduction text.
     """
     try:
-        llm = get_gm_provider()
+        llm = get_narrator_provider()
         prompt = SCENE_INTRO_PROMPT.format(scene_context=scene_context)
         messages = [Message(role=MessageRole.USER, content=prompt)]
         response = await llm.complete(messages, temperature=0.8, max_tokens=1000, system_prompt=SCENE_INTRO_SYSTEM)
@@ -107,7 +107,7 @@ async def _generate_look_description(scene_context: str) -> str:
         Brief description of visible surroundings.
     """
     try:
-        llm = get_gm_provider()
+        llm = get_narrator_provider()
         prompt = LOOK_PROMPT.format(scene_context=scene_context)
         messages = [Message(role=MessageRole.USER, content=prompt)]
         response = await llm.complete(messages, temperature=0.7, max_tokens=500, system_prompt=LOOK_SYSTEM)
@@ -267,7 +267,7 @@ async def narrator_node(state: GameState) -> dict[str, Any]:
 
     # Use LLM-powered narrator for proper prose generation
     try:
-        llm = get_gm_provider()
+        llm = get_narrator_provider()
         narrator = ConstrainedNarrator(
             llm_provider=llm,
             max_tokens=style_config["max_tokens"],

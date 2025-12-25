@@ -7,7 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Multi-Model LLM Configuration** - Task-specific provider:model routing
+  - New `provider:model` format in `.env` (e.g., `NARRATOR=ollama:magmell:32b`)
+  - Three task-specific settings: `NARRATOR`, `REASONING`, `CHEAP`
+  - Supports mixing providers (ollama, qwen-agent, anthropic, openai per task)
+  - `ProviderConfig` dataclass and `parse_provider_config()` parser
+  - Task-specific factory functions: `get_narrator_provider()`, `get_reasoning_provider()`, `get_cheap_provider()`
+  - Key files: `src/config.py`, `src/llm/factory.py`
+
+- **GM Spawn Tools** - New tools for creating world objects during narration
+  - `spawn_storage` - Create furniture, containers, surfaces (table, chest, shelf, etc.)
+  - `spawn_item` - Create discoverable items on surfaces
+  - `introduce_npc` - Introduce new NPCs with initial attitude
+  - Replaces verbose `create_entity` workflow with purpose-specific tools
+  - Key file: `data/templates/game_master.md`
+
+- **GM Text Accumulation** - Narrative text preserved across tool call iterations
+  - LLM can now narrate before making tool calls without losing that text
+  - All text from intermediate responses combined in final output
+  - Key file: `src/gm/gm_node.py`
+
 ### Fixed
+- **Skill Check Display Compatibility** - CLI now handles both legacy and new GM pipeline formats
+  - Maps field names between legacy executor and new GM pipeline
+  - Calculates outcome_tier from margin when not provided
+  - Key file: `src/cli/commands/game.py`
+
 - **GM create_entity NPC bug** - Fixed broken `create_npc()` call in tools
   - Changed to use `create_entity()` with proper `EntityType.NPC`
   - Creates `NPCExtension` for location and activity tracking

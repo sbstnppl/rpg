@@ -44,6 +44,10 @@ from src.llm.factory import (
     get_gm_provider,
     get_extraction_provider,
     get_cheap_provider,
+    # Multi-model Ollama providers
+    get_narrator_provider,
+    get_reasoning_provider,
+    get_creative_provider,
 )
 
 # Retry utilities
@@ -95,6 +99,10 @@ __all__ = [
     "get_gm_provider",
     "get_extraction_provider",
     "get_cheap_provider",
+    # Multi-model Ollama providers
+    "get_narrator_provider",
+    "get_reasoning_provider",
+    "get_creative_provider",
     # Retry
     "RetryConfig",
     "with_retry",

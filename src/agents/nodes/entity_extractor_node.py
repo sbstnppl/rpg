@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from src.agents.state import GameState
 from src.agents.schemas.extraction import ExtractionResult
 from src.database.models.session import GameSession
-from src.llm.factory import get_extraction_provider
+from src.llm.factory import get_reasoning_provider
 from src.llm.message_types import Message
 from src.llm.audit_logger import set_audit_context
 from src.managers.context_validator import ContextValidator
@@ -124,7 +124,7 @@ async def _extract_entities(state: GameState) -> dict[str, Any]:
     )
 
     # Get LLM provider and extract
-    provider = get_extraction_provider()
+    provider = get_reasoning_provider()
 
     response = await provider.complete_structured(
         messages=[Message.user(prompt)],

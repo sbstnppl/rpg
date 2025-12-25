@@ -40,6 +40,12 @@ class QwenAgentProvider:
     # Match incomplete thinking blocks (cut off before closing tag)
     THINKING_INCOMPLETE = re.compile(r"<think>.*$", re.DOTALL)
 
+    # Pattern to match tool call JSON blocks in content
+    TOOL_CALL_PATTERN = re.compile(
+        r'\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[^}]*\}\s*\}',
+        re.DOTALL
+    )
+
     @staticmethod
     def _strip_thinking(content: str) -> str:
         """Remove <think>...</think> tags from response content.
@@ -51,6 +57,37 @@ class QwenAgentProvider:
         # Then remove any incomplete block at the end
         result = QwenAgentProvider.THINKING_INCOMPLETE.sub("", result)
         return result.strip()
+
+    @staticmethod
+    def _extract_and_strip_tool_calls(content: str) -> tuple[str, list[ToolCall]]:
+        """Extract tool call JSON from content and return cleaned content + tool calls.
+
+        Some Qwen models output tool calls as JSON text in the content instead of
+        using the structured function_call format. This extracts them properly.
+
+        Returns:
+            Tuple of (cleaned_content, extracted_tool_calls)
+        """
+        tool_calls = []
+
+        # Find all tool call JSON blocks
+        matches = QwenAgentProvider.TOOL_CALL_PATTERN.findall(content)
+        for match in matches:
+            try:
+                parsed = json.loads(match)
+                if "name" in parsed and "arguments" in parsed:
+                    tool_calls.append(ToolCall(
+                        id=parsed["name"],  # Use name as ID
+                        name=parsed["name"],
+                        arguments=parsed["arguments"],
+                        raw_arguments=json.dumps(parsed["arguments"]),
+                    ))
+            except (json.JSONDecodeError, KeyError):
+                pass
+
+        # Remove the JSON blocks from content
+        cleaned = QwenAgentProvider.TOOL_CALL_PATTERN.sub("", content)
+        return cleaned.strip(), tool_calls
 
     def __init__(
         self,
@@ -158,9 +195,13 @@ class QwenAgentProvider:
         for msg in response_messages:
             if msg.get("role") == "assistant":
                 raw_content = msg.get("content", "")
+                # Strip thinking blocks first
                 content = self._strip_thinking(raw_content) if raw_content else ""
+                # Extract and strip any JSON tool calls from content (some models output these as text)
+                content, extracted_calls = self._extract_and_strip_tool_calls(content)
+                tool_calls.extend(extracted_calls)
 
-                # Check for function_call
+                # Check for function_call (structured format)
                 if fn_call := msg.get("function_call"):
                     # Parse arguments (may be JSON string)
                     args_raw = fn_call.get("arguments", "{}")

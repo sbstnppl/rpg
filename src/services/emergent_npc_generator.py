@@ -40,7 +40,7 @@ from src.agents.schemas.npc_state import (
     SceneContext,
     VisibleItem,
 )
-from src.llm.factory import get_cheap_provider
+from src.llm.factory import get_creative_provider
 from src.database.models.character_preferences import CharacterPreferences
 from src.database.models.character_state import CharacterNeeds
 from src.database.models.entities import Entity, EntitySkill, NPCExtension
@@ -1506,7 +1506,7 @@ Consider:
 
 Generate occupation details that fit naturally in this setting."""
 
-        provider = get_cheap_provider()
+        provider = get_creative_provider()
         result = await provider.complete_structured(
             prompt=prompt,
             output_schema=OccupationDetails,

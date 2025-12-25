@@ -24,7 +24,7 @@ from src.agents.state import GameState
 from src.agents.tools.gm_tools import GM_TOOLS
 from src.agents.tools.executor import GMToolExecutor
 from src.database.models.session import GameSession
-from src.llm.factory import get_gm_provider
+from src.llm.factory import get_reasoning_provider
 from src.llm.message_types import Message, MessageContent, MessageRole
 from src.llm.audit_logger import set_audit_context
 from src.managers.context_validator import ContextValidator
@@ -126,13 +126,15 @@ async def _generate_response(state: GameState) -> dict[str, Any]:
     )
 
     # Get LLM provider and generate response with tools
-    provider = get_gm_provider()
+    provider = get_reasoning_provider()
     messages = [Message.user(prompt)]
 
     # Setup tool executor if we have database context
     executor = None
     if db is not None and game_session is not None:
-        executor = GMToolExecutor(db, game_session)
+        # Pass current player location so spawn_storage/spawn_item know where to create things
+        current_zone_key = state.get("player_location")
+        executor = GMToolExecutor(db, game_session, current_zone_key=current_zone_key)
 
     # Track skill checks for interactive display
     skill_checks: list[dict[str, Any]] = []

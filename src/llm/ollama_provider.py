@@ -29,22 +29,29 @@ class OllamaProvider:
     """Ollama LLM implementation using langchain-ollama.
 
     Supports:
-    - Llama 3, Llama 3.1, Llama 3.2, Mistral, Qwen3, etc.
+    - Llama 3, Llama 3.1, Llama 3.2, Mistral, Qwen3, gpt-oss, etc.
     - Tool calling (model-dependent - llama3.1+, mistral, qwen3 support it)
     - Structured output via with_structured_output()
     - Local or remote Ollama instances
-    - Thinking mode control for reasoning models (Qwen3, etc.)
+    - Thinking mode control for reasoning models
+
+    Thinking modes supported:
+    - Native reasoning: Models like gpt-oss use `reasoning=True` parameter
+      and return thinking in `additional_kwargs['reasoning_content']`
+    - Qwen3-style: Uses `/nothink` system prefix and `<think>` tags
 
     Note:
     - Token counting is approximate (Ollama doesn't expose tokenizers)
-    - Usage stats are not available via langchain-ollama interface
+    - Usage stats are available in response_metadata
     """
 
     CHARS_PER_TOKEN = 4  # Rough estimate for token counting
-    # Match complete thinking blocks
+    # Match complete thinking blocks (Qwen3 style)
     THINKING_PATTERN = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
     # Match incomplete thinking blocks (cut off before closing tag)
     THINKING_INCOMPLETE = re.compile(r"<think>.*$", re.DOTALL)
+    # Models that use native reasoning API (not /nothink)
+    NATIVE_REASONING_MODELS = ("gpt-oss",)
 
     @staticmethod
     def _strip_thinking(content: str) -> str:
@@ -57,6 +64,10 @@ class OllamaProvider:
         # Then remove any incomplete block at the end
         result = OllamaProvider.THINKING_INCOMPLETE.sub("", result)
         return result.strip()
+
+    def _uses_native_reasoning(self, model: str) -> bool:
+        """Check if model uses native reasoning API vs Qwen3-style."""
+        return any(model.startswith(prefix) for prefix in self.NATIVE_REASONING_MODELS)
 
     def __init__(
         self,
@@ -157,23 +168,28 @@ class OllamaProvider:
             temperature: Sampling temperature.
             stop_sequences: Stop sequences to end generation.
             system_prompt: System prompt to prepend.
-            think: Enable thinking mode for reasoning models (Qwen3, etc.).
+            think: Enable thinking mode for reasoning models.
                    Defaults to False for faster responses.
         """
-        # Disable thinking mode if not requested (faster responses)
+        model_name = model or self._default_model
+        uses_native = self._uses_native_reasoning(model_name)
+
+        # Apply thinking mode control based on model type
         effective_system = system_prompt or ""
-        if not think:
+        if not uses_native and not think:
+            # Qwen3-style: use /nothink prefix
             effective_system = "/nothink\n" + effective_system if effective_system else "/nothink"
 
         lc_messages = self._convert_messages(messages, effective_system)
-        model_name = model or self._default_model
 
+        # Build client with appropriate reasoning setting
         client = ChatOllama(
             base_url=self._base_url,
             model=model_name,
             temperature=temperature,
             num_predict=max_tokens,
             stop=list(stop_sequences) if stop_sequences else None,
+            reasoning=think if uses_native else False,  # Native reasoning API
         )
 
         try:
@@ -203,25 +219,29 @@ class OllamaProvider:
             temperature: Sampling temperature.
             tool_choice: Tool selection mode ("auto", "none", or specific tool).
             system_prompt: System prompt to prepend.
-            think: Enable thinking mode for reasoning models (Qwen3, etc.).
+            think: Enable thinking mode for reasoning models.
                    Defaults to True for tool calls (reasoning helps).
 
         Note: Not all Ollama models support tool calling.
-        Models with tool support include: llama3.1+, mistral, qwen3, etc.
+        Models with tool support include: llama3.1+, mistral, qwen3, gpt-oss, etc.
         """
-        # Apply thinking mode control
+        model_name = model or self._default_model
+        uses_native = self._uses_native_reasoning(model_name)
+
+        # Apply thinking mode control based on model type
         effective_system = system_prompt or ""
-        if not think:
+        if not uses_native and not think:
+            # Qwen3-style: use /nothink prefix
             effective_system = "/nothink\n" + effective_system if effective_system else "/nothink"
 
         lc_messages = self._convert_messages(messages, effective_system)
-        model_name = model or self._default_model
 
         client = ChatOllama(
             base_url=self._base_url,
             model=model_name,
             temperature=temperature,
             num_predict=max_tokens,
+            reasoning=think if uses_native else False,  # Native reasoning API
         )
 
         # Convert tools to LangChain format (OpenAI-compatible function schema)

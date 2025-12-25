@@ -1401,15 +1401,21 @@ def _display_skill_checks_interactive(skill_checks: list[dict]) -> None:
     )
 
     for check in skill_checks:
+        # Map field names - new GM pipeline uses different names than legacy executor
+        # Legacy: skill_name, skill_tier, attribute_key, attribute_modifier, skill_modifier, total_modifier
+        # New GM: skill, modifier (combined), roll, total
+        skill_name = check.get("skill_name") or check.get("skill", "unknown")
+        total_modifier = check.get("total_modifier") or check.get("modifier", 0)
+
         # Show the pre-roll prompt
         display_skill_check_prompt(
-            description=check.get("description", "Skill check"),
-            skill_name=check.get("skill_name", "unknown"),
+            description=check.get("description") or check.get("context", "Skill check"),
+            skill_name=skill_name,
             skill_tier=check.get("skill_tier", "Novice"),
             skill_modifier=check.get("skill_modifier", 0),
             attribute_key=check.get("attribute_key", "unknown"),
             attribute_modifier=check.get("attribute_modifier", 0),
-            total_modifier=check.get("total_modifier", 0),
+            total_modifier=total_modifier,
             difficulty_assessment=check.get("difficulty_assessment", ""),
         )
 
@@ -1419,16 +1425,40 @@ def _display_skill_checks_interactive(skill_checks: list[dict]) -> None:
         # Show rolling animation
         display_rolling_animation()
 
+        # Calculate margin if not provided
+        dc = check.get("dc", 10)
+        total_roll = check.get("total") or check.get("roll", 10)
+        margin = check.get("margin", total_roll - dc)
+
+        # Determine outcome tier from margin if not provided
+        outcome_tier = check.get("outcome_tier", "")
+        if not outcome_tier:
+            if margin >= 10:
+                outcome_tier = "exceptional"
+            elif margin >= 5:
+                outcome_tier = "clear_success"
+            elif margin >= 1:
+                outcome_tier = "narrow_success"
+            elif margin == 0:
+                outcome_tier = "bare_success"
+            elif margin >= -4:
+                outcome_tier = "partial_failure"
+            elif margin >= -9:
+                outcome_tier = "clear_failure"
+            else:
+                outcome_tier = "catastrophic"
+
         # Show the result
         display_skill_check_result(
             success=check.get("success", False),
-            natural_roll=check.get("natural_roll", 10),
-            total_modifier=check.get("total_modifier", 0),
-            total_roll=check.get("roll", 10),
-            dc=check.get("dc", 10),
-            margin=check.get("margin", 0),
-            is_critical_success=check.get("is_critical_success", False),
-            is_critical_failure=check.get("is_critical_failure", False),
+            dice_rolls=check.get("dice_rolls"),  # May be None for new GM pipeline
+            total_modifier=total_modifier,
+            total_roll=total_roll,
+            dc=dc,
+            margin=margin,
+            outcome_tier=outcome_tier,
+            is_critical_success=check.get("is_critical_success") or check.get("critical_success", False),
+            is_critical_failure=check.get("is_critical_failure") or check.get("critical_failure", False),
         )
 
 

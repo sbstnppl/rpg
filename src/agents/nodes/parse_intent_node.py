@@ -12,7 +12,7 @@ import re
 from typing import Any, Callable, Coroutine, TYPE_CHECKING
 
 from src.agents.state import GameState
-from src.llm.factory import get_extraction_provider
+from src.llm.factory import get_reasoning_provider
 from src.parser.intent_parser import IntentParser, SceneContext
 
 if TYPE_CHECKING:
@@ -210,7 +210,7 @@ async def parse_intent_node(state: GameState) -> dict[str, Any]:
 
     # Get LLM provider for intent classification
     try:
-        llm_provider = get_extraction_provider()
+        llm_provider = get_reasoning_provider()
     except Exception:
         llm_provider = None
 
@@ -291,7 +291,7 @@ def create_parse_intent_node() -> Callable[[GameState], Coroutine[Any, Any, dict
 
         # Get LLM provider for intent classification
         try:
-            llm_provider = get_extraction_provider()
+            llm_provider = get_reasoning_provider()
         except Exception:
             llm_provider = None
 

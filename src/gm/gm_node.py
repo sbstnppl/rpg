@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from src.database.models.session import GameSession
-from src.llm.factory import get_gm_provider
+from src.llm.factory import get_reasoning_provider
 from src.llm.base import LLMProvider
 from src.llm.message_types import Message, MessageRole
 from src.llm.tool_types import ToolDefinition, ToolParameter
@@ -57,7 +57,7 @@ class GMNode:
         self.player_id = player_id
         self.location_key = location_key
         self.roll_mode = roll_mode
-        self.llm_provider = llm_provider or get_gm_provider()
+        self.llm_provider = llm_provider or get_reasoning_provider()
 
         self.context_builder = GMContextBuilder(db, game_session)
         self.tools = GMTools(db, game_session, player_id, roll_mode, location_key)
@@ -192,8 +192,11 @@ class GMNode:
             tools: Available tools.
 
         Returns:
-            Final LLM response.
+            Final LLM response with accumulated text from all iterations.
         """
+        # Accumulate text from all iterations (narrative may come before tool calls)
+        accumulated_text: list[str] = []
+
         for iteration in range(self.MAX_TOOL_ITERATIONS):
             logger.debug(f"GM tool loop iteration {iteration + 1}")
 
@@ -206,9 +209,23 @@ class GMNode:
                 max_tokens=2048,
             )
 
+            # Accumulate any text content from this response
+            if response.content and response.content.strip():
+                accumulated_text.append(response.content.strip())
+
             # Check for tool calls
             if not response.has_tool_calls:
                 logger.debug("GM completed without tool calls")
+                # Return response with accumulated text
+                if accumulated_text:
+                    # Combine all accumulated text
+                    combined_text = "\n\n".join(accumulated_text)
+                    return LLMResponse(
+                        content=combined_text,
+                        finish_reason=response.finish_reason,
+                        tool_calls=response.tool_calls,
+                        raw_response=response.raw_response,
+                    )
                 return response
 
             # Execute tool calls
@@ -237,6 +254,15 @@ class GMNode:
             ))
 
         logger.warning(f"GM tool loop reached max iterations ({self.MAX_TOOL_ITERATIONS})")
+        # Return with accumulated text even on max iterations
+        if accumulated_text:
+            combined_text = "\n\n".join(accumulated_text)
+            return LLMResponse(
+                content=combined_text,
+                finish_reason=response.finish_reason,
+                tool_calls=response.tool_calls,
+                raw_response=response.raw_response,
+            )
         return response
 
     async def _execute_tool_call(self, tool_call: ToolCall) -> dict[str, Any]:

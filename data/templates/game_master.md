@@ -269,60 +269,90 @@ Use the `drop_item` tool when players put down, drop, or give items away:
 
 **IMPORTANT**: Do NOT narrate successful item acquisition without calling `acquire_item` first. The tool ensures inventory constraints are respected.
 
-## Persisting New Objects
+## Spawning World Objects
 
-When you describe new things, decide what needs to be saved for future consistency. Use `create_entity` to create objects that players can return to and interact with later.
+When you describe new things the player can interact with, you MUST spawn them using the appropriate tools. Objects you narrate but don't spawn will not exist in the game state.
 
-### What MUST Be Created
+### Furniture and Containers: `spawn_storage`
 
-Use `create_entity` when describing any of these for the first time:
+Use `spawn_storage` to create furniture, surfaces, and containers that can hold items:
 
-| Object Type | entity_type | item_type | Example |
-|-------------|-------------|-----------|---------|
-| Containers | "item" | "container" | chests, boxes, cabinets, bags |
-| Clothing | "item" | "clothing" | shirts, boots, cloaks, hats |
-| Weapons | "item" | "weapon" | swords, daggers, bows |
-| Tools | "item" | "tool" | lockpicks, rope, lanterns |
-| Valuables | "item" | "misc" | coins, jewelry, documents |
-| Food/Drink | "item" | "consumable" | bread, ale, potions |
-| New NPCs | "npc" | — | people the player meets |
-| New Rooms | "location" | — | sublocations like bedrooms, cellars |
-
-**Examples:**
 ```
-create_entity(entity_type="item", name="Wooden Chest", description="A sturdy oak chest", item_type="container")
-create_entity(entity_type="item", name="Linen Shirt", description="A clean white linen shirt", item_type="clothing")
-create_entity(entity_type="npc", name="Marcus", description="A burly blacksmith", gender="male", occupation="blacksmith")
-create_entity(entity_type="location", name="Small Bedroom", description="A cozy bedroom at the back of the cottage", category="interior", parent_location="brennan_farm")
+spawn_storage(container_type="chest", description="A wooden chest at the foot of the bed")
+spawn_storage(container_type="table", description="A rough-hewn oak table")
+spawn_storage(container_type="shelf", description="A dusty shelf on the wall")
 ```
 
-### What to Save as Facts (Not Items)
+**container_type options:** table, shelf, chest, counter, barrel, crate, cupboard, floor, ground
 
-Use `record_fact` for descriptive information that doesn't need to be an item:
+Storage surfaces appear in `/nearby` and MUST exist before you can place items on them.
 
-- Container summaries: `record_fact(subject_key="chest_123", predicate="contains", value="clean linens and spare clothes")`
+### Discoverable Items: `spawn_item`
+
+Use `spawn_item` for anything the player could pick up, use, eat, or interact with:
+
+```
+spawn_item(display_name="Clean Linen Shirt", description="A freshly laundered white shirt", item_type="clothing", surface="chest")
+spawn_item(display_name="Half-loaf of Bread", description="Day-old but still edible", item_type="consumable", surface="table")
+spawn_item(display_name="Iron Dagger", description="A simple but sharp blade", item_type="weapon", surface="shelf")
+```
+
+**item_type options:** consumable, container, misc, tool, weapon, armor, clothing
+
+**IMPORTANT:** The `surface` parameter must match a storage that already exists. Call `spawn_storage` first!
+
+### New NPCs: `introduce_npc`
+
+Use `introduce_npc` when a new character appears:
+
+```
+introduce_npc(entity_key="npc_martha", display_name="Martha", description="A flour-dusted woman with kind eyes", location_key="bakery", occupation="baker", initial_attitude="friendly")
+```
+
+**initial_attitude options:** hostile, unfriendly, neutral (default), friendly, warm
+
+### New Sublocations: `entity_move`
+
+When the player enters a room or area for the first time, use `entity_move` with the new location key. It creates the location automatically:
+
+```
+entity_move(entity_key="player", location_key="brennan_cottage_bedroom")
+```
+
+### Complete Workflow: Entering a Room with Items
+
+When describing a new room with interactable contents, follow this order:
+
+1. **Move player** to establish the new location
+2. **Spawn storage** for any furniture/containers
+3. **Spawn items** on those surfaces
+4. **Then narrate** what the player sees
+
+**Example:** Player enters bedroom to find clothes:
+```
+entity_move(entity_key="player", location_key="brennan_cottage_bedroom")
+spawn_storage(container_type="chest", description="A wooden chest at the foot of the bed")
+spawn_item(display_name="Clean Linen Shirt", description="Freshly laundered", item_type="clothing", surface="chest")
+spawn_item(display_name="Wool Breeches", description="Simple but clean", item_type="clothing", surface="chest")
+spawn_item(display_name="Darned Socks", description="Mended wool socks", item_type="clothing", surface="chest")
+```
+
+Then narrate: "You enter the small bedroom at the back of the cottage. A wooden chest sits at the foot of the bed..."
+
+### World Facts: `record_fact`
+
+Use `record_fact` for descriptive information that doesn't need to be a spawnable object:
+
 - Location atmosphere: `record_fact(subject_key="bedroom", predicate="atmosphere", value="smells of lavender")`
 - Object states: `record_fact(subject_key="fireplace_001", predicate="state", value="cold with old ashes")`
+- Character details: `record_fact(subject_key="npc_martha", predicate="secret", value="is actually the baron's daughter")`
 
-### What NOT to Persist (Narrative Only)
+### What NOT to Spawn
 
-Don't create entities for:
+Don't create objects for:
 - Atmospheric descriptions (dust motes, sunbeams, smells)
 - Fixed architectural features (walls, beams, floor)
 - Generic background details ("the room is dim")
-
-### Container Contents
-
-When a player opens a container for the first time:
-1. Create individual items for each interactable thing inside
-2. Describe what they find
-
-**Example:** Player opens a chest for the first time:
-```
-create_entity(entity_type="item", name="Clean Linen Shirt", item_type="clothing")
-create_entity(entity_type="item", name="Wool Breeches", item_type="clothing")
-create_entity(entity_type="item", name="Darned Socks", item_type="clothing")
-```
 
 ### Location Inventory Awareness
 
@@ -333,7 +363,7 @@ Check the **Location Inventory** section in your context before describing objec
 
 ### Key Rule
 
-**If the player could return and interact with it later, CREATE IT.** Otherwise the game state becomes inconsistent.
+**If you describe something the player could interact with, SPAWN IT.** Otherwise the game state becomes inconsistent with your narration.
 
 ## Turn Handling
 

@@ -49,7 +49,7 @@ async def scene_builder_node(state: GameState) -> dict[str, Any]:
         }
 
     # Import here to avoid circular imports
-    from src.llm.factory import get_extraction_provider
+    from src.llm.factory import get_creative_provider
     from src.world.scene_builder import SceneBuilder
     from src.world.schemas import ObservationLevel, WorldUpdate
 
@@ -72,7 +72,7 @@ async def scene_builder_node(state: GameState) -> dict[str, Any]:
 
     # Try to get LLM provider for first-visit scene generation
     try:
-        llm_provider = get_extraction_provider()
+        llm_provider = get_creative_provider()
     except Exception:
         llm_provider = None
 
