@@ -49,6 +49,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added FIRST-TIME vs REVISIT rules for storage containers
   - Key files: `src/gm/prompts.py`, `src/gm/context_builder.py`
 
+- **Update Docs Command** - New `/update-docs` slash command for documentation maintenance
+  - Audits and updates project docs to match current codebase state
+  - Checks for clean working tree, runs `/commit` first if dirty
+  - Compares CLAUDE.md stats, architecture.md, implementation-plan.md against actual code
+  - Reports changes made and flags items needing manual attention
+  - Key file: `.claude/commands/update-docs.md`
+
 - **Multi-Model LLM Configuration** - Task-specific provider:model routing
   - New `provider:model` format in `.env` (e.g., `NARRATOR=ollama:magmell:32b`)
   - Three task-specific settings: `NARRATOR`, `REASONING`, `CHEAP`
