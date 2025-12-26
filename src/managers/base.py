@@ -39,5 +39,9 @@ class BaseManager:
         return self.game_session.total_turns
 
     def _clamp(self, value: int | float, min_val: int = 0, max_val: int = 100) -> int:
-        """Clamp a value between min and max bounds."""
-        return int(max(min_val, min(max_val, value)))
+        """Clamp a value between min and max bounds.
+
+        Uses round() instead of int() to avoid truncation errors from
+        floating-point arithmetic (e.g., 99.9 → 100 instead of 99).
+        """
+        return round(max(min_val, min(max_val, value)))

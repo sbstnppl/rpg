@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **GM Tool Calling Consistency** - Improved prompt structure for reliable tool execution
+  - Restructured GM system prompt with "MANDATORY TOOL CALLS" section at top
+  - Added all 10 needs with trigger words in table format
+  - Added few-shot examples showing correct tool→narrative flow
+  - Fixed `_clamp` truncation bug: `int()` → `round()` (99.9 → 100 instead of 99)
+  - Added `think` parameter to `AnthropicProvider.complete_with_tools()` for compatibility
+  - Key files: `src/gm/prompts.py`, `src/managers/base.py`, `src/llm/anthropic_provider.py`
+  - Issue tracking: `docs/issues/gm-prompt-tool-calling/`
+
+- **Tool Loop Message Handling** - Fixed Anthropic API message format for tool results
+  - Proper tool_use content blocks in assistant messages
+  - Combined multiple tool_result blocks into single user message
+  - Turn number tracking for fact recording
+  - Key files: `src/gm/gm_node.py`, `src/gm/tools.py`, `src/llm/anthropic_provider.py`
+
 ### Added
 - **GM Pipeline E2E Test Framework** - Automated end-to-end testing for GM pipeline
   - `GME2ETestRunner` runs flowing gameplay scenarios with comprehensive logging

@@ -4,6 +4,7 @@ Single LLM call with tool use for the Game Master.
 Handles tool execution loop for skill checks, combat, and entity creation.
 """
 
+import json
 import logging
 from typing import Any
 
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 from src.database.models.session import GameSession
 from src.llm.factory import get_reasoning_provider
 from src.llm.base import LLMProvider
-from src.llm.message_types import Message, MessageRole
+from src.llm.message_types import Message, MessageRole, MessageContent
 from src.llm.tool_types import ToolDefinition, ToolParameter
 from src.llm.response_types import LLMResponse, ToolCall
 from src.gm.context_builder import GMContextBuilder
@@ -247,6 +248,9 @@ class GMNode:
         Returns:
             GMResponse with narrative and state changes.
         """
+        # Update tools with current turn number for fact recording
+        self.tools.turn_number = turn_number
+
         # Detect explicit OOC prefix
         is_explicit_ooc, cleaned_input = self._detect_explicit_ooc(player_input)
 
@@ -346,29 +350,59 @@ class GMNode:
                     )
                 return response
 
-            # Execute tool calls
-            tool_results_content = []
-            for tool_call in response.tool_calls:
-                result = await self._execute_tool_call(tool_call)
-                tool_results_content.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_call.id,
-                    "content": str(result),
-                })
+            # Execute tool calls and build proper message content
+            tool_use_blocks = []
+            tool_result_messages = []
 
-            # Add assistant message with tool calls
-            # Anthropic requires non-empty content, so use placeholder if needed
-            assistant_content = response.content or "[Executing tools...]"
+            for tool_call in response.tool_calls:
+                # Create tool_use content block for assistant message
+                tool_use_blocks.append(MessageContent(
+                    type="tool_use",
+                    tool_use_id=tool_call.id,
+                    tool_name=tool_call.name,
+                    tool_input=tool_call.arguments,
+                ))
+
+                # Execute the tool
+                result = await self._execute_tool_call(tool_call)
+
+                # Create tool result message
+                result_str = json.dumps(result) if isinstance(result, dict) else str(result)
+                tool_result_messages.append(Message.tool_result(
+                    tool_call_id=tool_call.id,
+                    content=result_str,
+                ))
+
+            # Add assistant message with tool_use blocks
+            # Include any text content as a text block if present
+            assistant_content_blocks = []
+            if response.content and response.content.strip():
+                assistant_content_blocks.append(MessageContent(
+                    type="text",
+                    text=response.content,
+                ))
+            assistant_content_blocks.extend(tool_use_blocks)
+
             messages.append(Message(
                 role=MessageRole.ASSISTANT,
-                content=assistant_content,
+                content=tuple(assistant_content_blocks),
             ))
 
-            # Add tool results as user message
-            # For Anthropic, tool results need to be in the proper format
+            # Add tool result messages
+            for tool_result_msg in tool_result_messages:
+                messages.append(tool_result_msg)
+
+            # Add narrative reminder after tool results
+            # Reference the original player input to keep response grounded
             messages.append(Message(
                 role=MessageRole.USER,
-                content=str(tool_results_content),
+                content=(
+                    "Now write your narrative response to the player's action. "
+                    "Write 2-5 sentences in second person that directly describe what happens "
+                    "in response to the player's input. Stay grounded in the scene context - "
+                    "only reference NPCs, items, and locations that exist. "
+                    "Do NOT explain tools or summarize mechanics - just tell the story."
+                ),
             ))
 
         logger.warning(f"GM tool loop reached max iterations ({self.MAX_TOOL_ITERATIONS})")

@@ -82,6 +82,19 @@ class AnthropicProvider:
         system_prompt: str | None = None
         api_messages: list[dict[str, Any]] = []
 
+        # Track pending tool results to combine into single message
+        pending_tool_results: list[dict[str, Any]] = []
+
+        def flush_tool_results() -> None:
+            """Add accumulated tool results as a single user message."""
+            nonlocal pending_tool_results
+            if pending_tool_results:
+                api_messages.append({
+                    "role": "user",
+                    "content": pending_tool_results,
+                })
+                pending_tool_results = []
+
         for msg in messages:
             if msg.role == MessageRole.SYSTEM:
                 # Extract system message to system parameter
@@ -92,18 +105,18 @@ class AnthropicProvider:
             role = "user" if msg.role == MessageRole.USER else "assistant"
 
             if msg.role == MessageRole.TOOL:
-                # Tool results need special handling
-                api_messages.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": msg.tool_call_id,
-                            "content": msg.content if isinstance(msg.content, str) else "",
-                        }
-                    ],
+                # Accumulate tool results to combine into single message
+                pending_tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": msg.tool_call_id,
+                    "content": msg.content if isinstance(msg.content, str) else "",
                 })
-            elif isinstance(msg.content, str):
+                continue  # Don't add yet, wait for next non-TOOL message
+
+            # Flush any pending tool results before adding new message
+            flush_tool_results()
+
+            if isinstance(msg.content, str):
                 api_messages.append({
                     "role": role,
                     "content": msg.content,
@@ -146,6 +159,9 @@ class AnthropicProvider:
                     "role": role,
                     "content": content_blocks,
                 })
+
+        # Flush any remaining tool results at end
+        flush_tool_results()
 
         return system_prompt, api_messages
 
@@ -246,6 +262,7 @@ class AnthropicProvider:
         temperature: float = 0.7,
         tool_choice: str | dict[str, Any] = "auto",
         system_prompt: str | None = None,
+        think: bool = False,  # Ignored for Anthropic (no extended thinking for tool calls)
     ) -> LLMResponse:
         """Generate a completion that may include tool calls."""
         extracted_system, api_messages = self._convert_messages(messages)

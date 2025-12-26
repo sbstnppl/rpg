@@ -49,6 +49,7 @@ class GMTools:
         player_id: int,
         roll_mode: str = "auto",
         location_key: str | None = None,
+        turn_number: int = 1,
     ) -> None:
         """Initialize tools.
 
@@ -58,6 +59,7 @@ class GMTools:
             player_id: Player entity ID.
             roll_mode: "auto" for background rolls, "manual" for player animation.
             location_key: Current location key (for placing created items).
+            turn_number: Current turn number for recording facts.
         """
         self.db = db
         self.game_session = game_session
@@ -65,6 +67,7 @@ class GMTools:
         self.player_id = player_id
         self.roll_mode = roll_mode
         self.location_key = location_key
+        self.turn_number = turn_number
 
         self._entity_manager: EntityManager | None = None
         self._item_manager: ItemManager | None = None
@@ -1306,6 +1309,7 @@ class GMTools:
             category=FactCategory.PERSONAL,
             is_secret=is_secret,
             confidence=80,
+            source_turn=self.turn_number,
         )
         self.db.add(fact)
         self.db.flush()
