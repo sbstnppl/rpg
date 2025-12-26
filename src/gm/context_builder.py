@@ -19,7 +19,8 @@ from src.managers.needs import NeedsManager
 from src.managers.relationship_manager import RelationshipManager
 from src.managers.storage_observation_manager import StorageObservationManager
 from src.managers.summary_manager import SummaryManager
-from src.gm.prompts import GM_USER_TEMPLATE
+from src.gm.prompts import GM_USER_TEMPLATE, GM_SYSTEM_PROMPT
+from src.llm.message_types import Message, MessageRole
 
 
 class GMContextBuilder(BaseManager):
@@ -665,3 +666,204 @@ class GMContextBuilder(BaseManager):
         keys.add(location_key)
 
         return keys
+
+    # =========================================================================
+    # Conversational Context Methods
+    # =========================================================================
+
+    def _select_turns_for_context(self, current_turn_number: int) -> list[Turn]:
+        """Select turns for conversation context using day-aware logic.
+
+        Algorithm:
+        1. Go back 10 turns from current
+        2. Find what day that turn was on
+        3. Extend back to the first turn of that day
+        4. Return all turns from that point to current-1
+
+        This ensures full-day context in the conversation history.
+
+        Args:
+            current_turn_number: The current turn number (excluded from result).
+
+        Returns:
+            List of Turn objects in chronological order (oldest first).
+        """
+        if current_turn_number <= 1:
+            return []
+
+        # Step 1: Find the turn 10 back (or 1 if fewer than 10)
+        turn_10_back = max(1, current_turn_number - 10)
+
+        # Step 2: Get that turn to find its day
+        target_turn = (
+            self.db.query(Turn)
+            .filter(
+                Turn.session_id == self.session_id,
+                Turn.turn_number == turn_10_back,
+            )
+            .first()
+        )
+
+        if not target_turn:
+            # Fallback: just get all previous turns
+            return list(
+                self.db.query(Turn)
+                .filter(
+                    Turn.session_id == self.session_id,
+                    Turn.turn_number < current_turn_number,
+                )
+                .order_by(Turn.turn_number.asc())
+                .all()
+            )
+
+        target_day = target_turn.game_day_at_turn
+
+        # Step 3: Find first turn of that day
+        if target_day is not None:
+            first_of_day = (
+                self.db.query(Turn)
+                .filter(
+                    Turn.session_id == self.session_id,
+                    Turn.game_day_at_turn == target_day,
+                )
+                .order_by(Turn.turn_number.asc())
+                .first()
+            )
+            start_turn = first_of_day.turn_number if first_of_day else turn_10_back
+        else:
+            # No day info, just use turn_10_back
+            start_turn = turn_10_back
+
+        # Step 4: Get all turns from start to current-1
+        turns = (
+            self.db.query(Turn)
+            .filter(
+                Turn.session_id == self.session_id,
+                Turn.turn_number >= start_turn,
+                Turn.turn_number < current_turn_number,
+            )
+            .order_by(Turn.turn_number.asc())
+            .all()
+        )
+
+        return list(turns)
+
+    def build_system_prompt(self, player_id: int, location_key: str) -> str:
+        """Build dynamic system prompt with GM instructions + world state + summaries.
+
+        The system prompt contains everything the GM needs to know about the current
+        world state. Conversation history will be provided as separate messages.
+
+        Args:
+            player_id: Player entity ID.
+            location_key: Current location key.
+
+        Returns:
+            Complete system prompt string.
+        """
+        player = self.db.query(Entity).filter(Entity.id == player_id).first()
+        if not player:
+            return GM_SYSTEM_PROMPT + "\n\nError: Player not found"
+
+        # Build world state sections
+        sections = [
+            GM_SYSTEM_PROMPT,
+            "\n---\n",
+            "## CURRENT WORLD STATE\n",
+            f"### Location: {self._get_location_name(location_key)}\n",
+            self._get_location_description(location_key),
+            "",
+            "### Present in Scene\n",
+            f"**NPCs:**\n{self._get_npcs_present(location_key, player_id)}",
+            "",
+            f"**Items:**\n{self._get_items_present(location_key)}",
+            "",
+            f"**Exits:**\n{self._get_exits(location_key)}",
+            "",
+            f"**Storage:**\n{self._get_storage_context(player_id, location_key)}",
+            "",
+            "---\n",
+            f"### Player: {player.display_name}\n",
+            self._get_background(player),
+            "",
+            self._get_needs_summary(player_id),
+            "",
+            f"**Inventory:**\n{self._get_inventory(player_id)}",
+            "",
+            f"**Equipped:**\n{self._get_equipped(player_id)}",
+            "",
+            "### Relationships\n",
+            self._get_relationships(player_id),
+            "",
+            "### Known Facts\n",
+            self._get_known_facts(),
+            "",
+            "---\n",
+            "## STORY CONTEXT\n",
+            "### Background Story\n",
+            self._get_story_summary(),
+            "",
+            "### Recent Events\n",
+            self._get_recent_summary(),
+            "",
+            "---\n",
+            "## SYSTEM NOTES\n",
+            self._get_system_hints(player_id),
+            "",
+            self._get_constraints(player_id, location_key),
+            "",
+            self._get_familiarity_context(player_id, location_key),
+            "",
+            "---\n",
+            "Continue the conversation naturally. The player's message follows.",
+        ]
+
+        return "\n".join(sections)
+
+    def build_conversation_messages(
+        self,
+        player_id: int,
+        player_input: str,
+        turn_number: int = 1,
+        is_ooc_hint: bool = False,
+    ) -> list[Message]:
+        """Build conversation history as USER/ASSISTANT message pairs.
+
+        Creates a natural conversation flow with past turns as message pairs,
+        ending with the current player input.
+
+        Args:
+            player_id: Player entity ID.
+            player_input: Current player input.
+            turn_number: Current turn number.
+            is_ooc_hint: Whether explicit OOC prefix was detected.
+
+        Returns:
+            List of Message objects in conversation order.
+        """
+        messages: list[Message] = []
+
+        # Get historical turns
+        history_turns = self._select_turns_for_context(turn_number)
+
+        # Convert history to message pairs
+        for turn in history_turns:
+            # User message (player input)
+            messages.append(
+                Message(role=MessageRole.USER, content=turn.player_input)
+            )
+            # Assistant message (GM response)
+            messages.append(
+                Message(role=MessageRole.ASSISTANT, content=turn.gm_response)
+            )
+
+        # Add current input as final message
+        # Prepend OOC hint if applicable
+        current_content = player_input
+        ooc_hint = self._get_ooc_hint(is_ooc_hint, player_input)
+        if "[EXPLICIT OOC" in ooc_hint or "[POSSIBLE OOC" in ooc_hint:
+            current_content = f"{ooc_hint}\n\n{player_input}"
+
+        messages.append(Message(role=MessageRole.USER, content=current_content))
+
+        return messages

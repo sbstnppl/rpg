@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key files: `src/gm/gm_node.py`, `src/gm/tools.py`, `src/llm/anthropic_provider.py`
 
 ### Added
+- **Conversational GM Context Architecture** - Natural conversation flow for GM LLM calls
+  - World state now in dynamic system prompt (refreshes each turn)
+  - Turn history as USER/ASSISTANT message pairs (not embedded text)
+  - Day-aware turn selection: 10 back + extend to day start for full-day context
+  - No truncation of turn content (previously 200/500 char limits)
+  - Key files: `src/gm/context_builder.py`, `src/gm/gm_node.py`
+
 - **GM Pipeline E2E Test Framework** - Automated end-to-end testing for GM pipeline
   - `GME2ETestRunner` runs flowing gameplay scenarios with comprehensive logging
   - `GME2EAssessor` evaluates narrative quality, tool usage, DB changes, time tracking

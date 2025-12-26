@@ -19,7 +19,7 @@ from src.llm.response_types import LLMResponse, ToolCall
 from src.gm.context_builder import GMContextBuilder
 from src.gm.tools import GMTools
 from src.gm.schemas import GMResponse, StateChange, NewEntity, StateChangeType
-from src.gm.prompts import GM_SYSTEM_PROMPT
+# GM_SYSTEM_PROMPT is now built dynamically by context_builder.build_system_prompt()
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +184,9 @@ class GMNode:
         self.tool_results: list[dict[str, Any]] = []
         self.pending_rolls: list[dict[str, Any]] = []
 
+        # Dynamic system prompt (set in run())
+        self._current_system_prompt: str = ""
+
     def get_tool_definitions(self) -> list[ToolDefinition]:
         """Get tool definitions for the LLM.
 
@@ -241,6 +244,9 @@ class GMNode:
     ) -> GMResponse:
         """Run the GM node to generate a response.
 
+        Uses conversational context: world state in system prompt,
+        turn history as message pairs.
+
         Args:
             player_input: The player's input/action.
             turn_number: Current turn number.
@@ -254,19 +260,22 @@ class GMNode:
         # Detect explicit OOC prefix
         is_explicit_ooc, cleaned_input = self._detect_explicit_ooc(player_input)
 
-        # Build context with OOC hint
-        context = self.context_builder.build(
+        # Build dynamic system prompt with world state and summaries
+        system_prompt = self.context_builder.build_system_prompt(
             player_id=self.player_id,
             location_key=self.location_key,
+        )
+
+        # Build conversation messages (turn history + current input)
+        messages = self.context_builder.build_conversation_messages(
+            player_id=self.player_id,
             player_input=cleaned_input,
             turn_number=turn_number,
             is_ooc_hint=is_explicit_ooc,
         )
 
-        # Build initial messages
-        messages: list[Message] = [
-            Message(role=MessageRole.USER, content=context),
-        ]
+        # Store system prompt for tool loop
+        self._current_system_prompt = system_prompt
 
         # Try with tools first, fall back to simple completion if not supported
         try:
@@ -293,7 +302,7 @@ class GMNode:
         """
         return await self.llm_provider.complete(
             messages=messages,
-            system_prompt=GM_SYSTEM_PROMPT,
+            system_prompt=self._current_system_prompt,
             temperature=0.7,
             max_tokens=2048,
         )
@@ -325,7 +334,7 @@ class GMNode:
             response = await self.llm_provider.complete_with_tools(
                 messages=messages,
                 tools=tools,
-                system_prompt=GM_SYSTEM_PROMPT,
+                system_prompt=self._current_system_prompt,
                 temperature=0.7,
                 max_tokens=2048,
                 think=False,  # Disable thinking - GM decisions are straightforward
