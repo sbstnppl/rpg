@@ -19,6 +19,7 @@ from src.managers.needs import NeedsManager
 from src.managers.relationship_manager import RelationshipManager
 from src.managers.storage_observation_manager import StorageObservationManager
 from src.managers.summary_manager import SummaryManager
+from src.gm.grounding import GroundedEntity, GroundingManifest
 from src.gm.prompts import GM_USER_TEMPLATE, GM_SYSTEM_PROMPT
 from src.llm.message_types import Message, MessageRole
 
@@ -667,6 +668,130 @@ class GMContextBuilder(BaseManager):
 
         return keys
 
+    def build_grounding_manifest(
+        self, player_id: int, location_key: str
+    ) -> GroundingManifest:
+        """Build a manifest of all entities the GM can reference.
+
+        This manifest is used for:
+        1. Including entity keys in the system prompt
+        2. Validating [key:text] references in GM output
+        3. Detecting unkeyed entity mentions (hallucinations)
+
+        Args:
+            player_id: Player entity ID.
+            location_key: Current location key.
+
+        Returns:
+            GroundingManifest with all valid entity keys.
+        """
+        from src.managers.entity_manager import EntityManager
+
+        # Get player entity
+        player = self.db.query(Entity).filter(Entity.id == player_id).first()
+        player_key = player.entity_key if player else "player"
+        player_display = player.display_name if player else "You"
+
+        # Get location
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == location_key,
+            )
+            .first()
+        )
+        location_display = location.display_name if location else location_key
+
+        # Build NPC dict
+        npcs: dict[str, GroundedEntity] = {}
+        entity_manager = EntityManager(self.db, self.game_session)
+        npc_entities = entity_manager.get_npcs_in_scene(location_key)
+        for npc in npc_entities[:10]:  # Limit to 10
+            occupation = npc.occupation or ""
+            npcs[npc.entity_key] = GroundedEntity(
+                key=npc.entity_key,
+                display_name=npc.display_name,
+                entity_type="npc",
+                short_description=occupation,
+            )
+
+        # Build items at location dict
+        items_at_location: dict[str, GroundedEntity] = {}
+        for item in self.item_manager.get_items_at_location(location_key)[:15]:
+            items_at_location[item.item_key] = GroundedEntity(
+                key=item.item_key,
+                display_name=item.display_name,
+                entity_type="item",
+            )
+
+        # Build inventory dict
+        inventory: dict[str, GroundedEntity] = {}
+        for item in self.item_manager.get_inventory(player_id)[:20]:
+            inventory[item.item_key] = GroundedEntity(
+                key=item.item_key,
+                display_name=item.display_name,
+                entity_type="item",
+            )
+
+        # Build equipped dict
+        equipped: dict[str, GroundedEntity] = {}
+        for item in self.item_manager.get_equipped_items(player_id):
+            slot = item.body_slot or "equipped"
+            equipped[item.item_key] = GroundedEntity(
+                key=item.item_key,
+                display_name=item.display_name,
+                entity_type="item",
+                short_description=f"worn on {slot}",
+            )
+
+        # Build storage dict
+        storages: dict[str, GroundedEntity] = {}
+        if location:
+            storages_with_status = (
+                self.storage_observation_manager.get_storages_at_location_with_status(
+                    observer_id=player_id,
+                    location_id=location.id,
+                )
+            )
+            for storage_info in storages_with_status:
+                storage_key = storage_info["storage_key"]
+                storage_name = storage_info.get("storage_name", storage_key)
+                first_time = storage_info["first_time"]
+                status = "[FIRST TIME]" if first_time else "[REVISIT]"
+                storages[storage_key] = GroundedEntity(
+                    key=storage_key,
+                    display_name=storage_name,
+                    entity_type="storage",
+                    short_description=status,
+                )
+
+        # Build exits dict
+        exits: dict[str, GroundedEntity] = {}
+        try:
+            accessible = self.location_manager.get_accessible_locations(location_key)
+            for loc in accessible:
+                exits[loc.location_key] = GroundedEntity(
+                    key=loc.location_key,
+                    display_name=loc.display_name,
+                    entity_type="location",
+                )
+        except Exception:
+            pass  # Skip if location lookup fails
+
+        return GroundingManifest(
+            location_key=location_key,
+            location_display=location_display,
+            player_key=player_key,
+            player_display=player_display,
+            npcs=npcs,
+            items_at_location=items_at_location,
+            inventory=inventory,
+            equipped=equipped,
+            storages=storages,
+            exits=exits,
+        )
+
     # =========================================================================
     # Conversational Context Methods
     # =========================================================================
@@ -748,7 +873,12 @@ class GMContextBuilder(BaseManager):
 
         return list(turns)
 
-    def build_system_prompt(self, player_id: int, location_key: str) -> str:
+    def build_system_prompt(
+        self,
+        player_id: int,
+        location_key: str,
+        include_grounding: bool = True,
+    ) -> str:
         """Build dynamic system prompt with GM instructions + world state + summaries.
 
         The system prompt contains everything the GM needs to know about the current
@@ -757,6 +887,7 @@ class GMContextBuilder(BaseManager):
         Args:
             player_id: Player entity ID.
             location_key: Current location key.
+            include_grounding: Whether to include the grounding manifest section.
 
         Returns:
             Complete system prompt string.
@@ -765,10 +896,27 @@ class GMContextBuilder(BaseManager):
         if not player:
             return GM_SYSTEM_PROMPT + "\n\nError: Player not found"
 
+        # Build grounding manifest for entity reference section
+        grounding_section = ""
+        if include_grounding:
+            manifest = self.build_grounding_manifest(player_id, location_key)
+            grounding_section = manifest.format_for_prompt()
+
         # Build world state sections
         sections = [
             GM_SYSTEM_PROMPT,
             "\n---\n",
+        ]
+
+        # Add grounding section if enabled
+        if grounding_section:
+            sections.extend([
+                grounding_section,
+                "",
+                "---\n",
+            ])
+
+        sections.extend([
             "## CURRENT WORLD STATE\n",
             f"### Location: {self._get_location_name(location_key)}\n",
             self._get_location_description(location_key),
@@ -816,7 +964,7 @@ class GMContextBuilder(BaseManager):
             "",
             "---\n",
             "Continue the conversation naturally. The player's message follows.",
-        ]
+        ])
 
         return "\n".join(sections)
 

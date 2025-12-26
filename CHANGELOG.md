@@ -24,6 +24,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key files: `src/gm/gm_node.py`, `src/gm/tools.py`, `src/llm/anthropic_provider.py`
 
 ### Added
+- **Grounded Narration System** - Prevent GM from hallucinating entities with validation
+  - `GroundingManifest` schema tracks all valid entity keys (NPCs, items, storages, exits)
+  - `GroundingValidator` checks `[key:text]` refs exist in manifest, detects unkeyed mentions
+  - Validation loop with retry (max 2x) and error feedback to LLM on grounding failures
+  - Key stripping: `[marcus_001:Marcus]` → `Marcus` for natural display output
+  - Updated GM prompt with `[key:text]` format rules and examples
+  - 36 unit tests for grounding system
+  - Key files: `src/gm/grounding.py`, `src/gm/grounding_validator.py`, `src/gm/gm_node.py`
+
 - **Conversational GM Context Architecture** - Natural conversation flow for GM LLM calls
   - World state now in dynamic system prompt (refreshes each turn)
   - Turn history as USER/ASSISTANT message pairs (not embedded text)

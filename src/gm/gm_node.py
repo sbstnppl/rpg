@@ -17,6 +17,8 @@ from src.llm.message_types import Message, MessageRole, MessageContent
 from src.llm.tool_types import ToolDefinition, ToolParameter
 from src.llm.response_types import LLMResponse, ToolCall
 from src.gm.context_builder import GMContextBuilder
+from src.gm.grounding import GroundingManifest
+from src.gm.grounding_validator import GroundingValidator, strip_key_references
 from src.gm.tools import GMTools
 from src.gm.schemas import GMResponse, StateChange, NewEntity, StateChangeType
 # GM_SYSTEM_PROMPT is now built dynamically by context_builder.build_system_prompt()
@@ -184,8 +186,14 @@ class GMNode:
         self.tool_results: list[dict[str, Any]] = []
         self.pending_rolls: list[dict[str, Any]] = []
 
-        # Dynamic system prompt (set in run())
+        # Dynamic system prompt and grounding manifest (set in run())
         self._current_system_prompt: str = ""
+        self._current_manifest: GroundingManifest | None = None
+
+        # Grounding validation settings
+        self.grounding_enabled: bool = True
+        self.grounding_max_retries: int = 2
+        self.grounding_log_only: bool = False  # Log but don't retry if True
 
     def get_tool_definitions(self) -> list[ToolDefinition]:
         """Get tool definitions for the LLM.
@@ -260,10 +268,17 @@ class GMNode:
         # Detect explicit OOC prefix
         is_explicit_ooc, cleaned_input = self._detect_explicit_ooc(player_input)
 
+        # Build grounding manifest for validation
+        self._current_manifest = self.context_builder.build_grounding_manifest(
+            player_id=self.player_id,
+            location_key=self.location_key,
+        )
+
         # Build dynamic system prompt with world state and summaries
         system_prompt = self.context_builder.build_system_prompt(
             player_id=self.player_id,
             location_key=self.location_key,
+            include_grounding=self.grounding_enabled,
         )
 
         # Build conversation messages (turn history + current input)
@@ -288,6 +303,10 @@ class GMNode:
             else:
                 raise
 
+        # Validate grounding if enabled
+        if self.grounding_enabled and self._current_manifest:
+            response = await self._validate_grounding(response, messages, tools)
+
         # Parse response into GMResponse
         return self._parse_response(response, player_input, turn_number)
 
@@ -306,6 +325,77 @@ class GMNode:
             temperature=0.7,
             max_tokens=2048,
         )
+
+    async def _validate_grounding(
+        self,
+        response: LLMResponse,
+        messages: list[Message],
+        tools: list[ToolDefinition],
+    ) -> LLMResponse:
+        """Validate grounding and retry if needed.
+
+        Checks that all [key:text] references exist in the manifest
+        and that entity names aren't mentioned without [key:text] format.
+
+        Args:
+            response: The LLM response to validate.
+            messages: Current conversation messages (for retry).
+            tools: Tool definitions (for retry).
+
+        Returns:
+            Validated (or cleaned) response.
+        """
+        if not self._current_manifest:
+            return response
+
+        validator = GroundingValidator(self._current_manifest)
+
+        for attempt in range(self.grounding_max_retries + 1):
+            result = validator.validate(response.content)
+
+            if result.valid:
+                if attempt > 0:
+                    logger.info(f"Grounding validation passed on retry {attempt}")
+                return response
+
+            # Log validation errors
+            logger.warning(
+                f"Grounding validation failed (attempt {attempt + 1}): "
+                f"{result.error_count} errors"
+            )
+            for err in result.invalid_keys:
+                logger.debug(f"  Invalid key: [{err.key}:{err.text}]")
+            for err in result.unkeyed_mentions:
+                logger.debug(f"  Unkeyed mention: {err.display_name}")
+
+            # If log-only mode, don't retry
+            if self.grounding_log_only:
+                break
+
+            # If we have retries left, ask LLM to fix
+            if attempt < self.grounding_max_retries:
+                error_feedback = result.error_feedback()
+                messages.append(Message.user(
+                    f"GROUNDING ERROR - Please fix and respond again:\n\n{error_feedback}"
+                ))
+
+                # Get new response
+                response = await self.llm_provider.complete_with_tools(
+                    messages=messages,
+                    tools=tools,
+                    system_prompt=self._current_system_prompt,
+                    temperature=0.7,
+                    max_tokens=2048,
+                    think=False,
+                )
+
+        # After max retries or in log-only mode, return as-is
+        # The key stripping in _parse_response will clean up any valid [key:text] refs
+        logger.warning(
+            f"Grounding validation failed after {self.grounding_max_retries} retries, "
+            "proceeding with response"
+        )
+        return response
 
     async def _run_tool_loop(
         self,
@@ -482,6 +572,10 @@ class GMNode:
 
         # Clean any hallucinated markdown formatting from the narrative
         narrative = self._clean_narrative(narrative)
+
+        # Strip [key:text] references for display (e.g., [marcus_001:Marcus] → Marcus)
+        if self.grounding_enabled:
+            narrative = strip_key_references(narrative)
 
         # Extract state changes from tool results
         state_changes = self._extract_state_changes()

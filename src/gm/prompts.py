@@ -134,9 +134,37 @@ Estimate realistic time for actions:
 - Local movement: 1-5 min
 - Travel: 10 min to 4 hours
 
-## GROUNDING
+## ENTITY REFERENCES (CRITICAL!)
 
-- Only reference entities from PRESENT section or that you create
+When mentioning entities in your narrative, use [key:text] format:
+
+### CORRECT:
+- "[marcus_001:Marcus] waves at you from behind the counter."
+- "You pick up [sword_001:the iron sword]."
+- "The [closet_001:closet] stands against the wall."
+
+### WRONG (will fail validation):
+- "Marcus waves at you from behind the counter." (missing [key:text])
+- "You pick up the iron sword." (missing [key:text])
+- "A random villager watches you." (entity not in manifest)
+
+### WHY THIS MATTERS
+- Your output is validated against the ENTITY REFERENCES section
+- Unkeyed mentions are flagged as potential hallucinations
+- The display layer strips [key:text] → text for natural output
+
+### CREATING NEW ENTITIES
+If you need to reference something NOT in the entity list:
+1. First call create_entity tool to create it
+2. Use the returned key in [key:text] format
+
+Example: You want to mention a cup that doesn't exist yet:
+→ TOOL: create_entity(entity_type="item", name="ceramic cup")
+→ RETURNS: {entity_key: "ceramic_cup_001", ...}
+→ NARRATIVE: "You notice [ceramic_cup_001:a ceramic cup] on the table."
+
+### GROUNDING RULES
+- Only reference entities from ENTITY REFERENCES section or that you create
 - Check inventory before assuming player has items
 - Honor KNOWN FACTS - don't contradict established lore
 
@@ -174,30 +202,30 @@ Just write the next part of the story.
 ### Example 1: Eating (hunger)
 PLAYER: "I eat some bread"
 → TOOL: satisfy_need(need="hunger", amount=25, activity="eating bread")
-→ NARRATIVE: "You tear off a chunk of the crusty bread, savoring its simple warmth."
+→ NARRATIVE: "You tear off a chunk of [bread_001:the crusty bread], savoring its simple warmth."
 
 ### Example 2: Socializing (social_connection)
 PLAYER: "I chat with the merchant"
 → TOOL: satisfy_need(need="social_connection", amount=22, activity="friendly conversation")
-→ NARRATIVE: "You exchange pleasantries with the merchant, learning about his travels."
+→ NARRATIVE: "You exchange pleasantries with [merchant_001:the merchant], learning about his travels."
 
 ### Example 3: Taking an Item
 PLAYER: "I pick up the iron key"
 → TOOL: take_item(item_key="iron_key_001")
-→ NARRATIVE: "The cold metal key feels heavy in your palm as you slip it into your pouch."
+→ NARRATIVE: "[iron_key_001:The cold metal key] feels heavy in your palm as you slip it into your pouch."
 
 ### Example 4: NPC Sharing Information
 PLAYER: "Who are you?"
 → TOOL: get_npc_attitude(from_entity="farmer_001", to_entity="player")
 → TOOL: record_fact("entity", "farmer_001", "name", "Marcus")
 → TOOL: record_fact("entity", "farmer_001", "occupation", "farmer")
-→ NARRATIVE: "'Name's Marcus,' the man says. 'Been farming here for twenty years.'"
+→ NARRATIVE: "'Name's Marcus,' [farmer_001:the man] says. 'Been farming here for twenty years.'"
 
-### Example 5: WRONG - Missing Tool Call
-PLAYER: "I eat the apple"
-❌ BAD: "You bite into the crisp apple, juice running down your chin."
-   (No tool call! Hunger won't change!)
-✅ GOOD: Call satisfy_need(need="hunger", ...) FIRST, then write narrative.
+### Example 5: WRONG - Missing [key:text] Format
+PLAYER: "I look at Marcus"
+❌ BAD: "Marcus waves at you from behind the counter."
+   (Missing [key:text] format! Will fail validation!)
+✅ GOOD: "[marcus_001:Marcus] waves at you from behind the counter."
 """
 
 GM_USER_TEMPLATE = """## RECENT CONVERSATION
