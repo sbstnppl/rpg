@@ -10,7 +10,7 @@ from typing import Any, Callable
 from sqlalchemy.orm import Session
 
 from src.database.models.entities import Entity, EntityAttribute, EntitySkill, NPCExtension
-from src.database.models.enums import EntityType
+from src.database.models.enums import EntityType, StorageLocationType
 from src.database.models.items import Item
 from src.database.models.world import Location
 from src.database.models.session import GameSession
@@ -29,6 +29,9 @@ from src.gm.schemas import (
 )
 from src.managers.entity_manager import EntityManager
 from src.managers.item_manager import ItemManager
+from src.managers.relationship_manager import RelationshipManager
+from src.managers.task_manager import TaskManager
+from src.managers.needs import NeedsManager
 
 
 class GMTools:
@@ -65,6 +68,9 @@ class GMTools:
 
         self._entity_manager: EntityManager | None = None
         self._item_manager: ItemManager | None = None
+        self._relationship_manager: RelationshipManager | None = None
+        self._task_manager: TaskManager | None = None
+        self._needs_manager: NeedsManager | None = None
 
     @property
     def entity_manager(self) -> EntityManager:
@@ -77,6 +83,24 @@ class GMTools:
         if self._item_manager is None:
             self._item_manager = ItemManager(self.db, self.game_session)
         return self._item_manager
+
+    @property
+    def relationship_manager(self) -> RelationshipManager:
+        if self._relationship_manager is None:
+            self._relationship_manager = RelationshipManager(self.db, self.game_session)
+        return self._relationship_manager
+
+    @property
+    def task_manager(self) -> TaskManager:
+        if self._task_manager is None:
+            self._task_manager = TaskManager(self.db, self.game_session)
+        return self._task_manager
+
+    @property
+    def needs_manager(self) -> NeedsManager:
+        if self._needs_manager is None:
+            self._needs_manager = NeedsManager(self.db, self.game_session)
+        return self._needs_manager
 
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """Get tool definitions for Claude API.
@@ -163,7 +187,7 @@ class GMTools:
             {
                 "name": "create_entity",
                 "description": (
-                    "Create a new NPC, item, or location. "
+                    "Create a new NPC, item, location, or storage container. "
                     "Use this to introduce new things that don't exist yet."
                 ),
                 "input_schema": {
@@ -171,7 +195,7 @@ class GMTools:
                     "properties": {
                         "entity_type": {
                             "type": "string",
-                            "enum": ["npc", "item", "location"],
+                            "enum": ["npc", "item", "location", "storage"],
                             "description": "Type of entity to create",
                         },
                         "name": {
@@ -205,6 +229,15 @@ class GMTools:
                         "parent_location": {
                             "type": "string",
                             "description": "For locations: parent location key",
+                        },
+                        "container_type": {
+                            "type": "string",
+                            "enum": ["container", "place"],
+                            "description": "For storage: 'container' (chest, barrel, bag) or 'place' (table, shelf, floor)",
+                        },
+                        "capacity": {
+                            "type": "integer",
+                            "description": "For storage: max items it can hold (default: unlimited)",
                         },
                     },
                     "required": ["entity_type", "name", "description"],
@@ -245,6 +278,285 @@ class GMTools:
                     "required": ["subject_type", "subject_key", "predicate", "value"],
                 },
             },
+            # ===================================================================
+            # Relationship Tools
+            # ===================================================================
+            {
+                "name": "get_npc_attitude",
+                "description": (
+                    "Query an NPC's attitude toward another entity. "
+                    "Use before generating NPC dialogue to understand their feelings."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "from_entity": {
+                            "type": "string",
+                            "description": "NPC entity key whose attitude to check",
+                        },
+                        "to_entity": {
+                            "type": "string",
+                            "description": "Target entity key (usually 'player')",
+                        },
+                    },
+                    "required": ["from_entity", "to_entity"],
+                },
+            },
+            # ===================================================================
+            # Quest Tools
+            # ===================================================================
+            {
+                "name": "assign_quest",
+                "description": (
+                    "Create and assign a new quest to the player. "
+                    "Use when an NPC gives the player a mission."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "quest_key": {
+                            "type": "string",
+                            "description": "Unique quest identifier (e.g., 'find_lost_ring')",
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "Display title for the quest",
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Quest description and objective",
+                        },
+                        "giver_entity_key": {
+                            "type": "string",
+                            "description": "Entity key of the quest giver (optional)",
+                        },
+                        "rewards": {
+                            "type": "string",
+                            "description": "Description of rewards (optional)",
+                        },
+                    },
+                    "required": ["quest_key", "title", "description"],
+                },
+            },
+            {
+                "name": "update_quest",
+                "description": (
+                    "Advance a quest to the next stage. "
+                    "Use when player completes an objective."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "quest_key": {
+                            "type": "string",
+                            "description": "Quest key to update",
+                        },
+                        "notes": {
+                            "type": "string",
+                            "description": "Progress notes (optional)",
+                        },
+                    },
+                    "required": ["quest_key"],
+                },
+            },
+            {
+                "name": "complete_quest",
+                "description": "Mark a quest as completed or failed.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "quest_key": {
+                            "type": "string",
+                            "description": "Quest key to complete",
+                        },
+                        "outcome": {
+                            "type": "string",
+                            "enum": ["completed", "failed"],
+                            "description": "Whether quest was completed or failed",
+                        },
+                        "outcome_notes": {
+                            "type": "string",
+                            "description": "Notes about the outcome (optional)",
+                        },
+                    },
+                    "required": ["quest_key", "outcome"],
+                },
+            },
+            # ===================================================================
+            # Task & Appointment Tools
+            # ===================================================================
+            {
+                "name": "create_task",
+                "description": (
+                    "Add a task/goal for the player to track. "
+                    "Use when player accepts a goal or needs a reminder."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "description": {
+                            "type": "string",
+                            "description": "Task description",
+                        },
+                        "category": {
+                            "type": "string",
+                            "enum": ["goal", "appointment", "reminder"],
+                            "description": "Type of task",
+                        },
+                        "priority": {
+                            "type": "integer",
+                            "enum": [1, 2, 3],
+                            "description": "Priority: 1=low, 2=medium, 3=high",
+                        },
+                        "in_game_day": {
+                            "type": "integer",
+                            "description": "Day number for scheduled tasks (optional)",
+                        },
+                        "in_game_time": {
+                            "type": "string",
+                            "description": "Time for scheduled tasks, e.g., '4pm' (optional)",
+                        },
+                        "location": {
+                            "type": "string",
+                            "description": "Location for the task (optional)",
+                        },
+                    },
+                    "required": ["description", "category"],
+                },
+            },
+            {
+                "name": "complete_task",
+                "description": "Mark a task as completed.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "task_id": {
+                            "type": "integer",
+                            "description": "Task ID to complete",
+                        },
+                    },
+                    "required": ["task_id"],
+                },
+            },
+            {
+                "name": "create_appointment",
+                "description": (
+                    "Schedule a meeting/event with an NPC. "
+                    "Use when an NPC or player sets up a future meeting."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "description": {
+                            "type": "string",
+                            "description": "Appointment description",
+                        },
+                        "game_day": {
+                            "type": "integer",
+                            "description": "Day number for the appointment",
+                        },
+                        "game_time": {
+                            "type": "string",
+                            "description": "Time for the appointment, e.g., '2pm'",
+                        },
+                        "participants": {
+                            "type": "string",
+                            "description": "Comma-separated participant names",
+                        },
+                        "location_name": {
+                            "type": "string",
+                            "description": "Location for the appointment (optional)",
+                        },
+                        "initiated_by": {
+                            "type": "string",
+                            "description": "Who suggested this meeting (optional)",
+                        },
+                    },
+                    "required": ["description", "game_day", "participants"],
+                },
+            },
+            {
+                "name": "complete_appointment",
+                "description": "Mark an appointment as kept, missed, or cancelled.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "appointment_id": {
+                            "type": "integer",
+                            "description": "Appointment ID",
+                        },
+                        "outcome": {
+                            "type": "string",
+                            "enum": ["kept", "missed", "cancelled"],
+                            "description": "What happened with the appointment",
+                        },
+                        "outcome_notes": {
+                            "type": "string",
+                            "description": "Notes about the outcome (optional)",
+                        },
+                    },
+                    "required": ["appointment_id", "outcome"],
+                },
+            },
+            # ===================================================================
+            # Needs Tools (Tier 3)
+            # ===================================================================
+            {
+                "name": "apply_stimulus",
+                "description": (
+                    "Create a craving when player sees/smells tempting things. "
+                    "Use when describing scenes with food, comfortable beds, etc."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "entity_key": {
+                            "type": "string",
+                            "description": "Entity key (usually 'player')",
+                        },
+                        "stimulus_type": {
+                            "type": "string",
+                            "enum": ["food_sight", "drink_sight", "rest_opportunity",
+                                     "social_atmosphere", "intimacy_trigger"],
+                            "description": "Type of stimulus",
+                        },
+                        "stimulus_description": {
+                            "type": "string",
+                            "description": "What the character sees/smells",
+                        },
+                        "intensity": {
+                            "type": "string",
+                            "enum": ["mild", "moderate", "strong"],
+                            "description": "How tempting it is",
+                        },
+                    },
+                    "required": ["entity_key", "stimulus_type", "stimulus_description"],
+                },
+            },
+            {
+                "name": "mark_need_communicated",
+                "description": (
+                    "Mark that a need was just mentioned to prevent repetition. "
+                    "Call after narrating a character's hunger, thirst, etc."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "entity_key": {
+                            "type": "string",
+                            "description": "Entity key",
+                        },
+                        "need_name": {
+                            "type": "string",
+                            "enum": ["hunger", "thirst", "stamina", "hygiene", "comfort",
+                                     "wellness", "social_connection", "morale",
+                                     "sense_of_purpose", "intimacy"],
+                            "description": "Which need was mentioned",
+                        },
+                    },
+                    "required": ["entity_key", "need_name"],
+                },
+            },
         ]
 
     def execute_tool(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
@@ -267,6 +579,30 @@ class GMTools:
             return self.create_entity(**tool_input).model_dump()
         elif tool_name == "record_fact":
             return self.record_fact(**tool_input)
+        # Relationship tools
+        elif tool_name == "get_npc_attitude":
+            return self.get_npc_attitude(**tool_input)
+        # Quest tools
+        elif tool_name == "assign_quest":
+            return self.assign_quest(**tool_input)
+        elif tool_name == "update_quest":
+            return self.update_quest(**tool_input)
+        elif tool_name == "complete_quest":
+            return self.complete_quest(**tool_input)
+        # Task & Appointment tools
+        elif tool_name == "create_task":
+            return self.create_task(**tool_input)
+        elif tool_name == "complete_task":
+            return self.complete_task(**tool_input)
+        elif tool_name == "create_appointment":
+            return self.create_appointment(**tool_input)
+        elif tool_name == "complete_appointment":
+            return self.complete_appointment(**tool_input)
+        # Needs tools (Tier 3)
+        elif tool_name == "apply_stimulus":
+            return self.apply_stimulus(**tool_input)
+        elif tool_name == "mark_need_communicated":
+            return self.mark_need_communicated(**tool_input)
         else:
             return {"error": f"Unknown tool: {tool_name}"}
 
@@ -454,11 +790,13 @@ class GMTools:
         storage_location: str | None = None,
         category: str | None = None,
         parent_location: str | None = None,
+        container_type: str | None = None,
+        capacity: int | None = None,
     ) -> CreateEntityResult:
         """Create a new entity.
 
         Args:
-            entity_type: Type of entity (npc, item, location).
+            entity_type: Type of entity (npc, item, location, storage).
             name: Display name.
             description: Detailed description.
             gender: For NPCs.
@@ -467,6 +805,8 @@ class GMTools:
             storage_location: For items - key of storage container.
             category: For locations.
             parent_location: For locations.
+            container_type: For storage - 'container' or 'place'.
+            capacity: For storage - max items.
 
         Returns:
             CreateEntityResult with the new entity key.
@@ -572,6 +912,31 @@ class GMTools:
                 return CreateEntityResult(
                     entity_key=entity_key,
                     entity_type=GMEntityType.LOCATION,
+                    display_name=name,
+                    success=True,
+                )
+
+            elif entity_type == "storage":
+                # Map container_type string to StorageLocationType enum
+                storage_type_map = {
+                    "container": StorageLocationType.CONTAINER,
+                    "place": StorageLocationType.PLACE,
+                }
+                storage_type = storage_type_map.get(
+                    container_type or "place", StorageLocationType.PLACE
+                )
+
+                # Create storage location
+                # The 'name' becomes the container_type (e.g., "wooden chest")
+                storage = self.item_manager.create_storage(
+                    location_key=entity_key,
+                    location_type=storage_type,
+                    container_type=name,  # Store the name as container type
+                    capacity=capacity,
+                )
+                return CreateEntityResult(
+                    entity_key=entity_key,
+                    entity_type=GMEntityType.STORAGE,
                     display_name=name,
                     success=True,
                 )
@@ -819,4 +1184,422 @@ class GMTools:
             "success": True,
             "created": True,
             "message": f"Recorded: {subject_key}.{predicate} = {value}",
+        }
+
+    # =========================================================================
+    # Relationship Tools
+    # =========================================================================
+
+    def get_npc_attitude(
+        self,
+        from_entity: str,
+        to_entity: str,
+    ) -> dict[str, Any]:
+        """Get NPC attitude toward another entity.
+
+        Args:
+            from_entity: NPC entity key whose attitude to check.
+            to_entity: Target entity key.
+
+        Returns:
+            Dict with attitude dimensions.
+        """
+        from_ent = self.entity_manager.get_entity(from_entity)
+        if not from_ent:
+            return {"error": f"Entity '{from_entity}' not found"}
+
+        # Handle 'player' as target
+        if to_entity == "player":
+            to_ent_id = self.player_id
+        else:
+            to_ent = self.entity_manager.get_entity(to_entity)
+            if not to_ent:
+                return {"error": f"Entity '{to_entity}' not found"}
+            to_ent_id = to_ent.id
+
+        attitude = self.relationship_manager.get_attitude(from_ent.id, to_ent_id)
+
+        return {
+            "from_entity": from_entity,
+            "to_entity": to_entity,
+            "knows": attitude.get("knows", False),
+            "trust": attitude.get("trust", 50),
+            "liking": attitude.get("liking", 50),
+            "respect": attitude.get("respect", 50),
+            "romantic_interest": attitude.get("romantic_interest", 0),
+            "familiarity": attitude.get("familiarity", 0),
+            "fear": attitude.get("fear", 0),
+            "effective_liking": attitude.get("effective_liking", 50),
+        }
+
+    # =========================================================================
+    # Quest Tools
+    # =========================================================================
+
+    def assign_quest(
+        self,
+        quest_key: str,
+        title: str,
+        description: str,
+        giver_entity_key: str | None = None,
+        rewards: str | None = None,
+    ) -> dict[str, Any]:
+        """Create and assign a new quest.
+
+        Args:
+            quest_key: Unique quest identifier.
+            title: Display title.
+            description: Quest description.
+            giver_entity_key: Quest giver entity key (optional).
+            rewards: Reward description (optional).
+
+        Returns:
+            Result dict with quest info.
+        """
+        # Check if quest already exists
+        existing = self.task_manager.get_quest(quest_key)
+        if existing:
+            return {"error": f"Quest '{quest_key}' already exists"}
+
+        # Get giver entity ID if specified
+        giver_id = None
+        if giver_entity_key:
+            giver = self.entity_manager.get_entity(giver_entity_key)
+            if giver:
+                giver_id = giver.id
+
+        # Create and start quest
+        rewards_dict = {"description": rewards} if rewards else None
+        quest = self.task_manager.create_quest(
+            quest_key=quest_key,
+            name=title,
+            description=description,
+            giver_entity_id=giver_id,
+            rewards=rewards_dict,
+        )
+        self.task_manager.start_quest(quest_key)
+
+        return {
+            "success": True,
+            "quest_key": quest_key,
+            "title": title,
+            "message": f"Quest assigned: {title}",
+        }
+
+    def update_quest(
+        self,
+        quest_key: str,
+        notes: str | None = None,
+    ) -> dict[str, Any]:
+        """Advance a quest to the next stage.
+
+        Args:
+            quest_key: Quest key to update.
+            notes: Progress notes (optional).
+
+        Returns:
+            Result dict with quest status.
+        """
+        quest = self.task_manager.get_quest(quest_key)
+        if not quest:
+            return {"error": f"Quest '{quest_key}' not found"}
+
+        try:
+            updated_quest = self.task_manager.complete_quest_stage(quest_key)
+            return {
+                "success": True,
+                "quest_key": quest_key,
+                "current_stage": updated_quest.current_stage,
+                "status": updated_quest.status.value,
+                "message": f"Quest advanced to stage {updated_quest.current_stage}",
+            }
+        except ValueError as e:
+            return {"error": str(e)}
+
+    def complete_quest(
+        self,
+        quest_key: str,
+        outcome: str,
+        outcome_notes: str | None = None,
+    ) -> dict[str, Any]:
+        """Mark a quest as completed or failed.
+
+        Args:
+            quest_key: Quest key to complete.
+            outcome: 'completed' or 'failed'.
+            outcome_notes: Notes about outcome (optional).
+
+        Returns:
+            Result dict with final status.
+        """
+        quest = self.task_manager.get_quest(quest_key)
+        if not quest:
+            return {"error": f"Quest '{quest_key}' not found"}
+
+        try:
+            if outcome == "completed":
+                # Complete all remaining stages
+                while quest.status.value == "active":
+                    quest = self.task_manager.complete_quest_stage(quest_key)
+            else:
+                quest = self.task_manager.fail_quest(quest_key)
+
+            return {
+                "success": True,
+                "quest_key": quest_key,
+                "status": quest.status.value,
+                "message": f"Quest {outcome}: {quest.name}",
+            }
+        except ValueError as e:
+            return {"error": str(e)}
+
+    # =========================================================================
+    # Task & Appointment Tools
+    # =========================================================================
+
+    def create_task(
+        self,
+        description: str,
+        category: str,
+        priority: int = 2,
+        in_game_day: int | None = None,
+        in_game_time: str | None = None,
+        location: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new task for the player.
+
+        Args:
+            description: Task description.
+            category: 'goal', 'appointment', or 'reminder'.
+            priority: 1=low, 2=medium, 3=high.
+            in_game_day: Optional day number.
+            in_game_time: Optional time string.
+            location: Optional location.
+
+        Returns:
+            Result dict with task ID.
+        """
+        from src.database.models.enums import TaskCategory
+
+        # Map category string to enum
+        category_map = {
+            "goal": TaskCategory.GOAL,
+            "appointment": TaskCategory.APPOINTMENT,
+            "reminder": TaskCategory.REMINDER,
+        }
+        task_category = category_map.get(category.lower(), TaskCategory.GOAL)
+
+        task = self.task_manager.create_task(
+            description=description,
+            category=task_category,
+            priority=priority,
+            in_game_day=in_game_day,
+            in_game_time=in_game_time,
+            location=location,
+        )
+
+        return {
+            "success": True,
+            "task_id": task.id,
+            "description": description,
+            "message": f"Task created: {description}",
+        }
+
+    def complete_task(
+        self,
+        task_id: int,
+    ) -> dict[str, Any]:
+        """Mark a task as completed.
+
+        Args:
+            task_id: Task ID to complete.
+
+        Returns:
+            Result dict with status.
+        """
+        try:
+            task = self.task_manager.complete_task(task_id)
+            return {
+                "success": True,
+                "task_id": task_id,
+                "message": f"Task completed: {task.description}",
+            }
+        except ValueError as e:
+            return {"error": str(e)}
+
+    def create_appointment(
+        self,
+        description: str,
+        game_day: int,
+        participants: str,
+        game_time: str | None = None,
+        location_name: str | None = None,
+        initiated_by: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a new appointment.
+
+        Args:
+            description: Appointment description.
+            game_day: Day number.
+            participants: Comma-separated participant names.
+            game_time: Time string (optional).
+            location_name: Location (optional).
+            initiated_by: Who suggested this (optional).
+
+        Returns:
+            Result dict with appointment ID.
+        """
+        appointment = self.task_manager.create_appointment(
+            description=description,
+            game_day=game_day,
+            participants=participants,
+            game_time=game_time,
+            location_name=location_name,
+            initiated_by=initiated_by,
+        )
+
+        return {
+            "success": True,
+            "appointment_id": appointment.id,
+            "game_day": game_day,
+            "message": f"Appointment scheduled for day {game_day}: {description}",
+        }
+
+    def complete_appointment(
+        self,
+        appointment_id: int,
+        outcome: str,
+        outcome_notes: str | None = None,
+    ) -> dict[str, Any]:
+        """Mark an appointment as kept, missed, or cancelled.
+
+        Args:
+            appointment_id: Appointment ID.
+            outcome: 'kept', 'missed', or 'cancelled'.
+            outcome_notes: Notes about outcome (optional).
+
+        Returns:
+            Result dict with status.
+        """
+        try:
+            if outcome == "kept":
+                appointment = self.task_manager.complete_appointment(
+                    appointment_id, outcome=outcome_notes
+                )
+            elif outcome == "missed":
+                appointment = self.task_manager.mark_appointment_missed(appointment_id)
+            elif outcome == "cancelled":
+                appointment = self.task_manager.cancel_appointment(appointment_id)
+            else:
+                return {"error": f"Invalid outcome: {outcome}"}
+
+            return {
+                "success": True,
+                "appointment_id": appointment_id,
+                "status": appointment.status.value,
+                "message": f"Appointment {outcome}",
+            }
+        except ValueError as e:
+            return {"error": str(e)}
+
+    # =========================================================================
+    # Needs Tools (Tier 3)
+    # =========================================================================
+
+    def apply_stimulus(
+        self,
+        entity_key: str,
+        stimulus_type: str,
+        stimulus_description: str,
+        intensity: str = "moderate",
+    ) -> dict[str, Any]:
+        """Apply a stimulus to create cravings.
+
+        Args:
+            entity_key: Entity key (usually 'player').
+            stimulus_type: Type of stimulus.
+            stimulus_description: What the character sees/smells.
+            intensity: 'mild', 'moderate', or 'strong'.
+
+        Returns:
+            Result dict with craving info.
+        """
+        # Get entity
+        if entity_key == "player":
+            entity_id = self.player_id
+        else:
+            entity = self.entity_manager.get_entity(entity_key)
+            if not entity:
+                return {"error": f"Entity '{entity_key}' not found"}
+            entity_id = entity.id
+
+        # Map stimulus type to need
+        stimulus_to_need = {
+            "food_sight": "hunger",
+            "drink_sight": "thirst",
+            "rest_opportunity": "stamina",
+            "social_atmosphere": "social_connection",
+            "intimacy_trigger": "intimacy",
+        }
+        need_name = stimulus_to_need.get(stimulus_type)
+        if not need_name:
+            return {"error": f"Unknown stimulus type: {stimulus_type}"}
+
+        # Map intensity to relevance (0.0-1.0) and attention values
+        # intensity affects both how relevant and how prominent the stimulus is
+        intensity_map = {
+            "mild": (0.3, 0.3),      # background, low relevance
+            "moderate": (0.6, 0.6),  # described in scene
+            "strong": (0.9, 1.0),    # directly offered/prominent
+        }
+        relevance, attention = intensity_map.get(intensity, (0.6, 0.6))
+
+        # Apply craving via NeedsManager
+        try:
+            craving_boost = self.needs_manager.apply_craving(
+                entity_id,
+                need_name,
+                relevance=relevance,
+                attention=attention,
+            )
+            return {
+                "success": True,
+                "entity_key": entity_key,
+                "need": need_name,
+                "craving_boost": craving_boost,
+                "message": f"Applied {intensity} {stimulus_type} craving",
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def mark_need_communicated(
+        self,
+        entity_key: str,
+        need_name: str,
+    ) -> dict[str, Any]:
+        """Mark that a need was just mentioned to prevent repetition.
+
+        This is a no-op stub for now - the NeedsManager doesn't track
+        communication timing yet. Returns success to allow GM to call it.
+
+        Args:
+            entity_key: Entity key.
+            need_name: Which need was mentioned.
+
+        Returns:
+            Result dict with status.
+        """
+        # Validate entity exists
+        if entity_key != "player":
+            entity = self.entity_manager.get_entity(entity_key)
+            if not entity:
+                return {"error": f"Entity '{entity_key}' not found"}
+
+        # TODO: Implement actual tracking in NeedsManager
+        # For now, return success without doing anything
+        return {
+            "success": True,
+            "entity_key": entity_key,
+            "need_name": need_name,
+            "message": f"Marked {need_name} as communicated",
         }

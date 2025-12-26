@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **GM Pipeline Tools Expansion** - Extended GM tools from 5 to 15 with consistent architecture
+  - StateChanges for mutations, Tools for queries/feedback
+  - Renamed `CONSUME` to `SATISFY_NEED` - clearer for activities (sleeping, bathing)
+  - Extended `SATISFY_NEED` for activity-based needs (not just item consumption)
+  - Extended `MOVE` StateChange for NPC movement (not just player)
+  - New `get_npc_attitude` tool - query NPC relationship before dialogue
+  - New quest tools: `assign_quest`, `update_quest`, `complete_quest`
+  - New task tools: `create_task`, `complete_task`
+  - New appointment tools: `create_appointment`, `complete_appointment`
+  - New `apply_stimulus` tool - create cravings when describing tempting scenes
+  - Extended `create_entity` for `storage` type (containers/furniture)
+  - Key files: `src/gm/tools.py`, `src/gm/applier.py`, `src/gm/schemas.py`
+
 - **Item State Extraction** - Separate item identity from state in keys and properties
   - New `ItemStateExtractor` utility extracts state adjectives from display names
   - Keys now based on base name only (e.g., `linen_shirt` not `clean_linen_shirt`)

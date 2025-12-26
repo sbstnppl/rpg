@@ -21,18 +21,19 @@ class EntityType(str, Enum):
     NPC = "npc"
     ITEM = "item"
     LOCATION = "location"
+    STORAGE = "storage"
 
 
 class StateChangeType(str, Enum):
     """Types of state changes the GM can request."""
 
-    MOVE = "move"  # Player moves to location
+    MOVE = "move"  # Entity moves to location (player or NPC)
     TAKE = "take"  # Player takes item
     DROP = "drop"  # Player drops item
     GIVE = "give"  # Player gives item to NPC
     EQUIP = "equip"  # Player equips item
     UNEQUIP = "unequip"  # Player unequips item
-    CONSUME = "consume"  # Player eats/drinks (affects needs)
+    SATISFY_NEED = "satisfy_need"  # Satisfy a need (eating, sleeping, bathing, etc.)
     DAMAGE = "damage"  # Entity takes damage
     HEAL = "heal"  # Entity heals
     RELATIONSHIP = "relationship"  # Relationship change

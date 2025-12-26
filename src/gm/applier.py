@@ -158,8 +158,8 @@ class StateApplier:
         elif change.change_type == StateChangeType.UNEQUIP:
             self._apply_unequip(change)
 
-        elif change.change_type == StateChangeType.CONSUME:
-            self._apply_consume(change)
+        elif change.change_type == StateChangeType.SATISFY_NEED:
+            self._apply_satisfy_need(change)
 
         elif change.change_type == StateChangeType.RELATIONSHIP:
             self._apply_relationship(change)
@@ -172,25 +172,35 @@ class StateApplier:
 
         return None
 
-    def _apply_move(self, change: StateChange) -> str:
-        """Apply a move state change.
+    def _apply_move(self, change: StateChange) -> str | None:
+        """Apply a move state change for player or NPC.
 
         Args:
             change: The move change.
 
         Returns:
-            New location key.
+            New location key if player moved, None for NPC moves.
         """
-        destination = change.details.get("to", change.target)
+        target_key = change.target
+        destination = change.details.get("to", target_key)
 
-        # Update player's current location
-        player = self.entity_manager.get_player()
-        if player and player.npc_extension:
-            player.npc_extension.current_location = destination
-            self.db.add(player)
+        if target_key == "player":
+            # Player movement
+            player = self.entity_manager.get_player()
+            if player and player.npc_extension:
+                player.npc_extension.current_location = destination
+                self.db.add(player)
 
-        logger.info(f"Player moved to {destination}")
-        return destination
+            logger.info(f"Player moved to {destination}")
+            return destination
+        else:
+            # NPC movement
+            npc = self.entity_manager.get_entity(target_key)
+            if npc and npc.npc_extension:
+                npc.npc_extension.current_location = destination
+                self.db.flush()
+                logger.info(f"NPC {target_key} moved to {destination}")
+            return None
 
     def _apply_take(self, change: StateChange) -> None:
         """Apply a take item state change."""
@@ -247,31 +257,69 @@ class StateApplier:
             self.item_manager.unequip_item(item.id)
             logger.info(f"Player unequipped: {item_key}")
 
-    def _apply_consume(self, change: StateChange) -> None:
-        """Apply a consume item state change (eating/drinking)."""
-        item_key = change.target
+    def _apply_satisfy_need(self, change: StateChange) -> None:
+        """Apply a need satisfaction state change.
 
-        item = self.item_manager.get_item(item_key)
-        if not item:
-            return
+        Handles both:
+        - Item consumption (eating bread, drinking ale) - deletes item
+        - Activity satisfaction (sleeping, bathing) - no item deletion
+        """
+        target_key = change.target
+        details = change.details or {}
 
-        # Get consumption effects from item properties
-        effects = change.details or {}
-        hunger_restore = effects.get("hunger", 0)
-        thirst_restore = effects.get("thirst", 0)
+        # Check if this is an activity-based satisfaction (has 'activity' key)
+        if "activity" in details:
+            # Activity-based need satisfaction (sleeping, bathing, conversations)
+            entity = self.entity_manager.get_entity(target_key)
+            if not entity:
+                logger.warning(f"Entity not found for need satisfaction: {target_key}")
+                return
 
-        # Apply effects to player needs
-        if hunger_restore:
-            self.needs_manager.modify_need(self.player_id, "hunger", hunger_restore)
-        if thirst_restore:
-            self.needs_manager.modify_need(self.player_id, "thirst", thirst_restore)
+            need_name = details.get("need")
+            amount = details.get("amount", 0)
+            activity = details.get("activity", "unknown")
 
-        # Remove the consumed item
-        self.item_manager.delete_item(item.id)
-        logger.info(f"Player consumed: {item_key}")
+            if need_name and amount:
+                self.needs_manager.satisfy_need(
+                    entity.id,
+                    need_name,
+                    amount,
+                    turn=self.game_session.total_turns,
+                )
+                logger.info(f"{target_key} satisfied {need_name} by {amount} via {activity}")
+        else:
+            # Item consumption - get the item and apply effects
+            item = self.item_manager.get_item(target_key)
+            if not item:
+                logger.warning(f"Item not found for consumption: {target_key}")
+                return
+
+            # Apply hunger/thirst restoration using satisfy_need
+            hunger_restore = details.get("hunger", 0)
+            thirst_restore = details.get("thirst", 0)
+
+            if hunger_restore:
+                self.needs_manager.satisfy_need(
+                    self.player_id, "hunger", hunger_restore,
+                    turn=self.game_session.total_turns
+                )
+            if thirst_restore:
+                self.needs_manager.satisfy_need(
+                    self.player_id, "thirst", thirst_restore,
+                    turn=self.game_session.total_turns
+                )
+
+            # Delete item unless explicitly told not to
+            if details.get("destroys_item", True):
+                self.item_manager.delete_item(target_key)
+                logger.info(f"Player consumed item: {target_key}")
+            else:
+                logger.info(f"Player used item (not consumed): {target_key}")
 
     def _apply_relationship(self, change: StateChange) -> None:
         """Apply a relationship change."""
+        from src.database.models.enums import RelationshipDimension
+
         npc_key = change.target
         adjustments = change.details
 
@@ -279,16 +327,27 @@ class StateApplier:
         if not npc:
             return
 
+        # Map string dimension names to enum values
+        dimension_map = {
+            "trust": RelationshipDimension.TRUST,
+            "liking": RelationshipDimension.LIKING,
+            "respect": RelationshipDimension.RESPECT,
+            "fear": RelationshipDimension.FEAR,
+            "romantic_interest": RelationshipDimension.ROMANTIC_INTEREST,
+            "familiarity": RelationshipDimension.FAMILIARITY,
+        }
+
         # Apply each adjustment
-        for dimension, delta in adjustments.items():
-            if dimension in ("trust", "liking", "respect", "fear", "romantic_interest"):
-                self.relationship_manager.adjust_attitude(
-                    entity_a_id=npc.id,
-                    entity_b_id=self.player_id,
-                    dimension=dimension,
+        for dimension_str, delta in adjustments.items():
+            if dimension_str in dimension_map:
+                self.relationship_manager.update_attitude(
+                    from_id=npc.id,
+                    to_id=self.player_id,
+                    dimension=dimension_map[dimension_str],
                     delta=delta,
+                    reason="GM state change",
                 )
-                logger.info(f"Adjusted {npc_key}'s {dimension} by {delta}")
+                logger.info(f"Adjusted {npc_key}'s {dimension_str} by {delta}")
 
     def _apply_fact(self, change: StateChange) -> None:
         """Apply a new fact."""
