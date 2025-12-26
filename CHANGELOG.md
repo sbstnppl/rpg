@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **GM Pipeline E2E Test Framework** - Automated end-to-end testing for GM pipeline
+  - `GME2ETestRunner` runs flowing gameplay scenarios with comprehensive logging
+  - `GME2EAssessor` evaluates narrative quality, tool usage, DB changes, time tracking
+  - `GME2ELogger` creates detailed markdown logs per test run in `logs/gm_e2e/`
+  - 6 test scenarios: exploration/dialog, item interaction, skill challenges, needs, movement, OOC
+  - Duplicate response detection, forbidden pattern checks, time bound validation
+  - Key files: `scripts/gm_e2e_test_runner.py`, `scripts/gm_e2e_scenarios.py`, `src/gm/e2e_assessor.py`, `src/gm/e2e_logger.py`
+
+- **Auto Mode for Game Start** - `--auto` flag for automated test session creation
+  - Creates pre-populated test character without prompts
+  - Enables headless session creation for E2E testing
+  - Key file: `src/cli/commands/game.py`
+
+- **Expanded E2E Testing Documentation** - Comprehensive testing guide updates
+  - Test action categories with expected durations
+  - Tool reliability testing procedures
+  - Craving/stimulus testing scenarios
+  - StateChange type reference table
+  - Key file: `docs/gm-pipeline-e2e-testing.md`
+
 - **Item Manipulation & Need Satisfaction Tools** - New GM tools for direct game state changes
   - `take_item(item_key)` - Player picks up items from scene/storage
   - `drop_item(item_key)` - Player drops items at current location

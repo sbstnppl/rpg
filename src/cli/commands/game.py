@@ -463,6 +463,7 @@ def start(
         "-p",
         help="Pipeline: 'system-authority' (default), 'scene-first' (new), or 'legacy'",
     ),
+    auto: bool = typer.Option(False, "--auto", help="Auto-setup with test defaults (for testing)"),
 ) -> None:
     """Start a new game with guided setup wizard.
 
@@ -472,14 +473,49 @@ def start(
     Use --conversational for the old freeform AI character creation style.
     Use --pipeline=scene-first for the new scene-first architecture.
     Use --pipeline=legacy for the old LLM-decides-everything flow.
+    Use --auto to skip all prompts and create a test session (for testing).
     """
     # Validate pipeline option
     normalized_pipeline = validate_pipeline(pipeline)
 
     try:
-        asyncio.run(_start_wizard_async(name, setting, use_wizard=wizard, pipeline=normalized_pipeline))
+        asyncio.run(_start_wizard_async(name, setting, use_wizard=wizard, pipeline=normalized_pipeline, auto=auto))
     except KeyboardInterrupt:
         display_info("\nWizard cancelled. No changes were saved.")
+
+
+def _create_auto_character_state() -> "CharacterCreationState":
+    """Create a pre-populated character state for auto mode testing.
+
+    Returns:
+        A complete CharacterCreationState with test defaults.
+    """
+    from src.cli.commands.character import CharacterCreationState
+
+    return CharacterCreationState(
+        name="Test Hero",
+        species="Human",
+        gender="Male",
+        age=25,
+        build="Average",
+        height="5'10\"",
+        hair_color="Brown",
+        hair_style="Short",
+        eye_color="Brown",
+        skin_tone="Fair",
+        attributes={
+            "strength": 10,
+            "dexterity": 10,
+            "constitution": 10,
+            "intelligence": 10,
+            "wisdom": 10,
+            "charisma": 10,
+        },
+        background="A wandering adventurer seeking fortune and glory in the realm.",
+        personality_notes="Curious and brave, always ready for adventure.",
+        confirmed=True,
+        conversation_history=["[Auto-generated test character]"],
+    )
 
 
 async def _start_wizard_async(
@@ -487,6 +523,7 @@ async def _start_wizard_async(
     preset_setting: str | None = None,
     use_wizard: bool = True,
     pipeline: str = "system-authority",
+    auto: bool = False,
 ) -> None:
     """Run the full game start wizard.
 
@@ -497,6 +534,7 @@ async def _start_wizard_async(
         preset_setting: Optional preset setting (skips prompt).
         use_wizard: If True, use step-by-step wizard; if False, use conversational AI.
         pipeline: Pipeline to use (legacy, system-authority, scene-first).
+        auto: If True, skip all prompts and use test defaults.
     """
     from src.cli.commands.character import (
         CharacterCreationState,
@@ -514,52 +552,65 @@ async def _start_wizard_async(
     from src.schemas.settings import get_setting_schema
     from src.llm.audit_logger import set_audit_context
 
-    # Phase 1: Welcome and Session Setup
-    display_game_wizard_welcome()
-
-    # Get available settings
-    available_settings = _get_available_settings()
-
-    # Select setting
-    if preset_setting and any(s["key"] == preset_setting for s in available_settings):
-        selected_setting = preset_setting
-    else:
-        selected_setting = prompt_setting_choice(available_settings, default="fantasy")
-
-    # Get session name
-    if preset_name:
-        session_name = preset_name
-    else:
-        session_name = prompt_session_name(default="New Adventure")
-
-    console.print(f"\n[dim]Creating adventure '{session_name}' in {selected_setting} setting...[/dim]")
-
-    # Phase 2: Character Creation (before DB commit)
-    schema = get_setting_schema(selected_setting)
-
-    console.print()  # Spacing before character creation
-
-    # Use wizard or conversational mode
-    if use_wizard:
-        wizard_state = await _wizard_character_creation_async(schema, session_id=None)
-        if wizard_state is None:
-            display_info("Character creation cancelled.")
-            return
-        # Convert wizard state to creation state for compatibility
-        creation_state = wizard_state.character
-        # Store potential stats and occupation for later
-        potential_stats = wizard_state.potential_stats
-        occupation = wizard_state.occupation
-        occupation_years = wizard_state.occupation_years
-    else:
-        creation_state = await _ai_character_creation_async(schema, session_id=None)
+    # Auto mode: skip all prompts and use test defaults
+    if auto:
+        selected_setting = preset_setting or "fantasy"
+        session_name = preset_name or "Test Adventure"
+        creation_state = _create_auto_character_state()
         potential_stats = None
         occupation = None
         occupation_years = None
+        console.print(f"[dim]Auto-creating '{session_name}' with test character...[/dim]")
+    else:
+        # Phase 1: Welcome and Session Setup
+        display_game_wizard_welcome()
 
-    if not creation_state or not creation_state.is_complete():
-        display_error("Character creation was not completed.")
-        return
+        # Get available settings
+        available_settings = _get_available_settings()
+
+        # Select setting
+        if preset_setting and any(s["key"] == preset_setting for s in available_settings):
+            selected_setting = preset_setting
+        else:
+            selected_setting = prompt_setting_choice(available_settings, default="fantasy")
+
+        # Get session name
+        if preset_name:
+            session_name = preset_name
+        else:
+            session_name = prompt_session_name(default="New Adventure")
+
+        console.print(f"\n[dim]Creating adventure '{session_name}' in {selected_setting} setting...[/dim]")
+
+        # Phase 2: Character Creation (before DB commit)
+        schema = get_setting_schema(selected_setting)
+
+        console.print()  # Spacing before character creation
+
+        # Use wizard or conversational mode
+        if use_wizard:
+            wizard_state = await _wizard_character_creation_async(schema, session_id=None)
+            if wizard_state is None:
+                display_info("Character creation cancelled.")
+                return
+            # Convert wizard state to creation state for compatibility
+            creation_state = wizard_state.character
+            # Store potential stats and occupation for later
+            potential_stats = wizard_state.potential_stats
+            occupation = wizard_state.occupation
+            occupation_years = wizard_state.occupation_years
+        else:
+            creation_state = await _ai_character_creation_async(schema, session_id=None)
+            potential_stats = None
+            occupation = None
+            occupation_years = None
+
+        if not creation_state or not creation_state.is_complete():
+            display_error("Character creation was not completed.")
+            return
+
+    # Get schema for equipment creation
+    schema = get_setting_schema(selected_setting)
 
     # Phase 3: Create all DB records (only after character confirmed)
     with get_db_session() as db:
@@ -613,25 +664,28 @@ async def _start_wizard_async(
         # Create character preferences (includes intimacy settings)
         _create_character_preferences(db, game_session, entity)
 
-        # Extract world data (NPCs, locations from backstory)
-        console.print("[dim]Extracting world from backstory...[/dim]")
-        conversation_history = "\n".join(creation_state.conversation_history)
-        world_data = await _extract_world_data(
-            character_output=conversation_history,
-            character_name=creation_state.name,
-            character_background=creation_state.background or "",
-            setting_name=selected_setting,
-            session_id=game_session.id,
-        )
         starting_location_key = None
-        if world_data:
-            starting_location_key = _create_world_from_extraction(db, game_session, entity, world_data)
 
-        # Infer gameplay fields (skills, preferences, modifiers)
-        console.print("[dim]Inferring skills and preferences...[/dim]")
-        inference = await _infer_gameplay_fields(creation_state, session_id=game_session.id)
-        if inference:
-            _create_inferred_records(db, game_session, entity, inference)
+        # Skip LLM inference in auto mode for speed
+        if not auto:
+            # Extract world data (NPCs, locations from backstory)
+            console.print("[dim]Extracting world from backstory...[/dim]")
+            conversation_history = "\n".join(creation_state.conversation_history)
+            world_data = await _extract_world_data(
+                character_output=conversation_history,
+                character_name=creation_state.name,
+                character_background=creation_state.background or "",
+                setting_name=selected_setting,
+                session_id=game_session.id,
+            )
+            if world_data:
+                starting_location_key = _create_world_from_extraction(db, game_session, entity, world_data)
+
+            # Infer gameplay fields (skills, preferences, modifiers)
+            console.print("[dim]Inferring skills and preferences...[/dim]")
+            inference = await _infer_gameplay_fields(creation_state, session_id=game_session.id)
+            if inference:
+                _create_inferred_records(db, game_session, entity, inference)
 
         db.commit()
 
@@ -649,6 +703,11 @@ async def _start_wizard_async(
                 for item in starting_items
             ]
             display_starting_equipment(item_dicts)
+
+        # Auto mode: just create session, don't start game loop
+        if auto:
+            display_success(f"Session {game_session.id} ready for testing.")
+            return
 
         # Phase 4: Start the game loop directly
         console.print()
