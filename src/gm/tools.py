@@ -557,6 +557,101 @@ class GMTools:
                     "required": ["entity_key", "need_name"],
                 },
             },
+            # ===================================================================
+            # Item Manipulation Tools
+            # ===================================================================
+            {
+                "name": "take_item",
+                "description": (
+                    "Transfer an item to the player's inventory. "
+                    "Use when player explicitly takes, picks up, or grabs an item."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "item_key": {
+                            "type": "string",
+                            "description": "Item key of the item to take (from Items Present or storage)",
+                        },
+                    },
+                    "required": ["item_key"],
+                },
+            },
+            {
+                "name": "drop_item",
+                "description": (
+                    "Drop an item from player's inventory at the current location. "
+                    "Use when player explicitly drops, puts down, or discards an item."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "item_key": {
+                            "type": "string",
+                            "description": "Item key of the item to drop (from Inventory)",
+                        },
+                    },
+                    "required": ["item_key"],
+                },
+            },
+            {
+                "name": "give_item",
+                "description": (
+                    "Give an item from player's inventory to an NPC. "
+                    "Use when player explicitly gives, hands, or offers an item to someone."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "item_key": {
+                            "type": "string",
+                            "description": "Item key of the item to give",
+                        },
+                        "recipient_key": {
+                            "type": "string",
+                            "description": "Entity key of the NPC receiving the item",
+                        },
+                    },
+                    "required": ["item_key", "recipient_key"],
+                },
+            },
+            {
+                "name": "satisfy_need",
+                "description": (
+                    "Satisfy a character need through an activity or consumption. "
+                    "Use when player eats, drinks, rests, sleeps, bathes, or engages in social activity. "
+                    "Amount guide: 10=snack/sip, 25=light meal/drink, 40=full meal, 65=feast."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "need": {
+                            "type": "string",
+                            "enum": ["hunger", "thirst", "stamina", "hygiene", "comfort",
+                                     "wellness", "social_connection", "morale",
+                                     "sense_of_purpose", "intimacy"],
+                            "description": "Which need is being satisfied",
+                        },
+                        "amount": {
+                            "type": "integer",
+                            "description": "Satisfaction amount (10=snack, 25=drink, 40=meal, 60=feast, 100=full)",
+                        },
+                        "activity": {
+                            "type": "string",
+                            "description": "Activity description (e.g., 'eating bread', 'taking a bath')",
+                        },
+                        "item_key": {
+                            "type": "string",
+                            "description": "Item key if consuming an item (optional)",
+                        },
+                        "destroys_item": {
+                            "type": "boolean",
+                            "description": "Whether the item is consumed/destroyed (default: true)",
+                        },
+                    },
+                    "required": ["need", "amount", "activity"],
+                },
+            },
         ]
 
     def execute_tool(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
@@ -574,10 +669,35 @@ class GMTools:
         elif tool_name == "attack_roll":
             return self.attack_roll(**tool_input).model_dump()
         elif tool_name == "damage_entity":
-            return self.damage_entity(**tool_input).model_dump()
+            # Filter to only expected parameters
+            allowed = {"target", "amount", "damage_type"}
+            filtered_input = {k: v for k, v in tool_input.items() if k in allowed}
+            return self.damage_entity(**filtered_input).model_dump()
         elif tool_name == "create_entity":
+            # Normalize parameter aliases - LLM sometimes uses shorthand names
+            if "type" in tool_input and "entity_type" not in tool_input:
+                tool_input["entity_type"] = tool_input.pop("type")
+            if "location" in tool_input and "storage_location" not in tool_input:
+                tool_input["storage_location"] = tool_input.pop("location")
+            if "container" in tool_input and "container_type" not in tool_input:
+                tool_input["container_type"] = tool_input.pop("container")
+            # Filter to valid parameters only
+            allowed_create = {
+                "entity_type", "name", "description", "gender", "occupation",
+                "item_type", "storage_location", "category", "parent_location",
+                "container_type", "capacity"
+            }
+            tool_input = {k: v for k, v in tool_input.items() if k in allowed_create}
             return self.create_entity(**tool_input).model_dump()
         elif tool_name == "record_fact":
+            # Normalize parameter aliases
+            if "fact" in tool_input and "value" not in tool_input:
+                # LLM sometimes sends {"fact": "..."} instead of structured params
+                # Try to parse as value
+                tool_input["value"] = tool_input.pop("fact")
+            # Filter to valid parameters
+            allowed_fact = {"subject_type", "subject_key", "predicate", "value", "is_secret"}
+            tool_input = {k: v for k, v in tool_input.items() if k in allowed_fact}
             return self.record_fact(**tool_input)
         # Relationship tools
         elif tool_name == "get_npc_attitude":
@@ -603,6 +723,16 @@ class GMTools:
             return self.apply_stimulus(**tool_input)
         elif tool_name == "mark_need_communicated":
             return self.mark_need_communicated(**tool_input)
+        # Item manipulation tools
+        elif tool_name == "take_item":
+            return self.take_item(**tool_input)
+        elif tool_name == "drop_item":
+            return self.drop_item(**tool_input)
+        elif tool_name == "give_item":
+            return self.give_item(**tool_input)
+        # Need satisfaction tool
+        elif tool_name == "satisfy_need":
+            return self.satisfy_need(**tool_input)
         else:
             return {"error": f"Unknown tool: {tool_name}"}
 
@@ -1602,4 +1732,163 @@ class GMTools:
             "entity_key": entity_key,
             "need_name": need_name,
             "message": f"Marked {need_name} as communicated",
+        }
+
+    # ===================================================================
+    # Item Manipulation Tools
+    # ===================================================================
+
+    def take_item(self, item_key: str) -> dict[str, Any]:
+        """Transfer item to player's inventory.
+
+        Args:
+            item_key: Item key to take.
+
+        Returns:
+            Result dict with success status.
+        """
+        item = self.item_manager.get_item(item_key)
+        if not item:
+            return {"error": f"Item not found: {item_key}"}
+
+        # Check if item is available (not held by another entity)
+        if item.holder_id and item.holder_id != self.player_id:
+            # Get holder name for error message
+            holder = self.entity_manager.get_entity_by_id(item.holder_id)
+            holder_name = holder.display_name if holder else "someone"
+            return {"error": f"Item is held by {holder_name}"}
+
+        # Transfer to player
+        self.item_manager.transfer_item(item_key, to_entity_id=self.player_id)
+
+        return {
+            "success": True,
+            "item_key": item_key,
+            "item_name": item.display_name,
+            "message": f"Took {item.display_name}",
+        }
+
+    def drop_item(self, item_key: str) -> dict[str, Any]:
+        """Drop item at current location.
+
+        Args:
+            item_key: Item key to drop.
+
+        Returns:
+            Result dict with success status.
+        """
+        item = self.item_manager.get_item(item_key)
+        if not item:
+            return {"error": f"Item not found: {item_key}"}
+
+        # Check if player holds the item
+        if item.holder_id != self.player_id:
+            return {"error": f"Player does not have {item.display_name}"}
+
+        # Drop at current location
+        if not self.location_key:
+            return {"error": "No current location"}
+
+        self.item_manager.drop_item(item_key, self.location_key)
+
+        return {
+            "success": True,
+            "item_key": item_key,
+            "item_name": item.display_name,
+            "location": self.location_key,
+            "message": f"Dropped {item.display_name}",
+        }
+
+    def give_item(self, item_key: str, recipient_key: str) -> dict[str, Any]:
+        """Give item to an NPC.
+
+        Args:
+            item_key: Item key to give.
+            recipient_key: Recipient NPC entity key.
+
+        Returns:
+            Result dict with success status.
+        """
+        item = self.item_manager.get_item(item_key)
+        if not item:
+            return {"error": f"Item not found: {item_key}"}
+
+        if item.holder_id != self.player_id:
+            return {"error": f"Player does not have {item.display_name}"}
+
+        recipient = self.entity_manager.get_entity(recipient_key)
+        if not recipient:
+            return {"error": f"Recipient not found: {recipient_key}"}
+
+        self.item_manager.transfer_item(item_key, to_entity_id=recipient.id)
+
+        return {
+            "success": True,
+            "item_key": item_key,
+            "item_name": item.display_name,
+            "recipient_key": recipient_key,
+            "recipient_name": recipient.display_name,
+            "message": f"Gave {item.display_name} to {recipient.display_name}",
+        }
+
+    def satisfy_need(
+        self,
+        need: str,
+        amount: int,
+        activity: str,
+        item_key: str | None = None,
+        destroys_item: bool = True,
+    ) -> dict[str, Any]:
+        """Satisfy a character need.
+
+        Args:
+            need: Need name to satisfy.
+            amount: Satisfaction amount.
+            activity: Description of the activity.
+            item_key: Optional item being consumed.
+            destroys_item: Whether item is destroyed.
+
+        Returns:
+            Result dict with updated need value.
+        """
+        # Get current need value
+        needs_record = self.needs_manager.get_needs(self.player_id)
+        if not needs_record:
+            return {"error": "No needs record for player"}
+
+        if not hasattr(needs_record, need):
+            return {"error": f"Unknown need: {need}"}
+
+        old_value = getattr(needs_record, need)
+
+        # Apply satisfaction
+        self.needs_manager.satisfy_need(
+            self.player_id,
+            need,
+            amount,
+            turn=self.game_session.total_turns,
+        )
+
+        # Handle item consumption
+        if item_key:
+            item = self.item_manager.get_item(item_key)
+            if item:
+                if destroys_item:
+                    self.item_manager.delete_item(item_key)
+            else:
+                return {"error": f"Item not found: {item_key}"}
+
+        # Get new value
+        needs_record = self.needs_manager.get_needs(self.player_id)
+        new_value = getattr(needs_record, need)
+
+        return {
+            "success": True,
+            "need": need,
+            "activity": activity,
+            "old_value": old_value,
+            "new_value": new_value,
+            "change": new_value - old_value,
+            "item_consumed": item_key if (item_key and destroys_item) else None,
+            "message": f"Satisfied {need}: {old_value} -> {new_value}",
         }

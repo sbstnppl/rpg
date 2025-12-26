@@ -119,7 +119,32 @@ class GMNode:
         result = "\n".join(cleaned_lines).strip()
         result = re.sub(r"\n{3,}", "\n\n", result)
 
-        return result
+        # Strip "GM:" prefix if present (LLM sometimes starts responses this way)
+        if result.startswith("GM:"):
+            result = result[3:].strip()
+
+        # Remove inline bold (**text**) - keep the text
+        result = re.sub(r"\*\*([^*]+)\*\*", r"\1", result)
+
+        # Remove inline italic (*text*) - keep the text
+        result = re.sub(r"\*([^*]+)\*", r"\1", result)
+
+        # Remove inline code (`text`) - keep the text
+        result = re.sub(r"`([^`]+)`", r"\1", result)
+
+        # Remove mechanical status lines (e.g., "Your hunger decreases from...")
+        # These contain technical data like "56/100" or "peckish (56/100)"
+        result = re.sub(
+            r"\n*Your \w+ (increases?|decreases?) from[^\n]*\n*",
+            "",
+            result,
+            flags=re.IGNORECASE,
+        )
+
+        # Clean up any resulting extra whitespace
+        result = re.sub(r"\n{3,}", "\n\n", result)
+
+        return result.strip()
 
     def _clean_narrative(self, narrative: str) -> str:
         """Instance method wrapper for _clean_narrative_static."""
@@ -299,6 +324,7 @@ class GMNode:
                 system_prompt=GM_SYSTEM_PROMPT,
                 temperature=0.7,
                 max_tokens=2048,
+                think=False,  # Disable thinking - GM decisions are straightforward
             )
 
             # Accumulate any text content from this response
@@ -529,35 +555,70 @@ class GMNode:
         player_input: str,
         state_changes: list[StateChange],
     ) -> int:
-        """Estimate in-game minutes passed.
+        """Estimate in-game minutes passed based on tools called.
+
+        Uses tool calls to infer time rather than parsing player input,
+        which avoids false positives from keyword matching.
 
         Args:
-            player_input: The player's input.
+            player_input: The player's input (unused, kept for signature).
             state_changes: State changes that occurred.
 
         Returns:
             Estimated minutes.
         """
-        input_lower = player_input.lower()
-
         # Check for combat (quick actions)
         if any(tc.change_type == StateChangeType.DAMAGE for tc in state_changes):
-            return 1  # Combat round is quick
+            return 1  # Combat round
 
-        # Check for movement
-        if any(word in input_lower for word in ["go", "walk", "move", "travel"]):
-            return 5
+        # Infer time from tool calls
+        max_time = 1  # Default: 1 minute for simple actions
 
-        # Check for conversation
-        if any(word in input_lower for word in ["talk", "ask", "say", "tell"]):
-            return 2
+        for result in self.tool_results:
+            tool_name = result.get("name", "")
+            args = result.get("input", {})
 
-        # Check for observation
-        if any(word in input_lower for word in ["look", "examine", "search"]):
-            return 2
+            # Need satisfaction - longest activities
+            if tool_name == "satisfy_need":
+                need = args.get("need", "")
+                if need == "hunger":
+                    max_time = max(max_time, 15)  # Eating
+                elif need == "thirst":
+                    max_time = max(max_time, 3)   # Drinking
+                elif need == "stamina":
+                    max_time = max(max_time, 15)  # Resting
+                elif need == "hygiene":
+                    max_time = max(max_time, 20)  # Bathing
+                elif need == "social_connection":
+                    max_time = max(max_time, 10)  # Socializing
+                else:
+                    max_time = max(max_time, 5)   # Other needs
 
-        # Default
-        return 1
+            # Skill checks - brief focused actions
+            elif tool_name == "skill_check":
+                max_time = max(max_time, 2)
+
+            # Combat rolls
+            elif tool_name in ("attack_roll", "damage_entity"):
+                max_time = max(max_time, 1)
+
+            # Item manipulation - quick
+            elif tool_name in ("take_item", "drop_item", "give_item"):
+                max_time = max(max_time, 1)
+
+            # Entity creation - depends on type
+            elif tool_name == "create_entity":
+                max_time = max(max_time, 2)
+
+            # NPC attitude check - conversation context
+            elif tool_name == "get_npc_attitude":
+                max_time = max(max_time, 2)
+
+            # Stimulus application - just observation
+            elif tool_name == "apply_stimulus":
+                max_time = max(max_time, 1)
+
+        return max_time
 
     def _record_storage_observations(
         self,

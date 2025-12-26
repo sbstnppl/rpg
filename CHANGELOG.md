@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Item Manipulation & Need Satisfaction Tools** - New GM tools for direct game state changes
+  - `take_item(item_key)` - Player picks up items from scene/storage
+  - `drop_item(item_key)` - Player drops items at current location
+  - `give_item(item_key, recipient_key)` - Player gives items to NPCs
+  - `satisfy_need(need, amount, activity)` - Satisfy player needs (hunger, thirst, stamina, etc.)
+  - Tool-based time estimation (replaces fragile keyword matching)
+  - Enhanced GM prompt with explicit tool usage examples
+  - Key files: `src/gm/tools.py`, `src/gm/prompts.py`, `src/gm/gm_node.py`
+  - Issue tracking: `docs/issues/gm-pipeline-tool-gaps/`
+
 - **GM Pipeline Tools Expansion** - Extended GM tools from 5 to 15 with consistent architecture
   - StateChanges for mutations, Tools for queries/feedback
   - Renamed `CONSUME` to `SATISFY_NEED` - clearer for activities (sleeping, bathing)
