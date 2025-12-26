@@ -53,6 +53,27 @@ gm_node → validator_node → applier_node → END
 | `src/gm/context_builder.py` | Builds context for GM prompt |
 | `src/gm/prompts.py` | GM system prompt |
 | `src/gm/schemas.py` | GMResponse and StateChange schemas |
+| `src/gm/grounding.py` | GroundingManifest schema for entity validation |
+| `src/gm/grounding_validator.py` | Validates `[key:text]` references in GM output |
+
+### Grounding System
+
+The GM uses a grounding system to prevent entity hallucination:
+
+1. **`[key:text]` Format**: GM must reference entities as `[marcus_001:Marcus]` or `[sword_001:the iron sword]`
+2. **GroundingManifest**: Contains all valid entity keys (NPCs, items, storages, exits, inventory)
+3. **Validation**: After GM response, `GroundingValidator` checks:
+   - All `[key:text]` references exist in manifest
+   - Entity names aren't mentioned without `[key:text]` format
+4. **Retry Loop**: On validation failure, GM retries with error feedback (max 2 retries)
+5. **Key Stripping**: Before display, `[key:text]` is stripped to just `text`
+
+**Example Flow**:
+```
+GM Output: "[marcus_001:Marcus] waves at you from behind [counter_001:the counter]."
+Validation: ✓ marcus_001 in manifest, ✓ counter_001 in manifest
+Display: "Marcus waves at you from behind the counter."
+```
 
 ---
 
@@ -345,6 +366,7 @@ The GM pipeline uses StateChange for mechanical effects instead of dedicated too
 - [ ] Second-person narration ("you" not "the player")
 - [ ] No raw data structures in output
 - [ ] No hallucinated items/NPCs not in DB
+- [ ] Entity references use `[key:text]` format (stripped for display)
 
 #### B. Database Queries
 
@@ -614,6 +636,13 @@ FROM character_needs WHERE entity_id = ?;
 - Verify `activity_type` is set correctly (eating, drinking, sleeping, bathing, etc.)
 - Check `applier.py:_apply_satisfy_need()` is called
 
+### Grounding validation failing
+- Check `gm_node.py:_validate_grounding()` logs for invalid keys or unkeyed mentions
+- Verify entity exists in `GroundingManifest` (check `context_builder.build_grounding_manifest()`)
+- If GM mentions entity without `[key:text]` format, grounding will retry with feedback
+- Max 2 retries before invalid refs are stripped
+- Enable `grounding_log_only=True` to log issues without blocking
+
 ---
 
 ## Quick DB Connection
@@ -627,6 +656,7 @@ PGPASSWORD=bRXAKO0T8t23Wz3l9tyB psql -h 138.199.236.25 -U langgraphrpg -d langgr
 ## References
 
 - **New GM Pipeline**: `src/gm/`
+- **Grounding Tests**: `tests/test_gm/test_grounding.py` (36 unit tests)
 - **Legacy Pipeline**: `src/agents/nodes/game_master_node.py`
 - **Legacy Tools**: `src/agents/tools/gm_tools.py`
 - **Gameplay Testing Guide**: `.claude/docs/gameplay-testing-guide.md`
