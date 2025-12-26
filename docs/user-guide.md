@@ -71,10 +71,18 @@ rpg game start
 
 ### Pipeline Options
 
-The game supports two pipelines, selectable via `--pipeline`:
+The game supports four pipelines, selectable via `--pipeline`:
 
 ```bash
-# System-Authority pipeline (default, recommended)
+# GM pipeline (default, recommended)
+rpg game start --pipeline gm
+rpg game play --pipeline gm
+
+# Scene-First pipeline (new architecture)
+rpg game start --pipeline scene-first
+rpg game play --pipeline scene-first
+
+# System-Authority pipeline
 rpg game start --pipeline system-authority
 rpg game play --pipeline system-authority
 
@@ -83,15 +91,23 @@ rpg game start --pipeline legacy
 rpg game play --pipeline legacy
 ```
 
-**System-Authority Pipeline** (default):
+**GM Pipeline** (default):
+- Single LLM call with native tool use for mechanics
+- Rich context: full player state, location, NPCs, items in prompt
+- Tools: skill_check, attack_roll, damage_entity, create_entity
+
+**Scene-First Pipeline**:
+- Builds the world BEFORE narrating it
+- All entities exist in a scene manifest before narrator runs
+- Prevents orphaned entities and state/narrative drift
+
+**System-Authority Pipeline**:
 - System decides what happens mechanically, LLM describes it
 - Guaranteed consistency between narrative and game state
-- Faster, more reliable, better for most gameplay
 
 **Legacy Pipeline**:
 - LLM decides what happens AND narrates it
 - More creative freedom, but may have state/narrative drift
-- Use for testing or if you prefer the older style
 
 The unified game wizard guides you through:
 1. **Setting Selection** - Choose fantasy, contemporary, or sci-fi

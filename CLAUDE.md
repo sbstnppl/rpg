@@ -92,11 +92,11 @@ An agentic console-based RPG using LangGraph for multi-agent orchestration. The 
 
 | Category | Count |
 |----------|-------|
-| **Test Functions** | 3,186 across 134 test files |
-| **Manager Classes** | 52 specialized managers in `src/managers/` |
-| **Agent Nodes** | 18 LangGraph nodes in `src/agents/nodes/` |
-| **Database Models** | 29 model files in `src/database/models/` |
-| **CLI Commands** | 6 command modules in `src/cli/commands/` |
+| **Test Functions** | 3,372 across 156 test files |
+| **Manager Classes** | 53 specialized managers in `src/managers/` |
+| **Agent Nodes** | 24 LangGraph nodes in `src/agents/nodes/` |
+| **Database Models** | 28 model files in `src/database/models/` |
+| **CLI Commands** | 5 command modules in `src/cli/commands/` |
 
 *Update these counts when adding significant new components.*
 
@@ -243,7 +243,7 @@ tests/
 
 ### Commands
 ```bash
-# Run all tests (3186 tests, ~2.5 minutes)
+# Run all tests (3372 tests, ~2.5 minutes)
 pytest
 
 # Run specific test file
