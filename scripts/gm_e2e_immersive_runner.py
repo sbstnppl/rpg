@@ -330,6 +330,8 @@ class ImmersiveTestRunner:
                     expectations=expectations,
                     previous_responses=self.previous_responses,
                     expected_entities=expected_entities,
+                    # OOC responses may be identical for same factual queries (e.g., "what time is it?")
+                    skip_duplicate_check=is_ooc_scenario,
                 )
                 self.previous_responses.append(gm_response)
 

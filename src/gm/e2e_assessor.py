@@ -87,6 +87,7 @@ class GME2EAssessor:
         expectations: ActionExpectations,
         previous_responses: list[str] | None = None,
         expected_entities: list[str] | None = None,
+        skip_duplicate_check: bool = False,
     ) -> TurnAssessment:
         """Assess a complete turn.
 
@@ -99,12 +100,15 @@ class GME2EAssessor:
             expectations: Expected outcomes for this action.
             previous_responses: List of previous turn responses (for duplicate detection).
             expected_entities: List of entity names that should appear in narrative.
+            skip_duplicate_check: If True, don't flag duplicate responses as failures.
+                                  Useful for OOC queries where identical answers are expected.
 
         Returns:
             Complete turn assessment.
         """
         narrative_result = self._assess_narrative(
-            narrative, errors, expectations, previous_responses or []
+            narrative, errors, expectations, previous_responses or [],
+            skip_duplicate_check=skip_duplicate_check
         )
         tool_result = self._assess_tools(tool_calls, expectations)
         db_result = self._assess_db_changes(db_changes, expectations)
@@ -159,6 +163,7 @@ class GME2EAssessor:
         errors: list[str],
         expectations: ActionExpectations,
         previous_responses: list[str],
+        skip_duplicate_check: bool = False,
     ) -> AssessmentResult:
         """Assess narrative quality.
 
@@ -168,7 +173,7 @@ class GME2EAssessor:
         - No raw data structures
         - Second-person narration
         - No markdown formatting
-        - Not a duplicate of previous responses
+        - Not a duplicate of previous responses (unless skip_duplicate_check is True)
         """
         issues = []
 
@@ -176,12 +181,13 @@ class GME2EAssessor:
         if errors:
             issues.append(f"Errors occurred: {errors}")
 
-        # Check for duplicate responses (critical failure)
-        for i, prev in enumerate(previous_responses):
-            similarity = self._text_similarity(narrative, prev)
-            if similarity > 0.95:  # 95% similar = duplicate
-                issues.append(f"Response is duplicate of turn {i + 1} ({similarity:.0%} similar)")
-                break
+        # Check for duplicate responses (skip for OOC scenarios where same answer is expected)
+        if not skip_duplicate_check:
+            for i, prev in enumerate(previous_responses):
+                similarity = self._text_similarity(narrative, prev)
+                if similarity > 0.95:  # 95% similar = duplicate
+                    issues.append(f"Response is duplicate of turn {i + 1} ({similarity:.0%} similar)")
+                    break
 
         # Check length
         if len(narrative) < expectations.min_chars:
