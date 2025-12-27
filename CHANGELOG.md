@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **GM Entity Key-Text Format** - Fixed LLM outputting `[key]` instead of `[key:text]` format
+  - Added `fix_key_only_format()` to convert `[key]` → `[key:display_name]` using manifest lookup
+  - Updated `strip_key_references()` to accept optional manifest for auto-fix before stripping
+  - Prevents empty display text like "You take a bite of , savoring..."
+  - Key file: `src/gm/grounding_validator.py`
+  - Issue tracking: `docs/issues/gm-entity-key-text-format/`
+
 - **GM Grounding Retry Duplicate Responses** - Fixed narrative duplication after grounding validation retry
   - Grounding retry now includes tool result context in feedback message
   - Prevents LLM from re-describing scene instead of narrating action results

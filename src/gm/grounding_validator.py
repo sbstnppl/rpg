@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 # Captures: group(1)=key, group(2)=display text
 KEY_PATTERN = re.compile(r"\[([a-z0-9_]+):([^\]]+)\]")
 
+# Pattern to match [key] without :text (LLM format error)
+# Captures: group(1)=key
+# Negative lookahead (?!:) ensures we don't match the start of [key:text]
+KEY_ONLY_PATTERN = re.compile(r"\[([a-z0-9_]+)\](?!:)")
+
 
 class GroundingValidator:
     """Validates GM output against a grounding manifest.
@@ -255,16 +260,53 @@ class GroundingValidator:
         return errors
 
 
-def strip_key_references(text: str) -> str:
+def fix_key_only_format(text: str, manifest: GroundingManifest) -> str:
+    """Replace [key] with [key:display_name] using manifest lookup.
+
+    This is a bandaid for LLMs that don't consistently follow [key:text] format.
+    When the LLM outputs "[fresh_bread]" instead of "[fresh_bread:the bread]",
+    this function looks up the entity and fills in the display name.
+
+    Args:
+        text: Text potentially containing [key] references.
+        manifest: Grounding manifest with entity lookup.
+
+    Returns:
+        Text with [key] replaced by [key:display_name] if entity found.
+
+    Example:
+        "[fresh_bread]" → "[fresh_bread:Fresh Bread]" (if in manifest)
+        "[unknown_key]" → "[unknown_key]" (unchanged, not in manifest)
+    """
+
+    def replace_key(match: re.Match[str]) -> str:
+        key = match.group(1)
+        entity = manifest.get_entity(key)
+        if entity:
+            return f"[{key}:{entity.display_name}]"
+        return match.group(0)  # Keep original if not found
+
+    return KEY_ONLY_PATTERN.sub(replace_key, text)
+
+
+def strip_key_references(
+    text: str, manifest: GroundingManifest | None = None
+) -> str:
     """Strip [key:text] format from text, leaving just the text.
 
     Args:
         text: Text containing [key:text] references.
+        manifest: Optional manifest to fix [key] format before stripping.
+            If provided, [key] references are converted to [key:display_name]
+            before stripping, preventing empty display text.
 
     Returns:
         Text with [key:text] replaced by just text.
 
     Example:
         "[marcus_001:Marcus] waves at you" → "Marcus waves at you"
+        "[bread_001]" with manifest → "Fresh Bread" (looked up display name)
     """
+    if manifest is not None:
+        text = fix_key_only_format(text, manifest)
     return KEY_PATTERN.sub(r"\2", text)

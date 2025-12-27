@@ -15,7 +15,9 @@ from src.gm.grounding import (
 from src.gm.grounding_validator import (
     GroundingValidator,
     strip_key_references,
+    fix_key_only_format,
     KEY_PATTERN,
+    KEY_ONLY_PATTERN,
 )
 
 
@@ -318,6 +320,112 @@ class TestKeyPattern:
         assert len(matches) == 0
 
 
+class TestKeyOnlyPattern:
+    """Tests for KEY_ONLY_PATTERN regex."""
+
+    def test_matches_key_only(self):
+        """Test pattern matches [key] without colon."""
+        text = "[fresh_bread]"
+        matches = KEY_ONLY_PATTERN.findall(text)
+        assert len(matches) == 1
+        assert matches[0] == "fresh_bread"
+
+    def test_no_match_key_with_text(self):
+        """Test pattern doesn't match [key:text]."""
+        text = "[marcus_001:Marcus]"
+        matches = KEY_ONLY_PATTERN.findall(text)
+        assert len(matches) == 0
+
+    def test_matches_multiple_key_only(self):
+        """Test pattern matches multiple [key] references."""
+        text = "You see [bread_001] and [sword_001] on the table."
+        matches = KEY_ONLY_PATTERN.findall(text)
+        assert len(matches) == 2
+        assert "bread_001" in matches
+        assert "sword_001" in matches
+
+    def test_mixed_formats(self):
+        """Test pattern only matches [key], not [key:text]."""
+        text = "[bread_001] and [marcus_001:Marcus]"
+        matches = KEY_ONLY_PATTERN.findall(text)
+        assert len(matches) == 1
+        assert matches[0] == "bread_001"
+
+
+# =============================================================================
+# fix_key_only_format Tests
+# =============================================================================
+
+
+class TestFixKeyOnlyFormat:
+    """Tests for fix_key_only_format function."""
+
+    @pytest.fixture
+    def manifest(self) -> GroundingManifest:
+        """Create manifest with test entities."""
+        return GroundingManifest(
+            location_key="bakery_001",
+            location_display="The Bakery",
+            player_key="player_001",
+            player_display="You",
+            npcs={
+                "marcus_baker": GroundedEntity(
+                    key="marcus_baker",
+                    display_name="Marcus",
+                    entity_type="npc",
+                    short_description="the baker",
+                ),
+            },
+            items_at_location={
+                "fresh_bread": GroundedEntity(
+                    key="fresh_bread",
+                    display_name="Fresh Bread",
+                    entity_type="item",
+                ),
+            },
+            inventory={},
+            equipped={},
+            storages={},
+            exits={},
+        )
+
+    def test_fix_key_only_item(self, manifest: GroundingManifest):
+        """Test [fresh_bread] -> [fresh_bread:Fresh Bread]."""
+        text = "You take a bite of [fresh_bread]."
+        result = fix_key_only_format(text, manifest)
+        assert result == "You take a bite of [fresh_bread:Fresh Bread]."
+
+    def test_fix_key_only_npc(self, manifest: GroundingManifest):
+        """Test [marcus_baker] -> [marcus_baker:Marcus]."""
+        text = "[marcus_baker] waves at you."
+        result = fix_key_only_format(text, manifest)
+        assert result == "[marcus_baker:Marcus] waves at you."
+
+    def test_unknown_key_unchanged(self, manifest: GroundingManifest):
+        """Test [unknown_key] stays as [unknown_key]."""
+        text = "You see [unknown_key] on the floor."
+        result = fix_key_only_format(text, manifest)
+        assert result == "You see [unknown_key] on the floor."
+
+    def test_key_text_format_unchanged(self, manifest: GroundingManifest):
+        """Test [key:text] stays as [key:text]."""
+        text = "[marcus_baker:the baker Marcus] waves at you."
+        result = fix_key_only_format(text, manifest)
+        assert result == "[marcus_baker:the baker Marcus] waves at you."
+
+    def test_mixed_format_in_sentence(self, manifest: GroundingManifest):
+        """Test both [key] and [key:text] in same sentence."""
+        text = "You eat [fresh_bread] that [marcus_baker:Marcus] gave you."
+        result = fix_key_only_format(text, manifest)
+        assert result == "You eat [fresh_bread:Fresh Bread] that [marcus_baker:Marcus] gave you."
+
+    def test_multiple_key_only_references(self, manifest: GroundingManifest):
+        """Test multiple [key] references in one text."""
+        text = "[marcus_baker] hands you [fresh_bread]."
+        result = fix_key_only_format(text, manifest)
+        assert result == "[marcus_baker:Marcus] hands you [fresh_bread:Fresh Bread]."
+
+
 # =============================================================================
 # strip_key_references Tests
 # =============================================================================
@@ -366,6 +474,65 @@ class TestStripKeyReferences:
         text = "[marcus_001:MARCUS] SHOUTS AT YOU."
         result = strip_key_references(text)
         assert result == "MARCUS SHOUTS AT YOU."
+
+
+class TestStripKeyReferencesWithManifest:
+    """Tests for strip_key_references with manifest parameter."""
+
+    @pytest.fixture
+    def manifest(self) -> GroundingManifest:
+        """Create manifest with test entities."""
+        return GroundingManifest(
+            location_key="bakery_001",
+            location_display="The Bakery",
+            player_key="player_001",
+            player_display="You",
+            npcs={
+                "marcus_baker": GroundedEntity(
+                    key="marcus_baker",
+                    display_name="Marcus",
+                    entity_type="npc",
+                ),
+            },
+            items_at_location={
+                "fresh_bread": GroundedEntity(
+                    key="fresh_bread",
+                    display_name="Fresh Bread",
+                    entity_type="item",
+                ),
+            },
+            inventory={},
+            equipped={},
+            storages={},
+            exits={},
+        )
+
+    def test_strip_key_only_with_manifest(self, manifest: GroundingManifest):
+        """Test stripping [key] format uses manifest for display name."""
+        text = "You take a bite of [fresh_bread]."
+        result = strip_key_references(text, manifest)
+        assert result == "You take a bite of Fresh Bread."
+
+    def test_strip_mixed_with_manifest(self, manifest: GroundingManifest):
+        """Test stripping mixed [key] and [key:text] with manifest."""
+        text = "[fresh_bread] from [marcus_baker:the baker Marcus]."
+        result = strip_key_references(text, manifest)
+        assert result == "Fresh Bread from the baker Marcus."
+
+    def test_strip_key_only_unknown_with_manifest(self, manifest: GroundingManifest):
+        """Test [unknown_key] without manifest match leaves empty."""
+        text = "You see [unknown_key]."
+        result = strip_key_references(text, manifest)
+        # Unknown key stays as [unknown_key] since it's not stripped by KEY_PATTERN
+        assert result == "You see [unknown_key]."
+
+    def test_strip_without_manifest_leaves_key_only_empty(self):
+        """Test without manifest, [key] format becomes empty."""
+        text = "You take a bite of [fresh_bread], savoring..."
+        result = strip_key_references(text)
+        # Without manifest, [fresh_bread] doesn't match KEY_PATTERN
+        # so it stays as-is (which is the current bug behavior)
+        assert result == "You take a bite of [fresh_bread], savoring..."
 
 
 # =============================================================================
