@@ -148,6 +148,15 @@ def narrative_quality() -> SuccessCriterion:
     )
 
 
+def ooc_response_quality() -> SuccessCriterion:
+    """Criterion: OOC response is informative (shorter than narrative)."""
+    return SuccessCriterion(
+        description="OOC response is informative",
+        check_type="narrative_quality",  # Reuse check, just with lower threshold
+        params={"min_chars": 20},
+    )
+
+
 # =============================================================================
 # DIALOG SCENARIOS (10+)
 # =============================================================================
@@ -1637,7 +1646,7 @@ OOC_TIME = ImmersiveScenario(
     setup_context="Player wants to know game time",
     success_criteria=[
         time_passed(0, 0),  # OOC should not advance time
-        narrative_quality(),
+        ooc_response_quality(),
     ],
     min_turns=1,
     max_turns=2,
@@ -1651,7 +1660,7 @@ OOC_INVENTORY = ImmersiveScenario(
     setup_context="Player wants to check inventory",
     success_criteria=[
         time_passed(0, 0),
-        narrative_quality(),
+        ooc_response_quality(),
     ],
     min_turns=1,
     max_turns=2,
@@ -1665,7 +1674,7 @@ OOC_NEEDS = ImmersiveScenario(
     setup_context="Player wants to know their status",
     success_criteria=[
         time_passed(0, 0),
-        narrative_quality(),
+        ooc_response_quality(),
     ],
     min_turns=1,
     max_turns=2,
@@ -1679,7 +1688,7 @@ OOC_LOCATION = ImmersiveScenario(
     setup_context="Player wants location info",
     success_criteria=[
         time_passed(0, 0),
-        narrative_quality(),
+        ooc_response_quality(),
     ],
     min_turns=1,
     max_turns=2,
@@ -1693,7 +1702,7 @@ OOC_SKILLS = ImmersiveScenario(
     setup_context="Player wants skill info",
     success_criteria=[
         time_passed(0, 0),
-        narrative_quality(),
+        ooc_response_quality(),
     ],
     min_turns=1,
     max_turns=2,
