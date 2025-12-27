@@ -465,7 +465,7 @@ class TestBuildConversationMessages:
             entity_key="player_001",
             display_name="Finn",
         )
-        # Create some turn history
+        # Create some turn history (responses must be >= 30 chars to pass validation)
         for i in range(1, 4):
             create_turn(
                 db_session,
@@ -474,7 +474,7 @@ class TestBuildConversationMessages:
                 game_day_at_turn=1,
                 game_time_at_turn="10:00",
                 player_input=f"Player action {i}",
-                gm_response=f"GM response {i}",
+                gm_response=f"You walk through the village square, taking in the sights. Turn {i}.",
             )
 
         builder = GMContextBuilder(db_session, game_session)
@@ -505,13 +505,14 @@ class TestBuildConversationMessages:
             entity_key="player_001",
             display_name="Finn",
         )
+        # Response must be >= 30 chars to pass validation
         create_turn(
             db_session,
             game_session,
             turn_number=1,
             game_day_at_turn=1,
             player_input="Previous action",
-            gm_response="Previous response",
+            gm_response="You step forward and examine your surroundings carefully.",
         )
 
         builder = GMContextBuilder(db_session, game_session)
