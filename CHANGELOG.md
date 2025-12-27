@@ -108,6 +108,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key files: `src/gm/gm_node.py`, `src/gm/tools.py`, `src/llm/anthropic_provider.py`
 
 ### Added
+- **Player Movement Tool** - `move_to` tool for updating player location when traveling
+  - Added `move_to(destination, travel_method)` tool with trigger words: go, walk, leave, travel, enter, exit
+  - Fuzzy-matches destination names or auto-creates new locations
+  - Calculates realistic travel time based on location hierarchy (2-10 min base, modifiers: run=0.5x, sneak=2x)
+  - Added prompt instructions in MANDATORY TOOL CALLS section
+  - Added 8 unit tests for movement scenarios
+  - Key files: `src/gm/tools.py`, `src/gm/prompts.py`
+  - Issue tracking: `docs/issues/movement-without-state-update/`
+
 - **Minimal Context Mode for Local LLMs** - 70-80% token reduction for Ollama/vLLM
   - Action classifier detects action type from keywords (look, eat, attack, etc.)
   - Pre-fetches only relevant context based on action category

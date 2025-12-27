@@ -802,3 +802,289 @@ class TestGetTimeTool:
 
         assert result["elapsed_today"] == "just started"
         assert result["elapsed_minutes"] == 0
+
+
+class TestMoveTo:
+    """Tests for the move_to tool."""
+
+    def test_move_to_existing_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """move_to updates player location to existing location."""
+        from src.managers.location_manager import LocationManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        player_ext = NPCExtension(entity_id=player.id, current_location="tavern")
+        db_session.add(player_ext)
+
+        # Create current location
+        loc_manager = LocationManager(db_session, game_session)
+        loc_manager.create_location(
+            location_key="tavern",
+            display_name="The Tavern",
+            description="A cozy tavern.",
+        )
+
+        # Create target location
+        loc_manager.create_location(
+            location_key="village_square",
+            display_name="Village Square",
+            description="The central square of the village.",
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id, location_key="tavern")
+        result = tools.move_to(destination="village_square")
+
+        assert result["success"] is True
+        assert result["to_location"] == "village_square"
+        assert result["display_name"] == "Village Square"
+        assert result["travel_time_minutes"] >= 1
+
+        # Verify DB updated
+        db_session.refresh(player_ext)
+        assert player_ext.current_location == "village_square"
+
+    def test_move_to_fuzzy_match(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """move_to uses fuzzy matching for destination."""
+        from src.managers.location_manager import LocationManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        player_ext = NPCExtension(entity_id=player.id, current_location="tavern")
+        db_session.add(player_ext)
+
+        # Create current and target locations
+        loc_manager = LocationManager(db_session, game_session)
+        loc_manager.create_location(
+            location_key="tavern",
+            display_name="The Tavern",
+            description="A cozy tavern.",
+        )
+        loc_manager.create_location(
+            location_key="farmhouse_well",
+            display_name="The Well",
+            description="A stone well near the farmhouse.",
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id, location_key="tavern")
+
+        # Use informal name - should fuzzy match to farmhouse_well
+        result = tools.move_to(destination="the well")
+
+        assert result["success"] is True
+        assert result["to_location"] == "farmhouse_well"
+
+    def test_move_to_creates_new_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """move_to creates new location if not found."""
+        from src.managers.location_manager import LocationManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        player_ext = NPCExtension(entity_id=player.id, current_location="tavern")
+        db_session.add(player_ext)
+
+        # Create current location only
+        loc_manager = LocationManager(db_session, game_session)
+        loc_manager.create_location(
+            location_key="tavern",
+            display_name="The Tavern",
+            description="A cozy tavern.",
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id, location_key="tavern")
+        result = tools.move_to(destination="the old mill")
+
+        assert result["success"] is True
+        assert "mill" in result["to_location"].lower()
+
+        # Verify location was created
+        loc = loc_manager.get_location(result["to_location"])
+        assert loc is not None
+        assert "mill" in loc.display_name.lower()
+
+    def test_move_to_running_faster(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Running reduces travel time compared to walking."""
+        from src.managers.location_manager import LocationManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        player_ext = NPCExtension(entity_id=player.id, current_location="tavern")
+        db_session.add(player_ext)
+
+        loc_manager = LocationManager(db_session, game_session)
+        loc_manager.create_location(
+            location_key="tavern",
+            display_name="The Tavern",
+            description="A cozy tavern.",
+        )
+        loc_manager.create_location(
+            location_key="village_square",
+            display_name="Village Square",
+            description="The central square.",
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id, location_key="tavern")
+
+        walk_result = tools.move_to(destination="village_square", travel_method="walk")
+
+        # Reset location for second test
+        player_ext.current_location = "tavern"
+        tools.location_key = "tavern"
+        db_session.flush()
+
+        run_result = tools.move_to(destination="village_square", travel_method="run")
+
+        # Running should be faster (or equal for very short distances)
+        assert run_result["travel_time_minutes"] <= walk_result["travel_time_minutes"]
+
+    def test_move_to_same_location_zero_time(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Moving to current location returns zero time."""
+        from src.managers.location_manager import LocationManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        player_ext = NPCExtension(entity_id=player.id, current_location="tavern")
+        db_session.add(player_ext)
+
+        loc_manager = LocationManager(db_session, game_session)
+        loc_manager.create_location(
+            location_key="tavern",
+            display_name="The Tavern",
+            description="A cozy tavern.",
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id, location_key="tavern")
+        result = tools.move_to(destination="tavern")
+
+        assert result["success"] is True
+        assert result["travel_time_minutes"] == 0
+
+    def test_move_to_no_destination_error(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """move_to returns error when no destination provided."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id, location_key="tavern")
+        result = tools.move_to(destination="")
+
+        assert result["success"] is False
+        assert "error" in result
+
+    def test_move_to_sneaking_slower(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Sneaking takes longer than walking."""
+        from src.managers.location_manager import LocationManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        player_ext = NPCExtension(entity_id=player.id, current_location="tavern")
+        db_session.add(player_ext)
+
+        loc_manager = LocationManager(db_session, game_session)
+        loc_manager.create_location(
+            location_key="tavern",
+            display_name="The Tavern",
+            description="A cozy tavern.",
+        )
+        loc_manager.create_location(
+            location_key="village_square",
+            display_name="Village Square",
+            description="The central square.",
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id, location_key="tavern")
+
+        walk_result = tools.move_to(destination="village_square", travel_method="walk")
+
+        # Reset location
+        player_ext.current_location = "tavern"
+        tools.location_key = "tavern"
+        db_session.flush()
+
+        sneak_result = tools.move_to(destination="village_square", travel_method="sneak")
+
+        # Sneaking should take longer
+        assert sneak_result["travel_time_minutes"] >= walk_result["travel_time_minutes"]
+
+    def test_move_to_updates_tools_location_key(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """move_to updates the GMTools instance location_key."""
+        from src.managers.location_manager import LocationManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        player_ext = NPCExtension(entity_id=player.id, current_location="tavern")
+        db_session.add(player_ext)
+
+        loc_manager = LocationManager(db_session, game_session)
+        loc_manager.create_location(
+            location_key="tavern",
+            display_name="The Tavern",
+            description="A cozy tavern.",
+        )
+        loc_manager.create_location(
+            location_key="village_square",
+            display_name="Village Square",
+            description="The central square.",
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id, location_key="tavern")
+        assert tools.location_key == "tavern"
+
+        tools.move_to(destination="village_square")
+
+        # Instance should be updated for subsequent tool calls
+        assert tools.location_key == "village_square"

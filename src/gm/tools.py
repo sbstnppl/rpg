@@ -29,6 +29,7 @@ from src.gm.schemas import (
 )
 from src.managers.entity_manager import EntityManager
 from src.managers.item_manager import ItemManager
+from src.managers.location_manager import LocationManager
 from src.managers.relationship_manager import RelationshipManager
 from src.managers.task_manager import TaskManager
 from src.managers.needs import NeedsManager
@@ -71,6 +72,7 @@ class GMTools:
 
         self._entity_manager: EntityManager | None = None
         self._item_manager: ItemManager | None = None
+        self._location_manager: LocationManager | None = None
         self._relationship_manager: RelationshipManager | None = None
         self._task_manager: TaskManager | None = None
         self._needs_manager: NeedsManager | None = None
@@ -86,6 +88,12 @@ class GMTools:
         if self._item_manager is None:
             self._item_manager = ItemManager(self.db, self.game_session)
         return self._item_manager
+
+    @property
+    def location_manager(self) -> LocationManager:
+        if self._location_manager is None:
+            self._location_manager = LocationManager(self.db, self.game_session)
+        return self._location_manager
 
     @property
     def relationship_manager(self) -> RelationshipManager:
@@ -659,6 +667,34 @@ class GMTools:
                         },
                     },
                     "required": ["item_key", "recipient_key"],
+                },
+            },
+            {
+                "name": "move_to",
+                "description": (
+                    "Move the player to a new location. Use when player travels to a different area.\n\n"
+                    "TRIGGER WORDS: go, walk, leave, travel, head, enter, exit, return, move to, explore\n\n"
+                    "Examples:\n"
+                    "- 'I leave the tavern' -> move_to(destination='village_square')\n"
+                    "- 'I go to the well' -> move_to(destination='the well')\n"
+                    "- 'I head home' -> move_to(destination='player_home')\n\n"
+                    "The tool will resolve the destination (fuzzy match or create new), "
+                    "calculate realistic travel time, and update the player's location."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "destination": {
+                            "type": "string",
+                            "description": "Location key or display name to travel to",
+                        },
+                        "travel_method": {
+                            "type": "string",
+                            "enum": ["walk", "run", "sneak"],
+                            "description": "How player is traveling (default: walk)",
+                        },
+                    },
+                    "required": ["destination"],
                 },
             },
             {
@@ -2021,6 +2057,125 @@ class GMTools:
             "item_consumed": item_key if (item_key and destroys_item) else None,
             "message": f"Satisfied {need}: {old_value} -> {new_value}",
         }
+
+    def move_to(
+        self,
+        destination: str,
+        travel_method: str = "walk",
+    ) -> dict[str, Any]:
+        """Move player to a new location.
+
+        Args:
+            destination: Location key or display name to travel to.
+            travel_method: How to travel (walk, run, sneak).
+
+        Returns:
+            Result dict with new location info and travel time.
+        """
+        if not destination:
+            return {"success": False, "error": "No destination provided"}
+
+        original_location = self.location_key
+
+        # Try to fuzzy match existing location
+        location = self.location_manager.fuzzy_match_location(destination)
+
+        if not location:
+            # Auto-create new location
+            location = self.location_manager.resolve_or_create_location(
+                location_text=destination,
+                parent_hint=self.location_key,
+                category="exterior",
+                description=f"A location known as {destination}.",
+            )
+
+        # Calculate realistic travel time
+        travel_time = self._calculate_travel_time(
+            self.location_key,
+            location.location_key,
+            travel_method,
+        )
+
+        # Update player location
+        self.location_manager.set_player_location(location.location_key)
+
+        # Update instance location_key for subsequent tools in same turn
+        self.location_key = location.location_key
+
+        return {
+            "success": True,
+            "from_location": original_location,
+            "to_location": location.location_key,
+            "display_name": location.display_name,
+            "description": location.description or "",
+            "travel_time_minutes": travel_time,
+            "message": f"Traveled to {location.display_name} ({travel_time} min)",
+        }
+
+    def _calculate_travel_time(
+        self,
+        from_key: str | None,
+        to_key: str,
+        method: str,
+    ) -> int:
+        """Calculate realistic travel time between locations.
+
+        Uses location hierarchy to determine distance:
+        - Same location: 0 min
+        - Same parent (adjacent rooms/areas): 2 min base
+        - Parent-child (entering/exiting): 2 min base
+        - Different areas: 10 min base
+
+        Travel method modifiers:
+        - walk: 1.0x
+        - run: 0.5x
+        - sneak: 2.0x
+
+        Args:
+            from_key: Origin location key.
+            to_key: Destination location key.
+            method: Travel method (walk, run, sneak).
+
+        Returns:
+            Travel time in minutes (minimum 1).
+        """
+        # Same location edge case
+        if from_key == to_key:
+            return 0
+
+        # Default base time if we can't determine relationship
+        base_time = 5
+
+        if from_key:
+            from_loc = self.location_manager.get_location(from_key)
+            to_loc = self.location_manager.get_location(to_key)
+
+            if from_loc and to_loc:
+                # Same parent (adjacent rooms/areas): 2 min
+                if (
+                    from_loc.parent_location_id is not None
+                    and from_loc.parent_location_id == to_loc.parent_location_id
+                ):
+                    base_time = 2
+                # Parent-child relationship (entering/exiting): 2 min
+                elif (
+                    from_loc.parent_location_id == to_loc.id
+                    or to_loc.parent_location_id == from_loc.id
+                ):
+                    base_time = 2
+                # Different areas: 10 min
+                else:
+                    base_time = 10
+
+        # Apply travel method modifier
+        method_multipliers = {
+            "walk": 1.0,
+            "run": 0.5,
+            "sneak": 2.0,
+        }
+        multiplier = method_multipliers.get(method, 1.0)
+
+        return max(1, int(base_time * multiplier))
 
     # =========================================================================
     # Context-Fetching Tools for Minimal Context Mode

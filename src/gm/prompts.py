@@ -63,6 +63,14 @@ TRIGGER: Before generating ANY NPC dialogue, check their attitude toward the pla
 - get_npc_attitude(from_entity="npc_key", to_entity="player_key")
 WHY: NPCs should respond based on how they actually feel about the player!
 
+### PLAYER MOVEMENT → move_to
+TRIGGER WORDS: go, walk, leave, travel, head, enter, exit, return, move to, explore
+- "I leave the tavern" → move_to(destination="village_square")
+- "I go to the well" → move_to(destination="the well")
+- "I head home" → move_to(destination="player_home")
+- "I explore the village" → move_to(destination="village")
+WHY: If you describe movement without calling move_to, the player's location won't update!
+
 ⚠️ NEVER narrate an action from the above categories without calling its tool first.
 The tool call updates the game state. Your narrative describes what happened.
 
