@@ -37,6 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key files: `src/gm/gm_node.py`, `src/gm/tools.py`, `src/llm/anthropic_provider.py`
 
 ### Added
+- **GM Pipeline Observability** - Real-time visibility into long-running E2E tests
+  - New `src/observability/` module with observer pattern architecture
+  - `RichConsoleObserver` renders colored console output with phase timings
+  - Events: PhaseStart/End, LLMCallStart/End, ToolExecution, Validation
+  - `--verbose` flag shows pipeline phases, LLM calls, tool executions
+  - Single `live.log` file for `tail -f` monitoring (replaces per-scenario logs)
+  - Key files: `src/observability/`, `src/gm/gm_node.py`, `scripts/gm_e2e_immersive_runner.py`
+
 - **Immersive E2E Test Runner** - LLM-driven gameplay testing with natural player behavior
   - `TestPlayerAgent` uses Ollama qwen3:32b to decide contextually appropriate actions
   - 100 goal-based scenarios across 20 categories (5+ tests per need type)

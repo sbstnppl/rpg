@@ -653,6 +653,39 @@ Enable with `LOG_LLM_CALLS=true`:
 - Logs all prompts and responses to markdown files
 - Structure: `logs/llm/session_{id}/turn_XXX_timestamp_calltype.md`
 
+## Pipeline Observability
+
+The GM pipeline supports real-time visibility into execution through an observer pattern.
+
+### Architecture
+```
+GMNode --emits--> Events --to--> ObservabilityHook --renders--> RichConsoleObserver
+```
+
+### Events
+- **PhaseStartEvent/PhaseEndEvent**: Track pipeline phases (context_building, llm_tool_loop)
+- **LLMCallStartEvent/LLMCallEndEvent**: Track each LLM call with token counts and timing
+- **ToolExecutionEvent**: Track tool calls with arguments, results, and duration
+- **ValidationEvent**: Track grounding and character validation attempts
+
+### Components
+- **ObservabilityHook** (protocol): Interface for receiving events
+- **NullHook**: No-op implementation (default when observability disabled)
+- **RichConsoleObserver**: Pretty console output with Rich library
+
+### Usage
+```bash
+# E2E tests with verbose output
+python scripts/gm_e2e_immersive_runner.py --verbose
+
+# Watch log file in separate terminal
+tail -f logs/gm_e2e/live.log
+```
+
+**Key files**: `src/observability/`, `src/gm/gm_node.py`
+
+---
+
 ## State Persistence
 
 ### Immutable Turn History

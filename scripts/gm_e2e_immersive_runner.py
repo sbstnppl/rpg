@@ -137,6 +137,8 @@ class ImmersiveTestRunner:
         log_dir: Path | None = None,
         player_model: str = "qwen3:32b",
         ollama_url: str = "http://localhost:11434",
+        verbose: bool = False,
+        per_scenario_logs: bool = False,
     ):
         """Initialize the immersive test runner.
 
@@ -144,15 +146,25 @@ class ImmersiveTestRunner:
             log_dir: Custom log directory. Defaults to logs/gm_e2e.
             player_model: Ollama model for test player.
             ollama_url: Ollama server URL.
+            verbose: Show detailed pipeline progress.
+            per_scenario_logs: Create separate log file per scenario.
         """
         self.log_dir = log_dir or Path("logs/gm_e2e")
         self.error_dump_path = self.log_dir / "gm_e2e_error.md"
-        self.logger = GME2ELogger(self.log_dir)
+        self.logger = GME2ELogger(self.log_dir, per_scenario_logs=per_scenario_logs)
         self.player_agent = TestPlayerAgent(
             model=player_model,
             ollama_url=ollama_url,
         )
         self.error_tracker = ErrorTracker()
+        self.verbose = verbose
+
+        # Create observability hook if verbose mode
+        if verbose:
+            from src.observability.console_observer import RichConsoleObserver
+            self.observer = RichConsoleObserver(show_tool_details=True)
+        else:
+            self.observer = None
 
     async def run_scenario(
         self, scenario: ImmersiveScenario
@@ -214,7 +226,11 @@ class ImmersiveTestRunner:
             current_location = location
 
             for turn_num in range(1, scenario.max_turns + 1):
-                print(f"  Turn {turn_num}: \"{current_action[:50]}...\" ", end="", flush=True)
+                if self.verbose:
+                    # Verbose mode: newline before turn, observer will print details
+                    print(f"\n  Turn {turn_num}: \"{current_action[:50]}...\"")
+                else:
+                    print(f"  Turn {turn_num}: \"{current_action[:50]}...\" ", end="", flush=True)
 
                 # Capture DB state before
                 db_before = self._snapshot_db(db, session_id, player_id)
@@ -293,7 +309,11 @@ class ImmersiveTestRunner:
 
                 # Print result
                 status = "PASS" if passed else "FAIL"
-                print(f"{status} ({len(gm_response)} chars, {time_passed} min)")
+                if self.verbose:
+                    # Verbose mode: print on new line after observer output
+                    print(f"  -> {status} ({len(gm_response)} chars, {time_passed} min, {duration:.1f}s)")
+                else:
+                    print(f"{status} ({len(gm_response)} chars, {time_passed} min)")
 
                 if issues:
                     for issue in issues[:2]:  # Show first 2 issues
@@ -738,6 +758,10 @@ class ImmersiveTestRunner:
         location: str,
     ) -> dict[str, Any]:
         """Run a single turn through the GM pipeline."""
+        # Reset observer state for new turn if verbose
+        if self.observer:
+            self.observer.reset()
+
         state = {
             "session_id": game_session.id,
             "player_id": player.id,
@@ -746,6 +770,7 @@ class ImmersiveTestRunner:
             "turn_number": turn_number,
             "_db": db,
             "_game_session": game_session,
+            "_observability_hook": self.observer,  # Pass observer through state
             "roll_mode": "auto",
             "_gm_response_obj": None,
             "gm_response": "",
@@ -918,12 +943,18 @@ async def main():
     parser.add_argument("--ollama-url", default="http://localhost:11434", help="Ollama server URL")
     parser.add_argument("--log-dir", type=Path, help="Custom log directory")
     parser.add_argument("--no-stop", action="store_true", help="Don't stop on fundamental errors")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Show detailed pipeline progress (phases, LLM calls, tools)")
+    parser.add_argument("--per-scenario-logs", action="store_true",
+                        help="Create separate log file per scenario instead of single live.log")
     args = parser.parse_args()
 
     runner = ImmersiveTestRunner(
         log_dir=args.log_dir,
         player_model=args.model,
         ollama_url=args.ollama_url,
+        verbose=args.verbose,
+        per_scenario_logs=args.per_scenario_logs,
     )
 
     # Determine which scenarios to run
@@ -945,6 +976,11 @@ async def main():
 
     print(f"Running {len(scenarios)} immersive scenario(s)...")
     print(f"Player agent model: {args.model}")
+    if args.verbose:
+        print(f"Verbose mode: ON (showing pipeline details)")
+    log_file = runner.log_dir / ("live.log" if not args.per_scenario_logs else "[per-scenario]")
+    print(f"Log file: {log_file}")
+    print()
 
     results = await runner.run_all(
         scenarios=scenarios,

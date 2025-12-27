@@ -4,9 +4,11 @@ Creates a single combined markdown log file per test run containing:
 - Session metadata
 - Each turn's context, response, tools, and assessment
 - Summary of all results
+
+By default, appends to a single `live.log` file for easy `tail -f` monitoring.
+Use `per_scenario_logs=True` for separate log files per scenario.
 """
 
-import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -72,16 +74,28 @@ class ScenarioLog:
 
 
 class GME2ELogger:
-    """Single-file markdown logger for E2E tests."""
+    """Single-file markdown logger for E2E tests.
 
-    def __init__(self, log_dir: Path | str = "logs/gm_e2e"):
+    By default, appends to `live.log` for real-time monitoring with `tail -f`.
+    """
+
+    LIVE_LOG_NAME = "live.log"
+
+    def __init__(
+        self,
+        log_dir: Path | str = "logs/gm_e2e",
+        per_scenario_logs: bool = False,
+    ):
         """Initialize the logger.
 
         Args:
             log_dir: Directory to write log files to.
+            per_scenario_logs: If True, create separate log file per scenario.
+                             If False (default), append to single live.log.
         """
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.per_scenario_logs = per_scenario_logs
         self.current_log: ScenarioLog | None = None
         self._log_path: Path | None = None
 
@@ -116,14 +130,30 @@ class GME2ELogger:
         )
 
         # Create log file path
-        timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S")
-        safe_name = scenario_name.lower().replace(" ", "_")
-        self._log_path = self.log_dir / f"run_{timestamp_str}_{safe_name}.md"
-
-        # Write header immediately
-        self._write_header()
+        if self.per_scenario_logs:
+            # Separate log file per scenario
+            timestamp_str = timestamp.strftime("%Y%m%d_%H%M%S")
+            safe_name = scenario_name.lower().replace(" ", "_")
+            self._log_path = self.log_dir / f"run_{timestamp_str}_{safe_name}.md"
+            # Write header (overwrite)
+            self._write_header()
+        else:
+            # Single live.log file (append mode)
+            self._log_path = self.log_dir / self.LIVE_LOG_NAME
+            # Write separator and header (append)
+            self._write_run_separator()
+            self._write_header(append=True)
 
         return self._log_path
+
+    def _write_run_separator(self) -> None:
+        """Write a separator for new run in live.log."""
+        if self._log_path is None:
+            return
+
+        separator = "\n\n" + "=" * 70 + "\n"
+        with self._log_path.open("a", encoding="utf-8") as f:
+            f.write(separator)
 
     def log_turn(self, turn: TurnLog) -> None:
         """Log a completed turn.
@@ -152,8 +182,12 @@ class GME2ELogger:
         self.current_log = None
         return result
 
-    def _write_header(self) -> None:
-        """Write the log file header."""
+    def _write_header(self, append: bool = False) -> None:
+        """Write the log file header.
+
+        Args:
+            append: If True, append to file. If False, overwrite.
+        """
         if self._log_path is None or self.current_log is None:
             return
 
@@ -172,7 +206,11 @@ class GME2ELogger:
             "",
         ]
 
-        self._log_path.write_text("\n".join(lines), encoding="utf-8")
+        if append:
+            with self._log_path.open("a", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+        else:
+            self._log_path.write_text("\n".join(lines), encoding="utf-8")
 
     def _append_turn(self, turn: TurnLog) -> None:
         """Append a turn to the log file."""

@@ -7,7 +7,8 @@ Handles tool execution loop for skill checks, combat, and entity creation.
 import json
 import logging
 import re
-from typing import Any
+import time
+from typing import Any, TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
@@ -23,6 +24,9 @@ from src.gm.grounding_validator import GroundingValidator, strip_key_references
 from src.gm.tools import GMTools
 from src.gm.schemas import GMResponse, StateChange, NewEntity, StateChangeType
 # GM_SYSTEM_PROMPT is now built dynamically by context_builder.build_system_prompt()
+
+if TYPE_CHECKING:
+    from src.observability.hooks import ObservabilityHook
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +222,7 @@ class GMNode:
         location_key: str,
         roll_mode: str = "auto",
         llm_provider: LLMProvider | None = None,
+        observability_hook: "ObservabilityHook | None" = None,
     ) -> None:
         """Initialize the GM node.
 
@@ -228,6 +233,7 @@ class GMNode:
             location_key: Current location key.
             roll_mode: "auto" or "manual" for dice rolls.
             llm_provider: LLM provider (defaults to get_gm_provider).
+            observability_hook: Optional hook for real-time observability.
         """
         self.db = db
         self.game_session = game_session
@@ -251,6 +257,13 @@ class GMNode:
         self.grounding_enabled: bool = True
         self.grounding_max_retries: int = 2
         self.grounding_log_only: bool = False  # Log but don't retry if True
+
+        # Observability hook (NullHook does nothing if not provided)
+        if observability_hook is None:
+            from src.observability.hooks import NullHook
+            self._hook: "ObservabilityHook" = NullHook()
+        else:
+            self._hook = observability_hook
 
     def get_tool_definitions(self) -> list[ToolDefinition]:
         """Get tool definitions for the LLM.
@@ -319,11 +332,17 @@ class GMNode:
         Returns:
             GMResponse with narrative and state changes.
         """
+        from src.observability.events import PhaseStartEvent, PhaseEndEvent
+
         # Update tools with current turn number for fact recording
         self.tools.turn_number = turn_number
 
         # Detect explicit OOC prefix
         is_explicit_ooc, cleaned_input = self._detect_explicit_ooc(player_input)
+
+        # Phase: Context Building
+        self._hook.on_phase_start(PhaseStartEvent(phase="context_building"))
+        context_start = time.perf_counter()
 
         # Build grounding manifest for validation
         self._current_manifest = self.context_builder.build_grounding_manifest(
@@ -349,6 +368,15 @@ class GMNode:
         # Store system prompt for tool loop
         self._current_system_prompt = system_prompt
 
+        self._hook.on_phase_end(PhaseEndEvent(
+            phase="context_building",
+            duration_ms=(time.perf_counter() - context_start) * 1000,
+        ))
+
+        # Phase: LLM Tool Loop
+        self._hook.on_phase_start(PhaseStartEvent(phase="llm_tool_loop"))
+        tool_loop_start = time.perf_counter()
+
         # Try with tools first, fall back to simple completion if not supported
         try:
             tools = self.get_tool_definitions()
@@ -359,6 +387,11 @@ class GMNode:
                 response = await self._run_simple(messages)
             else:
                 raise
+
+        self._hook.on_phase_end(PhaseEndEvent(
+            phase="llm_tool_loop",
+            duration_ms=(time.perf_counter() - tool_loop_start) * 1000,
+        ))
 
         # Validate grounding if enabled
         if self.grounding_enabled and self._current_manifest:
@@ -405,13 +438,29 @@ class GMNode:
         Returns:
             Validated (or cleaned) response.
         """
+        from src.observability.events import ValidationEvent
+
         if not self._current_manifest:
             return response
 
         validator = GroundingValidator(self._current_manifest)
+        max_attempts = self.grounding_max_retries + 1
 
-        for attempt in range(self.grounding_max_retries + 1):
+        for attempt in range(max_attempts):
             result = validator.validate(response.content)
+
+            # Emit validation event
+            errors = [f"Invalid: [{e.key}:{e.text}]" for e in result.invalid_keys]
+            errors.extend([f"Unkeyed: {e.display_name}" for e in result.unkeyed_mentions])
+
+            self._hook.on_validation(ValidationEvent(
+                validator_type="grounding",
+                attempt=attempt + 1,
+                max_attempts=max_attempts,
+                passed=result.valid,
+                error_count=result.error_count,
+                errors=errors[:5],  # Limit to 5 errors for display
+            ))
 
             if result.valid:
                 if attempt > 0:
@@ -474,13 +523,32 @@ class GMNode:
         Returns:
             Validated or corrected response.
         """
+        from src.observability.events import ValidationEvent
+
         if not response.content:
             return response
 
         has_break, pattern = self._detect_character_break(response.content)
 
         if not has_break:
+            # Emit passing validation event
+            self._hook.on_validation(ValidationEvent(
+                validator_type="character",
+                attempt=1,
+                max_attempts=2,
+                passed=True,
+            ))
             return response
+
+        # Emit failing validation event
+        self._hook.on_validation(ValidationEvent(
+            validator_type="character",
+            attempt=1,
+            max_attempts=2,
+            passed=False,
+            error_count=1,
+            errors=[f"Pattern matched: {pattern}"],
+        ))
 
         logger.warning(
             f"Character break detected (pattern: {pattern}): "
@@ -512,6 +580,17 @@ class GMNode:
 
         # Check if correction worked
         still_broken, _ = self._detect_character_break(corrected.content or "")
+
+        # Emit second validation event
+        self._hook.on_validation(ValidationEvent(
+            validator_type="character",
+            attempt=2,
+            max_attempts=2,
+            passed=not still_broken,
+            error_count=1 if still_broken else 0,
+            errors=["Pattern still matched after retry"] if still_broken else [],
+        ))
+
         if still_broken:
             logger.error(
                 "Character break persists after correction attempt, "
@@ -539,11 +618,27 @@ class GMNode:
         Returns:
             Final LLM response with accumulated text from all iterations.
         """
+        from src.observability.events import LLMCallStartEvent, LLMCallEndEvent
+
         # Accumulate text from all iterations (narrative may come before tool calls)
         accumulated_text: list[str] = []
 
+        # Estimate system prompt tokens (rough: 4 chars per token)
+        sys_tokens = len(self._current_system_prompt) // 4
+
         for iteration in range(self.MAX_TOOL_ITERATIONS):
             logger.debug(f"GM tool loop iteration {iteration + 1}")
+
+            # Emit LLM call start event
+            self._hook.on_llm_call_start(LLMCallStartEvent(
+                iteration=iteration + 1,
+                model=getattr(self.llm_provider, "default_model", "unknown"),
+                has_tools=len(tools) > 0,
+                system_prompt_tokens=sys_tokens,
+                message_count=len(messages),
+            ))
+
+            llm_start = time.perf_counter()
 
             # Call LLM with tools
             response = await self.llm_provider.complete_with_tools(
@@ -554,6 +649,21 @@ class GMNode:
                 max_tokens=2048,
                 think=False,  # Disable thinking - GM decisions are straightforward
             )
+
+            llm_duration = (time.perf_counter() - llm_start) * 1000
+
+            # Calculate response tokens (rough estimate)
+            resp_tokens = len(response.content or "") // 4
+
+            # Emit LLM call end event
+            self._hook.on_llm_call_end(LLMCallEndEvent(
+                iteration=iteration + 1,
+                duration_ms=llm_duration,
+                response_tokens=resp_tokens,
+                has_tool_calls=response.has_tool_calls,
+                tool_count=len(response.tool_calls) if response.tool_calls else 0,
+                text_preview=(response.content or "")[:50],
+            ))
 
             # Accumulate any text content from this response
             if response.content and response.content.strip():
@@ -587,7 +697,7 @@ class GMNode:
                     tool_input=tool_call.arguments,
                 ))
 
-                # Execute the tool
+                # Execute the tool (with timing)
                 result = await self._execute_tool_call(tool_call)
 
                 # Create tool result message (TOOL role for provider compatibility)
@@ -639,9 +749,23 @@ class GMNode:
         Returns:
             Tool result dictionary.
         """
+        from src.observability.events import ToolExecutionEvent
+
         logger.debug(f"Executing tool: {tool_call.name} with args: {tool_call.arguments}")
 
+        tool_start = time.perf_counter()
         result = self.tools.execute_tool(tool_call.name, tool_call.arguments)
+        tool_duration = (time.perf_counter() - tool_start) * 1000
+
+        # Emit tool execution event
+        success = result.get("success", True) if isinstance(result, dict) else True
+        self._hook.on_tool_execution(ToolExecutionEvent(
+            tool_name=tool_call.name,
+            arguments=tool_call.arguments,
+            result=result if isinstance(result, dict) else {"result": str(result)},
+            duration_ms=tool_duration,
+            success=success,
+        ))
 
         # Track the result
         self.tool_results.append({

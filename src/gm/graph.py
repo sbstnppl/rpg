@@ -7,6 +7,8 @@ A single, straightforward graph that:
 4. Applies state changes
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any, TypedDict
 
@@ -35,6 +37,7 @@ class GMState(TypedDict, total=False):
     # Internal
     _db: Session
     _game_session: GameSession
+    _observability_hook: Any  # ObservabilityHook - use Any to avoid LangGraph type resolution issues
 
     # Working state
     _gm_response_obj: GMResponse | None  # Internal GMResponse object
@@ -67,6 +70,7 @@ async def gm_node(state: GMState) -> dict[str, Any]:
     player_input = state.get("player_input", "")
     turn_number = state.get("turn_number", 1)
     roll_mode = state.get("roll_mode", "auto")
+    observability_hook = state.get("_observability_hook")
 
     if not all([db, game_session, player_id, player_location]):
         return {
@@ -81,6 +85,7 @@ async def gm_node(state: GMState) -> dict[str, Any]:
             player_id=player_id,
             location_key=player_location,
             roll_mode=roll_mode,
+            observability_hook=observability_hook,
         )
         response = await node.run(player_input, turn_number)
 
