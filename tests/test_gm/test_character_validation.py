@@ -208,3 +208,70 @@ class TestCharacterBreakDetection:
         is_broken, pattern = GMNode._detect_character_break(None)
         assert not is_broken
         assert pattern is None
+
+    # ===========================================================================
+    # Tool Error Exposure Tests
+    # ===========================================================================
+
+    def test_detects_not_in_inventory(self):
+        """Detect 'not in inventory' pattern."""
+        text = "The item is not in your inventory."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+        assert "not in" in pattern
+
+    def test_detects_not_in_your_inventory(self):
+        """Detect 'not in your inventory' pattern."""
+        text = "The mug is not in your inventory, leaving its presence unaccounted for."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
+    def test_detects_unable_to_find(self):
+        """Detect 'unable to find' pattern."""
+        text = "The system was unable to find the specified item."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+        assert "unable to" in pattern
+
+    def test_detects_unable_to_locate(self):
+        """Detect 'unable to locate' pattern."""
+        text = "I was unable to locate the mug in the scene."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
+    def test_detects_presence_unaccounted(self):
+        """Detect 'presence unaccounted' pattern from actual bug."""
+        text = "The mug itself is not recognized, leaving its presence unaccounted for."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
+    def test_detects_left_unaccounted(self):
+        """Detect 'left ... unaccounted' pattern."""
+        text = "The item was left in an unaccounted state."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
+    def test_detects_couldnt_find_item(self):
+        """Detect 'couldn't find the item' pattern."""
+        text = "The tool couldn't find the item in the database."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
+    def test_detects_is_not_recognized(self):
+        """Detect 'is not recognized' pattern from actual bug."""
+        text = "The mug itself is not recognized in your inventory."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+        assert "is not recognized" in pattern
+
+    def test_valid_narrative_with_find_passes(self):
+        """Narrative using 'find' naturally should pass."""
+        text = "You search the room but find nothing of interest."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert not is_broken
+
+    def test_valid_narrative_drinking_passes(self):
+        """Normal drinking narrative should pass."""
+        text = "You raise the mug to your lips, savoring the cool ale."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert not is_broken

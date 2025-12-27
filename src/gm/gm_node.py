@@ -130,6 +130,12 @@ class GMNode:
         r"\bfor clarification\b",
         r"\bto ensure i address\b",
         r"\bno specific (?:question|task)\b",
+        # Tool error exposure (technical terms leaked to player)
+        r"\bnot in (?:your )?inventory\b",
+        r"\bunable to (?:find|locate)\b",
+        r"\bpresence unaccounted\b",
+        r"\bleft .+ unaccounted\b",
+        r"\bcouldn'?t (?:find|locate) (?:the|this|that) item\b",
     )
 
     @staticmethod

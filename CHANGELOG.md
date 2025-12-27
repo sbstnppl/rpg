@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Character Break on Tool Errors** - LLM now handles tool failures gracefully in-story
+  - Added HANDLING TOOL FAILURES section to GM_SYSTEM_PROMPT and MINIMAL_GM_CORE_PROMPT
+  - LLM instructed to narrate success or give in-story reason instead of exposing technical errors
+  - Added 5 detection patterns for leaked technical terms: "not in inventory", "unable to find", etc.
+  - Added 10 unit tests for tool error exposure patterns
+  - Key files: `src/gm/prompts.py`, `src/gm/gm_node.py`
+  - Issue tracking: `docs/issues/character-break-on-tool-errors/`
+
 - **Unrealistic Time Passage** - Activities now have realistic duration estimates
   - "Eat a hearty meal" now takes 32 minutes instead of 1 minute
   - Hybrid time estimation: combines activity keywords + tool results, takes maximum
