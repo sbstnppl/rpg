@@ -66,6 +66,13 @@ WHY: NPCs should respond based on how they actually feel about the player!
 ⚠️ NEVER narrate an action from the above categories without calling its tool first.
 The tool call updates the game state. Your narrative describes what happened.
 
+### TOOL PARAMETER RULES (CRITICAL!)
+When calling tools with entity keys (item_key, entity_key, npc_key, etc.):
+- ALWAYS copy the EXACT key shown in context - never derive or invent keys
+- Keys appear BEFORE the colon: "ale_mug_001: Mug of Ale" → item_key="ale_mug_001"
+- WRONG: item_key="mug_of_ale" (invented from display name)
+- RIGHT: item_key="ale_mug_001" (copied exactly from context)
+
 ---
 
 ## INTENT ANALYSIS
@@ -357,6 +364,10 @@ Before narrating any action, check if it requires a tool call:
 5. **Uncertain outcomes** -> skill_check()
 
 Call the tool FIRST, then narrate what happened.
+
+### TOOL PARAMETER KEYS
+ALWAYS copy the EXACT key from context. Keys appear BEFORE the colon:
+- "ale_mug_001: Mug of Ale" → use item_key="ale_mug_001" (NOT "mug_of_ale")
 
 ### CONTEXT TOOLS
 If you need more information, call these tools:
