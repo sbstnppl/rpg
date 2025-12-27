@@ -497,3 +497,128 @@ class TestExecuteToolFiltering:
         assert filtered == {"item_key": "sword_001"}
         assert "storage_location" not in filtered
         assert "quantity" not in filtered
+
+
+class TestSatisfyNeedMapping:
+    """Tests for satisfy_need activity-to-need mapping."""
+
+    def test_tool_description_contains_activity_mappings(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Tool description includes explicit activity-to-need mappings."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id)
+        tool_defs = tools.get_tool_definitions()
+
+        # Find satisfy_need tool
+        satisfy_need_tool = next(
+            (t for t in tool_defs if t["name"] == "satisfy_need"), None
+        )
+        assert satisfy_need_tool is not None
+
+        description = satisfy_need_tool["description"]
+
+        # Verify key mappings are present
+        assert "Drinking" in description and "thirst" in description
+        assert "Eating" in description and "hunger" in description
+        assert "Resting" in description and "stamina" in description
+        assert "Sleeping" in description and "sleep_pressure" in description
+        assert "Bathing" in description and "hygiene" in description
+        assert "Talking" in description or "socializing" in description
+
+    def test_satisfy_need_thirst_drinking(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """satisfy_need with thirst correctly updates thirst level."""
+        from src.managers.needs import NeedsManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # Initialize needs
+        needs_manager = NeedsManager(db_session, game_session)
+        needs = needs_manager.get_or_create_needs(player.id)
+        initial_thirst = needs.thirst
+
+        tools = GMTools(db_session, game_session, player.id)
+        result = tools.satisfy_need(
+            need="thirst",
+            amount=25,
+            activity="drinking ale",
+        )
+
+        assert result["success"] is True
+        assert result["need"] == "thirst"
+        assert result["new_value"] > initial_thirst
+
+    def test_satisfy_need_hunger_eating(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """satisfy_need with hunger correctly updates hunger level."""
+        from src.managers.needs import NeedsManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # Initialize needs
+        needs_manager = NeedsManager(db_session, game_session)
+        needs = needs_manager.get_or_create_needs(player.id)
+        initial_hunger = needs.hunger
+
+        tools = GMTools(db_session, game_session, player.id)
+        result = tools.satisfy_need(
+            need="hunger",
+            amount=40,
+            activity="eating bread",
+        )
+
+        assert result["success"] is True
+        assert result["need"] == "hunger"
+        assert result["new_value"] > initial_hunger
+
+    def test_satisfy_need_stamina_resting(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """satisfy_need with stamina correctly updates stamina level."""
+        from src.managers.needs import NeedsManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # Initialize needs
+        needs_manager = NeedsManager(db_session, game_session)
+        needs = needs_manager.get_or_create_needs(player.id)
+        initial_stamina = needs.stamina
+
+        tools = GMTools(db_session, game_session, player.id)
+        result = tools.satisfy_need(
+            need="stamina",
+            amount=25,
+            activity="resting by the fire",
+        )
+
+        assert result["success"] is True
+        assert result["need"] == "stamina"
+        assert result["new_value"] > initial_stamina

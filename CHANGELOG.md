@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Wrong Need Type for Activities** - Added explicit activity-to-need mapping in satisfy_need tool
+  - LLM was selecting wrong need (e.g., drinking → hunger instead of thirst)
+  - Tool description now includes explicit mapping table for eating→hunger, drinking→thirst, etc.
+  - Added 4 tests to verify correct need mappings
+  - Key file: `src/gm/tools.py`
+  - Issue tracking: `docs/issues/wrong-need-type-for-activities/`
+
 - **GM Invents Wrong Item Keys** - Added explicit prompt instructions to copy exact entity keys
   - LLM was generating `mug_of_ale` instead of copying `ale_mug_001` from context
   - Added TOOL PARAMETER RULES section to GM_SYSTEM_PROMPT and MINIMAL_GM_CORE_PROMPT

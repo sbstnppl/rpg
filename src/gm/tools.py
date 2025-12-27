@@ -664,9 +664,15 @@ class GMTools:
             {
                 "name": "satisfy_need",
                 "description": (
-                    "Satisfy a character need through an activity or consumption. "
-                    "Use when player eats, drinks, rests, sleeps, bathes, or engages in social activity. "
-                    "Amount guide: 10=snack/sip, 25=light meal/drink, 40=full meal, 65=feast."
+                    "Satisfy a character need through an activity or consumption.\n\n"
+                    "ACTIVITY-TO-NEED MAPPING (use these exact mappings):\n"
+                    "- Eating/food/meal/bread → need=\"hunger\"\n"
+                    "- Drinking/water/ale/wine/beverage → need=\"thirst\"\n"
+                    "- Resting/sitting/relaxing → need=\"stamina\"\n"
+                    "- Sleeping/napping/dozing → need=\"sleep_pressure\"\n"
+                    "- Bathing/washing/cleaning → need=\"hygiene\"\n"
+                    "- Talking/socializing/chatting → need=\"social_connection\"\n\n"
+                    "AMOUNT GUIDE: 10=snack/sip, 25=light meal/drink, 40=full meal, 65=feast."
                 ),
                 "input_schema": {
                     "type": "object",
