@@ -502,11 +502,26 @@ class ImmersiveTestRunner:
 
         elif criterion.check_type == "db_change":
             # Check for specific DB change
-            expected_change = f"{criterion.params.get('field')}={criterion.params.get('expected')}"
+            field = criterion.params.get("field", "")
+            expected = criterion.params.get("expected", "")
+
             for turn in turns:
                 for change in turn.db_changes:
-                    if expected_change.lower() in change.lower():
-                        return True
+                    change_lower = change.lower()
+                    # Special handling for item holder changes
+                    # Format: "Item X moved: holder None -> 285"
+                    if field == "holder_id":
+                        if expected == "player" and "moved: holder" in change_lower:
+                            # Check if holder changed to a numeric ID (player)
+                            if "-> none" not in change_lower and "-> null" not in change_lower:
+                                return True
+                        elif expected == "null" and "-> none" in change_lower:
+                            return True
+                    else:
+                        # Generic field=expected check
+                        expected_change = f"{field}={expected}"
+                        if expected_change.lower() in change_lower:
+                            return True
             return False
 
         return True  # Unknown criterion type - pass by default

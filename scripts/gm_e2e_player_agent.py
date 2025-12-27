@@ -45,23 +45,27 @@ CRITICAL RULES:
 2. Keep actions short (1-2 sentences max)
 3. Respond to what the GM just narrated
 4. If an NPC spoke, respond to them conversationally
-5. If you see something interesting, interact with it
+5. If you see something interesting, interact with it DIRECTLY
 6. Pursue the given goal naturally through gameplay
 7. Don't repeat the same action twice in a row
 8. Be specific - use names and items mentioned by the GM
 9. If NPCs are present and your goal involves talking, GREET THEM FIRST
-10. After your first turn, AVOID purely observational actions - take meaningful steps toward your goal
+10. After your first turn, AVOID purely observational actions - take CONCRETE actions toward your goal
+11. If your goal involves eating/drinking, ACTUALLY EAT OR DRINK the food/water you see
+12. If your goal involves picking up items, ACTUALLY PICK THEM UP - don't just "reach for" or "search"
 
 BAD examples (don't do these):
 - "I decide to look around" (too meta)
-- "As a player, I want to..." (meta-commentary)
-- "I look around" then "I look around" (repetition)
+- "I reach for the nearest item" (too vague - SAY WHICH ITEM)
+- "I search for something useful" (vague - be specific)
+- "I check the area" (observational when action is needed)
 
 GOOD examples:
 - "I walk over to Marcus and say hello"
-- "I pick up the bread and take a bite"
+- "I pick up the bread and eat it"
+- "I grab the water jug and take a drink"
+- "I take the sword from the table"
 - "What's going on here?" (direct speech to NPC)
-- "I try the door handle"
 
 Write your action now. Just the action, nothing else."""
 
@@ -313,13 +317,37 @@ Write your action now. Just the action, nothing else."""
                 "I clear my throat and introduce myself",
                 "'Hello there!' I call out",
             ]
-        # Item/take goals → search actions
-        elif any(kw in goal_lower for kw in ["take", "find", "get", "pick", "item"]):
+        # Hunger/eat goals → explicit eating actions
+        elif any(kw in goal_lower for kw in ["eat", "hunger", "food"]):
             variations = [
-                "I search the area for useful items",
-                "I check nearby surfaces for objects",
-                "I look for something I can use",
-                "I reach for the nearest item",
+                "I pick up the bread and take a bite",
+                "I grab the bread from the table and eat it",
+                "I take the bread and eat some",
+                "I eat the bread I see on the table",
+            ]
+        # Thirst/drink goals → explicit drinking actions
+        elif any(kw in goal_lower for kw in ["drink", "thirst", "water"]):
+            variations = [
+                "I pick up the water jug and take a drink",
+                "I grab the jug and drink some water",
+                "I drink from the water jug on the table",
+                "I take the jug and drink from it",
+            ]
+        # Item pickup goals → explicit take actions
+        elif any(kw in goal_lower for kw in ["pick up", "take", "grab"]):
+            variations = [
+                "I pick up the bread from the table",
+                "I grab the water jug",
+                "I take the item I see nearby",
+                "I pick up what's on the table",
+            ]
+        # Generic item/find goals → search then take
+        elif any(kw in goal_lower for kw in ["find", "get", "item"]):
+            variations = [
+                "I pick up the nearest useful item",
+                "I take the bread from the table",
+                "I grab the water jug from the table",
+                "I pick up what I found",
             ]
         # Default observational (existing)
         else:

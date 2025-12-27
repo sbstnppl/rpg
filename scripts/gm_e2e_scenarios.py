@@ -307,7 +307,7 @@ HUNGER_EAT_BREAD = ImmersiveScenario(
     goal="Find and eat the bread to satisfy hunger",
     setup_context="Player is hungry, bread is visible on the table",
     success_criteria=[
-        need_decreased("hunger", 15),
+        need_increased("hunger", 15),  # Higher hunger value = more satisfied
         time_passed(5, 20),
         narrative_quality(),
     ],
@@ -384,7 +384,7 @@ THIRST_DRINK_WATER = ImmersiveScenario(
     goal="Find and drink water to quench thirst",
     setup_context="Player is thirsty, water jug is visible",
     success_criteria=[
-        need_decreased("thirst", 15),
+        need_increased("thirst", 15),  # Higher thirst value = more hydrated
         time_passed(1, 5),
         narrative_quality(),
     ],
