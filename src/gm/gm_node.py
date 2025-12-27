@@ -32,6 +32,44 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Activity patterns for time estimation (validated by temporal-validator)
+# Format: category -> (keyword set, base minutes)
+ACTIVITY_PATTERNS: dict[str, tuple[frozenset[str], int]] = {
+    "eating": (frozenset({"eat", "meal", "dine", "feast", "breakfast", "lunch", "dinner"}), 25),
+    "snacking": (frozenset({"snack", "nibble", "bite", "munch"}), 7),
+    "drinking": (frozenset({"drink", "sip", "gulp", "ale", "wine", "quaff"}), 5),
+    "resting": (frozenset({"rest", "relax", "sit", "lounge"}), 15),
+    "sleeping": (frozenset({"sleep", "nap", "doze", "slumber"}), 30),
+    "hygiene": (frozenset({"bathe", "bath", "wash", "clean"}), 20),
+    "exploration": (frozenset({"explore", "wander", "roam", "search"}), 10),
+    "movement": (frozenset({"go", "walk", "leave", "exit", "enter", "head", "travel"}), 5),
+    "observation": (frozenset({"look", "examine", "inspect", "observe", "study"}), 3),
+    "conversation": (frozenset({"talk", "speak", "chat", "discuss", "ask", "tell", "greet"}), 8),
+    "trading": (frozenset({"buy", "sell", "trade", "purchase", "shop"}), 10),
+    "reading": (frozenset({"read", "peruse", "scroll", "book", "letter"}), 12),
+    "crafting": (frozenset({"craft", "make", "create", "forge", "build", "repair"}), 25),
+}
+
+# Time modifiers (30% adjustment, not 50% - per temporal validation)
+TIME_MODIFIERS: dict[str, float] = {
+    # Speed modifiers (reduce time)
+    "quickly": 0.7,
+    "quick": 0.7,
+    "fast": 0.7,
+    "hastily": 0.7,
+    "briefly": 0.7,
+    # Thoroughness modifiers (increase time)
+    "thoroughly": 1.4,
+    "carefully": 1.3,
+    "slowly": 1.4,
+    "leisurely": 1.5,
+    "long": 1.5,
+    "hearty": 1.3,
+    "full": 1.3,
+    "proper": 1.3,
+}
+
+
 class GMNode:
     """Game Master node with tool use.
 
@@ -1018,48 +1056,125 @@ class GMNode:
         player_input: str,
         state_changes: list[StateChange],
     ) -> int:
-        """Estimate in-game minutes passed based on tools called.
+        """Estimate in-game minutes using hybrid activity + tool approach.
 
-        Uses tool calls to infer time rather than parsing player input,
-        which avoids false positives from keyword matching.
+        Combines:
+        1. Activity keywords from player input (e.g., "eat meal" -> 25 min)
+        2. Tool call results (e.g., satisfy_need:hunger -> 20 min)
+        Takes the maximum of all estimates for realistic time.
 
         Args:
-            player_input: The player's input (unused, kept for signature).
+            player_input: The player's input text.
             state_changes: State changes that occurred.
 
         Returns:
             Estimated minutes.
         """
-        # Check for combat (quick actions)
+        # Combat override - quick actions
         if any(tc.change_type == StateChangeType.DAMAGE for tc in state_changes):
             return 1  # Combat round
 
-        # Infer time from tool calls
-        max_time = 1  # Default: 1 minute for simple actions
+        estimates = [1]  # Default minimum
+
+        # Activity-based estimation from player input
+        activity_time = self._estimate_activity_time(player_input)
+        if activity_time > 0:
+            estimates.append(activity_time)
+
+        # Tool-based estimation from tool results
+        tool_time = self._estimate_tool_time()
+        if tool_time > 0:
+            estimates.append(tool_time)
+
+        max_time = max(estimates)
+        logger.debug(
+            f"Time estimate: activity={activity_time}, tool={tool_time}, "
+            f"max={max_time} for '{player_input[:40]}...'"
+        )
+
+        return max_time
+
+    def _estimate_activity_time(self, player_input: str) -> int:
+        """Estimate time from activity keywords in player input.
+
+        Parses input for activity patterns (eating, resting, exploration, etc.)
+        and applies modifiers (quickly, thoroughly, etc.).
+
+        Args:
+            player_input: The player's input text.
+
+        Returns:
+            Estimated minutes, or 0 if no activity recognized.
+        """
+        input_lower = player_input.lower()
+        words = set(input_lower.split())
+
+        # Add word stems (eating->eat, walked->walk, rests->rest)
+        stems = set()
+        for word in words:
+            if word.endswith("ing") and len(word) > 4:
+                stems.add(word[:-3])
+            elif word.endswith("ed") and len(word) > 3:
+                stems.add(word[:-2])
+            elif word.endswith("s") and len(word) > 2:
+                stems.add(word[:-1])
+        all_words = words | stems
+
+        # Find matching activity pattern
+        base_time = 0
+        matched_category = None
+        for category, (keywords, minutes) in ACTIVITY_PATTERNS.items():
+            if all_words & keywords:
+                base_time = minutes
+                matched_category = category
+                break
+
+        if base_time == 0:
+            return 0  # No activity recognized, defer to default
+
+        # Apply modifier if present (check as whole word to avoid false matches)
+        modifier = 1.0
+        for mod_word, mult in TIME_MODIFIERS.items():
+            if mod_word in all_words:
+                modifier = mult
+                break
+
+        estimated = int(base_time * modifier)
+        logger.debug(
+            f"Activity time: '{player_input[:30]}' -> {matched_category}:"
+            f"{base_time}min * {modifier} = {estimated}min"
+        )
+
+        return estimated
+
+    def _estimate_tool_time(self) -> int:
+        """Estimate time from tool calls.
+
+        Returns:
+            Estimated minutes based on tools called.
+        """
+        max_time = 0
 
         for result in self.tool_results:
-            tool_name = result.get("name", "")
-            args = result.get("input", {})
+            tool_name = result.get("tool", "")
+            args = result.get("arguments", {})
 
-            # Need satisfaction - longest activities
+            # Need satisfaction - longest activities (updated for realism)
             if tool_name == "satisfy_need":
                 need = args.get("need", "")
-                if need == "hunger":
-                    max_time = max(max_time, 15)  # Eating
-                elif need == "thirst":
-                    max_time = max(max_time, 3)   # Drinking
-                elif need == "stamina":
-                    max_time = max(max_time, 15)  # Resting
-                elif need == "hygiene":
-                    max_time = max(max_time, 20)  # Bathing
-                elif need == "social_connection":
-                    max_time = max(max_time, 10)  # Socializing
-                else:
-                    max_time = max(max_time, 5)   # Other needs
+                need_times = {
+                    "hunger": 20,
+                    "thirst": 5,
+                    "stamina": 15,
+                    "sleep_pressure": 30,
+                    "hygiene": 20,
+                    "social_connection": 10,
+                }
+                max_time = max(max_time, need_times.get(need, 5))
 
             # Skill checks - brief focused actions
             elif tool_name == "skill_check":
-                max_time = max(max_time, 2)
+                max_time = max(max_time, 3)
 
             # Combat rolls
             elif tool_name in ("attack_roll", "damage_entity"):
@@ -1075,7 +1190,7 @@ class GMNode:
 
             # NPC attitude check - conversation context
             elif tool_name == "get_npc_attitude":
-                max_time = max(max_time, 2)
+                max_time = max(max_time, 3)
 
             # Stimulus application - just observation
             elif tool_name == "apply_stimulus":

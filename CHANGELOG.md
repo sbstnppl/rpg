@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Unrealistic Time Passage** - Activities now have realistic duration estimates
+  - "Eat a hearty meal" now takes 32 minutes instead of 1 minute
+  - Hybrid time estimation: combines activity keywords + tool results, takes maximum
+  - Added `ACTIVITY_PATTERNS` (13 categories: eating, resting, exploration, etc.)
+  - Added `TIME_MODIFIERS` (quickly=0.7x, thoroughly=1.4x, etc.)
+  - Fixed bug: tool result keys were "name"/"input" but should be "tool"/"arguments"
+  - Added 47 tests for time estimation
+  - Key files: `src/gm/gm_node.py`, `tests/test_gm/test_time_estimation.py`
+  - Issue tracking: `docs/issues/unrealistic-time-passage/`
+
 - **Wrong Need Type for Activities** - Added explicit activity-to-need mapping in satisfy_need tool
   - LLM was selecting wrong need (e.g., drinking → hunger instead of thirst)
   - Tool description now includes explicit mapping table for eating→hunger, drinking→thirst, etc.
