@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **GM Tool Output Exposure** - Character validation now detects when LLM leaks tool responses to player
+  - Added 9 patterns for meta-questions: "what would you like", "the provided text", "let me know if", etc.
+  - Fixed bug in `next steps?:` pattern (trailing `\b` didn't match after colon)
+  - Added 28 unit tests for character break detection
+  - Key files: `src/gm/gm_node.py`, `src/gm/context_builder.py`
+  - Issue tracking: `docs/issues/tool-output-leaked-to-player/`
+
 - **GM Audit Context** - LLM call logs now organized by session instead of orphan folder
   - Added `set_audit_context()` call in `GMNode.run()` before LLM calls
   - Logs now saved to `logs/llm/session_<id>/turn_<n>_*.md` instead of `logs/llm/orphan/`

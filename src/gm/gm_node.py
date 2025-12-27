@@ -80,8 +80,18 @@ class GMNode:
         r"\bno prior (?:mention|information|context)\b",
         r"\bin the current context\b",  # Technical scoping language
         # Game design / strategy game style
-        r"\bnext steps?:\b",  # Strategy game prompt
+        r"\bnext steps?:",  # Strategy game prompt
         r"\bnarratively,?\s+this\b",  # Meta-commentary on narrative
+        # Tool output exposure / meta-questions
+        r"\bwhat would you like\b",
+        r"\bthe provided text\b",
+        r"\brules for (?:handling|managing|processing)\b",
+        r"\blet me know if\b",
+        r"\bwhat .+ do with (?:this|these)\b",
+        r"\bwould you like me to\b",
+        r"\bfor clarification\b",
+        r"\bto ensure i address\b",
+        r"\bno specific (?:question|task)\b",
     )
 
     @staticmethod
