@@ -134,7 +134,9 @@ Write your action now. Just the action, nothing else."""
 
         # Add goal-specific hints to guide action type
         goal_lower = goal.lower()
-        if any(kw in goal_lower for kw in ["greet", "talk", "speak", "ask", "conversation", "exchange"]):
+        if any(kw in goal_lower for kw in ["ooc", "out of character", "game time", "inventory", "status", "needs"]):
+            context_parts.append("HINT: This is an OOC (out of character) goal - ask a meta-game question like '[OOC] What time is it?' or '[OOC] What am I carrying?'")
+        elif any(kw in goal_lower for kw in ["greet", "talk", "speak", "ask", "conversation", "exchange"]):
             context_parts.append("HINT: This is a dialog goal - engage with NPCs directly!")
         elif any(kw in goal_lower for kw in ["take", "find", "get", "pick", "item"]):
             context_parts.append("HINT: This is an item goal - search for and interact with objects!")
@@ -309,8 +311,45 @@ Write your action now. Just the action, nothing else."""
         """
         goal_lower = goal.lower()
 
+        # OOC goals → meta-game questions
+        if any(kw in goal_lower for kw in ["ooc", "out of character"]):
+            if "time" in goal_lower:
+                variations = [
+                    "[OOC] What time is it in the game?",
+                    "[OOC] What's the current game time?",
+                    "[OOC] Can you tell me the in-game time?",
+                    "What time is it? (out of character)",
+                ]
+            elif "inventory" in goal_lower or "carrying" in goal_lower:
+                variations = [
+                    "[OOC] What am I carrying?",
+                    "[OOC] Show me my inventory",
+                    "[OOC] What's in my inventory?",
+                    "What am I carrying? (out of character)",
+                ]
+            elif "needs" in goal_lower or "status" in goal_lower:
+                variations = [
+                    "[OOC] What are my character's needs?",
+                    "[OOC] Show me my status",
+                    "[OOC] How hungry/thirsty am I?",
+                    "What's my character status? (out of character)",
+                ]
+            elif "location" in goal_lower or "where" in goal_lower:
+                variations = [
+                    "[OOC] Where am I?",
+                    "[OOC] What location is this?",
+                    "[OOC] What's my current location?",
+                    "Where am I? (out of character)",
+                ]
+            else:
+                variations = [
+                    "[OOC] Can you help me?",
+                    "[OOC] What can I do here?",
+                    "[OOC] Show me the game status",
+                    "Help me (out of character)",
+                ]
         # Dialog goals → dialog actions
-        if any(kw in goal_lower for kw in ["greet", "talk", "speak", "ask", "conversation", "exchange"]):
+        elif any(kw in goal_lower for kw in ["greet", "talk", "speak", "ask", "conversation", "exchange"]):
             variations = [
                 "I say hello to the person nearby",
                 "I greet them with a friendly nod",
@@ -386,6 +425,10 @@ Write your action now. Just the action, nothing else."""
             "talk": ["says", "replies", "responds", "tells you", "conversation"],
             "take": ["pick up", "take", "grabbed", "now holding", "in your inventory"],
             "find": ["find", "discover", "notice", "see", "spot"],
+            "time": ["morning", "afternoon", "evening", "night", "o'clock", "hour", "day", "dawn", "dusk", "noon", "midnight", "time is"],
+            "inventory": ["carrying", "inventory", "possessions", "items", "you have"],
+            "needs": ["hunger", "thirst", "fatigue", "tired", "hungry", "thirsty", "energy", "status"],
+            "location": ["you are in", "you are at", "location", "area", "room", "place"],
         }
 
         for keyword, indicators in goal_indicators.items():

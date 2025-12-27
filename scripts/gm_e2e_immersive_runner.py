@@ -228,8 +228,23 @@ class ImmersiveTestRunner:
             game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
             player = db.query(Entity).filter(Entity.id == player_id).first()
 
-            # Initial "look around" to establish scene
-            current_action = "I look around"
+            # Initial action based on scenario type
+            # OOC scenarios should start with the OOC query directly (no time should pass)
+            if FocusArea.OOC in scenario.focus_areas:
+                goal_lower = scenario.goal.lower()
+                if "time" in goal_lower:
+                    current_action = "[OOC] What time is it?"
+                elif "inventory" in goal_lower or "carrying" in goal_lower:
+                    current_action = "[OOC] What am I carrying?"
+                elif "needs" in goal_lower or "status" in goal_lower:
+                    current_action = "[OOC] What are my character's needs?"
+                elif "location" in goal_lower or "where" in goal_lower:
+                    current_action = "[OOC] Where am I?"
+                else:
+                    current_action = "[OOC] Help me"
+            else:
+                # Normal scenarios start with "look around" to establish scene
+                current_action = "I look around"
             current_location = location
 
             for turn_num in range(1, scenario.max_turns + 1):
@@ -294,14 +309,17 @@ class ImmersiveTestRunner:
                         break
 
                 # Assess turn quality using full assessor
+                # OOC scenarios have shorter responses (e.g., "It is 9:00 AM.")
+                is_ooc_scenario = FocusArea.OOC in scenario.focus_areas
                 expectations = ActionExpectations(
-                    min_chars=50,
+                    min_chars=20 if is_ooc_scenario else 50,
                     max_chars=2000,
                     min_time=0,
                     max_time=60,
                 )
                 # Expected entities from the test session setup
-                expected_entities = ["marcus", "farmer", "farmhouse", "bread", "water"]
+                # Skip entity grounding for OOC scenarios (meta-game queries don't describe scene)
+                expected_entities = None if is_ooc_scenario else ["marcus", "farmer", "farmhouse", "bread", "water"]
 
                 assessment = self.assessor.assess_turn(
                     narrative=gm_response,
