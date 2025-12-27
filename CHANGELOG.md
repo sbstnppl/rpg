@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **GM Audit Context** - LLM call logs now organized by session instead of orphan folder
+  - Added `set_audit_context()` call in `GMNode.run()` before LLM calls
+  - Logs now saved to `logs/llm/session_<id>/turn_<n>_*.md` instead of `logs/llm/orphan/`
+  - Key file: `src/gm/gm_node.py`
+  - Issue tracking: `docs/issues/gm-audit-context-session-id/`
+
 - **GM Entity Key-Text Format** - Fixed LLM outputting `[key]` instead of `[key:text]` format
   - Added `fix_key_only_format()` to convert `[key]` → `[key:display_name]` using manifest lookup
   - Updated `strip_key_references()` to accept optional manifest for auto-fix before stripping

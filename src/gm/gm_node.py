@@ -21,6 +21,7 @@ from src.llm.response_types import LLMResponse, ToolCall
 from src.gm.context_builder import GMContextBuilder
 from src.gm.grounding import GroundingManifest
 from src.gm.grounding_validator import GroundingValidator, strip_key_references
+from src.llm.audit_logger import set_audit_context
 from src.gm.tools import GMTools
 from src.gm.schemas import GMResponse, StateChange, NewEntity, StateChangeType
 # GM_SYSTEM_PROMPT is now built dynamically by context_builder.build_system_prompt()
@@ -352,6 +353,13 @@ class GMNode:
             GMResponse with narrative and state changes.
         """
         from src.observability.events import PhaseStartEvent, PhaseEndEvent
+
+        # Set audit context for LLM logging
+        set_audit_context(
+            session_id=self.game_session.id,
+            turn_number=turn_number,
+            call_type="gm",
+        )
 
         # Update tools with current turn number for fact recording
         self.tools.turn_number = turn_number
