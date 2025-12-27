@@ -51,6 +51,8 @@ class LLMCallEndEvent:
     has_tool_calls: bool
     tool_count: int = 0
     text_preview: str = ""
+    cache_read_tokens: int = 0  # Tokens read from cache (fast)
+    cache_creation_tokens: int = 0  # Tokens cached for next call
     timestamp: datetime = field(default_factory=datetime.now)
 
 

@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Grounding Validator False Positives** - Player equipment no longer triggers unkeyed mention errors
+  - Added `skip_player_items=True` parameter to `GroundingValidator`
+  - Player inventory and equipped items exempt from unkeyed mention checks
+  - Narrative like "You're wearing a simple tunic" no longer fails validation
+  - Key file: `src/gm/grounding_validator.py`
+  - Issue tracking: `docs/issues/gm-unkeyed-entities/`
+
+- **E2E Player Agent Action Loops** - Improved goal-awareness and repetition detection
+  - Semantic verb matching: "look around" and "examine surroundings" now detected as repetitive
+  - Goal-aware fallback variations: dialog goals → greeting actions, item goals → search actions
+  - Checks last 3 actions instead of just last 1 for repetition
+  - Enhanced system prompt with NPC engagement rules (rules 9-10)
+  - Key file: `scripts/gm_e2e_player_agent.py`
+
 - **GM Character Consistency** - Multi-layer defense against AI-like responses
   - Layer 1: Strengthened GM persona in system prompt with explicit character rules
   - Layer 2: `_validate_character()` detects character breaks with regex patterns and retries

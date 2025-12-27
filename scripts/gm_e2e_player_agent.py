@@ -33,6 +33,10 @@ class TestPlayerAgent:
     DEFAULT_MODEL = "qwen3:32b"
     FALLBACK_MODEL = "gpt-oss:120b"
 
+    # Verb categories for semantic repetition detection
+    OBSERVE_VERBS = {"look", "examine", "inspect", "observe", "scan", "study", "scrutinize", "check"}
+    DIALOG_VERBS = {"say", "greet", "speak", "talk", "ask", "tell", "reply"}
+
     # System prompt for the test player
     SYSTEM_PROMPT = """You are a human player in a fantasy RPG. You're playing the game naturally.
 
@@ -45,6 +49,8 @@ CRITICAL RULES:
 6. Pursue the given goal naturally through gameplay
 7. Don't repeat the same action twice in a row
 8. Be specific - use names and items mentioned by the GM
+9. If NPCs are present and your goal involves talking, GREET THEM FIRST
+10. After your first turn, AVOID purely observational actions - take meaningful steps toward your goal
 
 BAD examples (don't do these):
 - "I decide to look around" (too meta)
@@ -121,6 +127,14 @@ Write your action now. Just the action, nothing else."""
             context_parts.append(f"Your recent actions:\n{history_str}")
 
         context_parts.append(f"GM's narration:\n\"{gm_response}\"")
+
+        # Add goal-specific hints to guide action type
+        goal_lower = goal.lower()
+        if any(kw in goal_lower for kw in ["greet", "talk", "speak", "ask", "conversation", "exchange"]):
+            context_parts.append("HINT: This is a dialog goal - engage with NPCs directly!")
+        elif any(kw in goal_lower for kw in ["take", "find", "get", "pick", "item"]):
+            context_parts.append("HINT: This is an item goal - search for and interact with objects!")
+
         context_parts.append("What do you do?")
 
         user_content = "\n\n".join(context_parts)
@@ -148,8 +162,8 @@ Write your action now. Just the action, nothing else."""
                     if attempt < max_retries:
                         user_content += "\n\n(You already did that. Try something different.)"
                         continue
-                    # Force variation
-                    action = self._vary_action(action)
+                    # Force variation (goal-aware)
+                    action = self._vary_action(action, goal)
 
                 # Store in history
                 self._action_history.append(action)
@@ -166,8 +180,8 @@ Write your action now. Just the action, nothing else."""
             except Exception as e:
                 if attempt < max_retries:
                     continue
-                # Return safe fallback on all failures
-                fallback = "I look around carefully"
+                # Return goal-aware fallback on all failures
+                fallback = self._vary_action("fallback", goal)
                 self._action_history.append(fallback)
                 return PlayerDecision(
                     action=fallback,
@@ -228,6 +242,8 @@ Write your action now. Just the action, nothing else."""
     def _is_repetitive(self, action: str) -> bool:
         """Check if the action is too similar to recent actions.
 
+        Checks against last 3 actions with semantic matching for action verbs.
+
         Args:
             action: The proposed action.
 
@@ -238,39 +254,81 @@ Write your action now. Just the action, nothing else."""
             return False
 
         action_lower = action.lower().strip()
-        last_action = self._action_history[-1].lower().strip()
+        action_words_list = action_lower.split()
 
-        # Exact match
-        if action_lower == last_action:
-            return True
+        # Get the actual verb (skip "I" if present)
+        if action_words_list and action_words_list[0] == "i":
+            action_verb = action_words_list[1] if len(action_words_list) > 1 else ""
+        else:
+            action_verb = action_words_list[0] if action_words_list else ""
 
-        # Check similarity (simple word overlap)
-        action_words = set(action_lower.split())
-        last_words = set(last_action.split())
+        # Check against last 3 actions (not just last 1)
+        for prev in self._action_history[-3:]:
+            prev_lower = prev.lower().strip()
 
-        if len(action_words) > 2 and len(last_words) > 2:
-            overlap = len(action_words & last_words)
-            min_len = min(len(action_words), len(last_words))
-            if min_len > 0 and overlap / min_len > 0.8:
+            # Exact match
+            if action_lower == prev_lower:
                 return True
+
+            # Semantic similarity: both are observational actions
+            prev_words_list = prev_lower.split()
+            # Get the actual verb (skip "I" if present)
+            if prev_words_list and prev_words_list[0] == "i":
+                prev_verb = prev_words_list[1] if len(prev_words_list) > 1 else ""
+            else:
+                prev_verb = prev_words_list[0] if prev_words_list else ""
+
+            if action_verb in self.OBSERVE_VERBS and prev_verb in self.OBSERVE_VERBS:
+                return True  # Both are observational → repetitive
+
+        # Word overlap check (lowered from 0.8 to 0.6)
+        action_words = set(action_lower.split())
+        for prev in self._action_history[-3:]:
+            prev_words = set(prev.lower().split())
+            if len(action_words) > 2 and len(prev_words) > 2:
+                overlap = len(action_words & prev_words)
+                min_len = min(len(action_words), len(prev_words))
+                if min_len > 0 and overlap / min_len > 0.6:
+                    return True
 
         return False
 
-    def _vary_action(self, action: str) -> str:
-        """Create a variation of a repetitive action.
+    def _vary_action(self, action: str, goal: str = "") -> str:
+        """Create a goal-appropriate variation of a repetitive action.
 
         Args:
             action: The repetitive action.
+            goal: The current scenario goal (used to pick appropriate variations).
 
         Returns:
-            A varied version.
+            A varied version appropriate for the goal type.
         """
-        variations = [
-            "I examine my surroundings more carefully",
-            "I check if there's anything I missed",
-            "I wait and listen for a moment",
-            "I look for another way forward",
-        ]
+        goal_lower = goal.lower()
+
+        # Dialog goals → dialog actions
+        if any(kw in goal_lower for kw in ["greet", "talk", "speak", "ask", "conversation", "exchange"]):
+            variations = [
+                "I say hello to the person nearby",
+                "I greet them with a friendly nod",
+                "I clear my throat and introduce myself",
+                "'Hello there!' I call out",
+            ]
+        # Item/take goals → search actions
+        elif any(kw in goal_lower for kw in ["take", "find", "get", "pick", "item"]):
+            variations = [
+                "I search the area for useful items",
+                "I check nearby surfaces for objects",
+                "I look for something I can use",
+                "I reach for the nearest item",
+            ]
+        # Default observational (existing)
+        else:
+            variations = [
+                "I examine my surroundings more carefully",
+                "I check if there's anything I missed",
+                "I wait and listen for a moment",
+                "I look for another way forward",
+            ]
 
         # Pick based on action history length to add variety
         idx = len(self._action_history) % len(variations)

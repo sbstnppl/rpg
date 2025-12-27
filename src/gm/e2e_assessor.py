@@ -32,6 +32,7 @@ class TurnAssessment:
     tool_usage: AssessmentResult
     db_changes: AssessmentResult
     time_tracking: AssessmentResult
+    grounding: AssessmentResult | None = None  # Entity grounding check
 
     @property
     def all_issues(self) -> list[str]:
@@ -41,11 +42,13 @@ class TurnAssessment:
         issues.extend(self.tool_usage.issues)
         issues.extend(self.db_changes.issues)
         issues.extend(self.time_tracking.issues)
+        if self.grounding:
+            issues.extend(self.grounding.issues)
         return issues
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for logging."""
-        return {
+        result = {
             "narrative": {
                 "passed": self.narrative.passed,
                 "message": self.narrative.message,
@@ -63,6 +66,12 @@ class TurnAssessment:
                 "message": self.time_tracking.message,
             },
         }
+        if self.grounding:
+            result["grounding"] = {
+                "passed": self.grounding.passed,
+                "message": self.grounding.message,
+            }
+        return result
 
 
 class GME2EAssessor:
@@ -77,6 +86,7 @@ class GME2EAssessor:
         db_changes: list[str],
         expectations: ActionExpectations,
         previous_responses: list[str] | None = None,
+        expected_entities: list[str] | None = None,
     ) -> TurnAssessment:
         """Assess a complete turn.
 
@@ -88,6 +98,7 @@ class GME2EAssessor:
             db_changes: List of DB change descriptions.
             expectations: Expected outcomes for this action.
             previous_responses: List of previous turn responses (for duplicate detection).
+            expected_entities: List of entity names that should appear in narrative.
 
         Returns:
             Complete turn assessment.
@@ -98,13 +109,19 @@ class GME2EAssessor:
         tool_result = self._assess_tools(tool_calls, expectations)
         db_result = self._assess_db_changes(db_changes, expectations)
         time_result = self._assess_time(time_passed, expectations)
+        grounding_result = self._assess_grounding(narrative, expected_entities)
 
-        overall = all([
+        results = [
             narrative_result.passed,
             tool_result.passed,
             db_result.passed,
             time_result.passed,
-        ])
+        ]
+        # Only include grounding if expected_entities was provided
+        if expected_entities:
+            results.append(grounding_result.passed)
+
+        overall = all(results)
 
         return TurnAssessment(
             overall_passed=overall,
@@ -112,6 +129,7 @@ class GME2EAssessor:
             tool_usage=tool_result,
             db_changes=db_result,
             time_tracking=time_result,
+            grounding=grounding_result if expected_entities else None,
         )
 
     def _text_similarity(self, a: str, b: str) -> float:
@@ -211,6 +229,7 @@ class GME2EAssessor:
         Checks:
         - Expected tools were called
         - Forbidden tools were not called
+        - Tool calls did not return errors
         """
         issues = []
         actual_tools = [tc.get("tool", "") for tc in tool_calls]
@@ -226,6 +245,13 @@ class GME2EAssessor:
             for tool in expectations.forbidden_tools:
                 if tool in actual_tools:
                     issues.append(f"Forbidden tool was called: {tool}")
+
+        # Check for tool errors
+        for tc in tool_calls:
+            result = tc.get("result", {})
+            if isinstance(result, dict) and "error" in result:
+                tool_name = tc.get("tool", "unknown")
+                issues.append(f"Tool '{tool_name}' error: {result['error']}")
 
         passed = len(issues) == 0
         if passed:
@@ -302,5 +328,45 @@ class GME2EAssessor:
             message = f"OK ({time_str})"
         else:
             message = f"FAIL ({time_str})"
+
+        return AssessmentResult(passed=passed, message=message, issues=issues)
+
+    def _assess_grounding(
+        self,
+        narrative: str,
+        expected_entities: list[str] | None,
+    ) -> AssessmentResult:
+        """Assess entity grounding in narrative.
+
+        Checks that narrative mentions at least one expected scene entity,
+        helping detect when the GM hallucinates content not in the scene.
+
+        Args:
+            narrative: GM narrative response.
+            expected_entities: List of entity names/terms that should appear.
+
+        Returns:
+            Assessment result for grounding check.
+        """
+        issues = []
+
+        if expected_entities:
+            narrative_lower = narrative.lower()
+            mentioned = [e for e in expected_entities if e.lower() in narrative_lower]
+
+            if not mentioned:
+                # Truncate list for readability
+                display_entities = expected_entities[:5]
+                if len(expected_entities) > 5:
+                    display_entities.append("...")
+                issues.append(
+                    f"No scene entities mentioned (expected: {display_entities})"
+                )
+
+        passed = len(issues) == 0
+        if passed:
+            message = "OK (grounded)"
+        else:
+            message = "FAIL (ungrounded)"
 
         return AssessmentResult(passed=passed, message=message, issues=issues)

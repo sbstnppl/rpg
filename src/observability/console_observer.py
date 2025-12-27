@@ -101,9 +101,17 @@ class RichConsoleObserver:
         preview = ""
         if event.text_preview and not self.show_tokens:
             preview = f' "{event.text_preview[:40]}..."'
+
+        # Show cache status - green if cache hit, yellow if cache creation
+        cache_str = ""
+        if event.cache_read_tokens > 0:
+            cache_str = f" [green]⚡cached:{event.cache_read_tokens}[/]"
+        elif event.cache_creation_tokens > 0:
+            cache_str = f" [yellow]📦caching:{event.cache_creation_tokens}[/]"
+
         self.console.print(
             f"{self.indent}{self.indent}{self.indent}-> {event.response_tokens} tokens, "
-            f"{event.duration_ms:.0f}ms{tools_str}{preview}"
+            f"{event.duration_ms:.0f}ms{tools_str}{cache_str}{preview}"
         )
 
     def on_tool_execution(self, event: ToolExecutionEvent) -> None:

@@ -29,12 +29,13 @@ from src.database.connection import get_db_session
 from src.database.models.session import GameSession
 from src.database.models.entities import Entity
 from src.database.models.enums import EntityType
-from src.database.models.world import TimeState, Fact
+from src.database.models.world import TimeState, Fact, Location
 from src.database.models.character_state import CharacterNeeds
 from src.database.models.items import Item
 from src.database.models.relationships import Relationship
 from src.gm.graph import build_gm_graph
 from src.gm.e2e_logger import GME2ELogger, TurnLog, compute_db_changes
+from src.gm.e2e_assessor import GME2EAssessor, TurnAssessment
 from scripts.gm_e2e_player_agent import TestPlayerAgent, PlayerDecision
 from scripts.gm_e2e_scenarios import (
     ALL_IMMERSIVE_SCENARIOS,
@@ -43,6 +44,7 @@ from scripts.gm_e2e_scenarios import (
     ImmersiveScenario,
     SuccessCriterion,
     FocusArea,
+    ActionExpectations,
 )
 
 
@@ -159,10 +161,14 @@ class ImmersiveTestRunner:
         self.error_tracker = ErrorTracker()
         self.verbose = verbose
 
+        # Assessment infrastructure
+        self.assessor = GME2EAssessor()
+        self.previous_responses: list[str] = []
+
         # Create observability hook if verbose mode
         if verbose:
             from src.observability.console_observer import RichConsoleObserver
-            self.observer = RichConsoleObserver(show_tool_details=True)
+            self.observer = RichConsoleObserver(show_tool_details=True, show_tokens=True)
         else:
             self.observer = None
 
@@ -185,6 +191,7 @@ class ImmersiveTestRunner:
         # Reset state
         self.player_agent.reset()
         self.error_tracker.reset()
+        self.previous_responses = []
 
         # Create fresh session
         try:
@@ -286,9 +293,30 @@ class ImmersiveTestRunner:
                         print("FATAL - Character break")
                         break
 
-                # Assess turn quality
-                issues = self._assess_turn(gm_response, time_passed, tool_calls)
-                passed = len(issues) == 0
+                # Assess turn quality using full assessor
+                expectations = ActionExpectations(
+                    min_chars=50,
+                    max_chars=2000,
+                    min_time=0,
+                    max_time=60,
+                )
+                # Expected entities from the test session setup
+                expected_entities = ["marcus", "farmer", "farmhouse", "bread", "water"]
+
+                assessment = self.assessor.assess_turn(
+                    narrative=gm_response,
+                    time_passed=time_passed,
+                    tool_calls=tool_calls,
+                    errors=result.get("errors", []),
+                    db_changes=db_changes,
+                    expectations=expectations,
+                    previous_responses=self.previous_responses,
+                    expected_entities=expected_entities,
+                )
+                self.previous_responses.append(gm_response)
+
+                passed = assessment.overall_passed
+                issues = assessment.all_issues
 
                 # Create turn result
                 turn_result = TurnResult(
@@ -398,29 +426,6 @@ class ImmersiveTestRunner:
             if re.search(pattern, text_lower):
                 return True
         return False
-
-    def _assess_turn(
-        self,
-        narrative: str,
-        time_passed: int | None,
-        tool_calls: list[dict],
-    ) -> list[str]:
-        """Assess turn quality and return list of issues."""
-        issues = []
-
-        # Check narrative length
-        if len(narrative) < 50:
-            issues.append(f"Narrative too short ({len(narrative)} chars)")
-
-        # Check for raw data structures
-        if "GMResponse" in narrative or "```" in narrative:
-            issues.append("Raw data structures in narrative")
-
-        # Check for markdown formatting
-        if "**" in narrative or narrative.startswith("#"):
-            issues.append("Unwanted markdown formatting")
-
-        return issues
 
     def _check_success_criteria(
         self,
@@ -691,6 +696,23 @@ class ImmersiveTestRunner:
 
             # Create test location
             location_key = "test_farmhouse"
+
+            # Create the Location record (required for GM context)
+            location = Location(
+                session_id=game_session.id,
+                location_key=location_key,
+                display_name="Farmhouse",
+                description=(
+                    "A modest farmhouse with rough-hewn wooden walls and a thatched roof. "
+                    "The interior is simple but well-kept, with a stone fireplace dominating "
+                    "one wall. A rough-hewn table sits at the center of the room, and sunlight "
+                    "filters through a small, dusty window above the sink. The scent of hay "
+                    "and woodsmoke hangs in the air."
+                ),
+                category="building",
+                atmosphere="Warm and rustic, with the crackle of a small fire",
+            )
+            db.add(location)
 
             storage = StorageLocation(
                 session_id=game_session.id,

@@ -43,19 +43,34 @@ class GroundingValidator:
             # Handle errors, retry with feedback
     """
 
-    def __init__(self, manifest: GroundingManifest) -> None:
+    def __init__(
+        self,
+        manifest: GroundingManifest,
+        skip_player_items: bool = True,
+    ) -> None:
         """Initialize validator with manifest.
 
         Args:
             manifest: The grounding manifest containing valid entities.
+            skip_player_items: If True, don't flag player inventory/equipped
+                items as unkeyed mentions. These are often mentioned naturally
+                in narrative without needing [key:text] format.
         """
         self.manifest = manifest
+        self.skip_player_items = skip_player_items
+        self._player_item_keys: set[str] = set()
         self._build_name_index()
 
     def _build_name_index(self) -> None:
         """Build index for efficient name lookups."""
         # Map display names to keys for detection
         self._name_to_key: dict[str, str] = {}
+
+        # Build set of player item keys (inventory + equipped)
+        # These can be mentioned without [key:text] format
+        if self.skip_player_items:
+            self._player_item_keys = set(self.manifest.inventory.keys())
+            self._player_item_keys.update(self.manifest.equipped.keys())
 
         for key, entity in self.manifest.all_entities().items():
             # Full display name
@@ -177,6 +192,11 @@ class GroundingValidator:
         for key, entity in self.manifest.all_entities().items():
             # If this key was used properly, skip checking its name
             if key in used_keys:
+                continue
+
+            # Skip player items if configured - these can be mentioned naturally
+            # e.g., "You're wearing a simple tunic" doesn't need [key:text]
+            if self.skip_player_items and key in self._player_item_keys:
                 continue
 
             display_lower = entity.display_name.lower()
