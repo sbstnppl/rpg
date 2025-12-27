@@ -126,7 +126,7 @@ def dialog_occurred() -> SuccessCriterion:
     return SuccessCriterion(
         description="NPC spoke in response (dialog occurred)",
         check_type="narrative_contains",
-        params={"patterns": ["says", "replies", "responds", "asks", "tells you"]},
+        params={"patterns": ["says", "replies", "responds", "asks", "tells you", "speaks", "answers", "greets", "nods"]},
     )
 
 
