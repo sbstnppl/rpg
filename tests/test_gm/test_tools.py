@@ -622,3 +622,183 @@ class TestSatisfyNeedMapping:
         assert result["success"] is True
         assert result["need"] == "stamina"
         assert result["new_value"] > initial_stamina
+
+
+class TestGetTimeTool:
+    """Tests for the get_time tool (OOC time queries)."""
+
+    def test_get_time_tool_defined(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """get_time tool should be in tool definitions."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id)
+        tool_defs = tools.get_tool_definitions()
+
+        names = [t["name"] for t in tool_defs]
+        assert "get_time" in names
+
+    def test_get_time_returns_current_time(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """get_time should return accurate time state."""
+        from src.managers.time_manager import TimeManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # Set specific time
+        tm = TimeManager(db_session, game_session)
+        tm.set_time("10:30")
+
+        tools = GMTools(db_session, game_session, player.id)
+        result = tools.execute_tool("get_time", {})
+
+        assert result["current_time"] == "10:30"
+        assert result["current_day"] == 1
+        # 10:30 - 08:00 = 150 minutes
+        assert result["elapsed_minutes"] == 150
+
+    def test_get_time_elapsed_formatting_hours(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """elapsed_today should show hours and minutes."""
+        from src.managers.time_manager import TimeManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # 1 hour and 15 minutes after default start (08:00)
+        tm = TimeManager(db_session, game_session)
+        tm.set_time("09:15")
+
+        tools = GMTools(db_session, game_session, player.id)
+        result = tools.execute_tool("get_time", {})
+
+        assert result["elapsed_today"] == "1 hour and 15 minutes"
+        assert result["elapsed_minutes"] == 75
+
+    def test_get_time_elapsed_formatting_minutes_only(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """elapsed_today should show just minutes for <60 min."""
+        from src.managers.time_manager import TimeManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # 10 minutes after default start (08:00)
+        tm = TimeManager(db_session, game_session)
+        tm.set_time("08:10")
+
+        tools = GMTools(db_session, game_session, player.id)
+        result = tools.execute_tool("get_time", {})
+
+        assert result["elapsed_today"] == "10 minutes"
+        assert result["elapsed_minutes"] == 10
+
+    def test_get_time_elapsed_singular_minute(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """elapsed_today should use singular 'minute' for 1 minute."""
+        from src.managers.time_manager import TimeManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # 1 minute after default start (08:00)
+        tm = TimeManager(db_session, game_session)
+        tm.set_time("08:01")
+
+        tools = GMTools(db_session, game_session, player.id)
+        result = tools.execute_tool("get_time", {})
+
+        assert result["elapsed_today"] == "1 minute"
+        assert result["elapsed_minutes"] == 1
+
+    def test_get_time_includes_day_of_week(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """get_time should return day of week."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id)
+        result = tools.execute_tool("get_time", {})
+
+        assert "day_of_week" in result
+        assert result["day_of_week"] == "monday"
+
+    def test_get_time_includes_period(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """get_time should return period of day."""
+        from src.managers.time_manager import TimeManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # Set to afternoon
+        tm = TimeManager(db_session, game_session)
+        tm.set_time("14:00")
+
+        tools = GMTools(db_session, game_session, player.id)
+        result = tools.execute_tool("get_time", {})
+
+        assert result["period"] == "afternoon"
+
+    def test_get_time_just_started(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """get_time should say 'just started' at session start time."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # Default time is 08:00, same as session start
+        tools = GMTools(db_session, game_session, player.id)
+        result = tools.execute_tool("get_time", {})
+
+        assert result["elapsed_today"] == "just started"
+        assert result["elapsed_minutes"] == 0

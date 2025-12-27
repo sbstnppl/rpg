@@ -297,3 +297,55 @@ class TestTimeManagerPeriodOfDay:
         result = manager.is_daytime()
 
         assert result is expected
+
+
+class TestTimeManagerElapsedTime:
+    """Tests for elapsed time calculations."""
+
+    @pytest.mark.parametrize(
+        "current_time,start_time,expected",
+        [
+            ("09:10", "08:00", 70),    # 1 hour 10 minutes
+            ("08:00", "08:00", 0),     # Just started
+            ("10:30", "08:00", 150),   # 2 hours 30 minutes
+            ("08:15", "08:00", 15),    # 15 minutes
+            ("12:00", "08:00", 240),   # 4 hours
+        ],
+    )
+    def test_calculate_elapsed_minutes(
+        self,
+        db_session: Session,
+        game_session: GameSession,
+        current_time: str,
+        start_time: str,
+        expected: int,
+    ):
+        """Verify calculate_elapsed_minutes computes correctly."""
+        create_time_state(db_session, game_session, current_time=current_time)
+        manager = TimeManager(db_session, game_session)
+
+        result = manager.calculate_elapsed_minutes(start_time)
+
+        assert result == expected
+
+    def test_calculate_elapsed_uses_default_start(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Default start time is 08:00."""
+        create_time_state(db_session, game_session, current_time="09:30")
+        manager = TimeManager(db_session, game_session)
+
+        result = manager.calculate_elapsed_minutes()
+
+        assert result == 90  # 09:30 - 08:00 = 90 minutes
+
+    def test_calculate_elapsed_before_start(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Negative elapsed time if current is before start."""
+        create_time_state(db_session, game_session, current_time="07:00")
+        manager = TimeManager(db_session, game_session)
+
+        result = manager.calculate_elapsed_minutes("08:00")
+
+        assert result == -60  # 1 hour before start

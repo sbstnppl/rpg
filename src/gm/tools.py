@@ -757,6 +757,18 @@ class GMTools:
                     "properties": {},
                 },
             },
+            {
+                "name": "get_time",
+                "description": (
+                    "Get current game time and elapsed time. "
+                    "Use for OOC time queries like 'what time is it' or "
+                    "'how long have I been here'."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
         ]
 
     def execute_tool(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
@@ -847,6 +859,8 @@ class GMTools:
             return self._get_player_state()
         elif tool_name == "get_story_context":
             return self._get_story_context()
+        elif tool_name == "get_time":
+            return self._get_time()
         else:
             return {"error": f"Unknown tool: {tool_name}"}
 
@@ -2182,4 +2196,42 @@ class GMTools:
             "story_summary": story_summary,
             "recent_events": recent_summary,
             "known_facts": fact_list,
+        }
+
+    def _get_time(self) -> dict[str, Any]:
+        """Get current game time information.
+
+        Returns:
+            Dict with current_day, current_time, day_of_week, period,
+            elapsed_today (human-readable), and elapsed_minutes.
+        """
+        from src.managers.time_manager import TimeManager
+
+        tm = TimeManager(self.db, self.game_session)
+        day, time_str = tm.get_current_time()
+        dow = tm.get_day_of_week()
+        period = tm.get_period_of_day()
+        elapsed = tm.calculate_elapsed_minutes()
+
+        # Format elapsed as human-readable
+        if elapsed < 0:
+            elapsed_str = "before session start"
+        elif elapsed == 0:
+            elapsed_str = "just started"
+        elif elapsed < 60:
+            elapsed_str = f"{elapsed} minute{'s' if elapsed != 1 else ''}"
+        else:
+            hours = elapsed // 60
+            mins = elapsed % 60
+            elapsed_str = f"{hours} hour{'s' if hours != 1 else ''}"
+            if mins > 0:
+                elapsed_str += f" and {mins} minute{'s' if mins != 1 else ''}"
+
+        return {
+            "current_day": day,
+            "current_time": time_str,
+            "day_of_week": dow.value,
+            "period": period,
+            "elapsed_today": elapsed_str,
+            "elapsed_minutes": elapsed,
         }

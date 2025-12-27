@@ -212,3 +212,22 @@ class TimeManager(BaseManager):
         time_state = self.get_or_create_time_state()
         hours = int(time_state.current_time.split(":")[0])
         return 6 <= hours < 20
+
+    def calculate_elapsed_minutes(self, start_time: str = "08:00") -> int:
+        """Calculate minutes elapsed since start_time on current day.
+
+        Args:
+            start_time: Reference start time in "HH:MM" format (default: "08:00").
+
+        Returns:
+            Minutes elapsed since start_time. Can be negative if current time
+            is before start_time.
+        """
+        time_state = self.get_or_create_time_state()
+        current_h, current_m = map(int, time_state.current_time.split(":"))
+        start_h, start_m = map(int, start_time.split(":"))
+
+        current_total = current_h * 60 + current_m
+        start_total = start_h * 60 + start_m
+
+        return current_total - start_total
