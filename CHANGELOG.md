@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **GM Grounding Retry Duplicate Responses** - Fixed narrative duplication after grounding validation retry
+  - Grounding retry now includes tool result context in feedback message
+  - Prevents LLM from re-describing scene instead of narrating action results
+  - E2E turn pass rate improved: 61.5% → 100%
+  - Key file: `src/gm/gm_node.py`
+
 - **Grounding Validator False Positives** - Player equipment no longer triggers unkeyed mention errors
   - Added `skip_player_items=True` parameter to `GroundingValidator`
   - Player inventory and equipped items exempt from unkeyed mention checks

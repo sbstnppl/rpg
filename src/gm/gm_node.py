@@ -515,10 +515,23 @@ class GMNode:
             # If we have retries left, ask LLM to fix
             if attempt < self.grounding_max_retries:
                 error_feedback = result.error_feedback()
+
+                # Build context about tool results so LLM narrates the action, not scene
+                tool_context = ""
+                if self.tool_results:
+                    tool_context = "\n\nREMINDER: You already processed the player's action. Narrate what happened based on these tool results:\n"
+                    for tr in self.tool_results:
+                        tool_name = tr.get("tool", "unknown")
+                        tool_result = tr.get("result", {})
+                        if isinstance(tool_result, dict) and tool_result.get("success"):
+                            tool_context += f"- {tool_name}: {tool_result.get('message', 'success')}\n"
+
                 messages.append(Message.user(
                     f"GROUNDING ERROR - Please fix your narrative and respond again.\n\n"
                     f"{error_feedback}\n\n"
-                    "Write ONLY the corrected narrative text - do NOT call any tools."
+                    f"{tool_context}"
+                    "Write ONLY the corrected narrative text - do NOT call any tools. "
+                    "Narrate the RESULTS of the player's action, not just the scene."
                 ))
 
                 # Get new response (no tools to force narrative-only response)
