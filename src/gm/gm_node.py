@@ -265,6 +265,25 @@ class GMNode:
         else:
             self._hook = observability_hook
 
+        # Minimal context mode for local LLMs
+        self._use_minimal_context = self._should_use_minimal_context()
+
+    def _should_use_minimal_context(self) -> bool:
+        """Determine if minimal context mode should be used.
+
+        Returns:
+            True if minimal context mode should be enabled.
+        """
+        from src.config import settings
+
+        # Explicit setting takes precedence
+        if settings.use_minimal_context is not None:
+            return settings.use_minimal_context
+
+        # Auto-detect based on provider
+        provider_name = getattr(self.llm_provider, "provider_name", "")
+        return provider_name in ("ollama", "qwen-agent")
+
     def get_tool_definitions(self) -> list[ToolDefinition]:
         """Get tool definitions for the LLM.
 
@@ -350,12 +369,24 @@ class GMNode:
             location_key=self.location_key,
         )
 
-        # Build dynamic system prompt with world state and summaries
-        system_prompt = self.context_builder.build_system_prompt(
-            player_id=self.player_id,
-            location_key=self.location_key,
-            include_grounding=self.grounding_enabled,
-        )
+        # Build system prompt (minimal or full depending on provider)
+        if self._use_minimal_context:
+            # Minimal context mode for local LLMs
+            from src.gm.action_classifier import ActionClassifier
+            action_category = ActionClassifier.classify(cleaned_input)
+            system_prompt = self.context_builder.build_minimal_system_prompt(
+                player_id=self.player_id,
+                location_key=self.location_key,
+                action_category=action_category,
+            )
+            logger.debug(f"Using minimal context mode (action: {action_category.value})")
+        else:
+            # Full context mode for cloud providers with caching
+            system_prompt = self.context_builder.build_system_prompt(
+                player_id=self.player_id,
+                location_key=self.location_key,
+                include_grounding=self.grounding_enabled,
+            )
 
         # Build conversation messages (turn history + current input)
         messages = self.context_builder.build_conversation_messages(
@@ -640,20 +671,44 @@ class GMNode:
 
             llm_start = time.perf_counter()
 
-            # Call LLM with tools
-            response = await self.llm_provider.complete_with_tools(
-                messages=messages,
-                tools=tools,
-                system_prompt=self._current_system_prompt,
-                temperature=0.7,
-                max_tokens=2048,
-                think=False,  # Disable thinking - GM decisions are straightforward
-            )
+            # Call LLM with tools - use streaming if available
+            if hasattr(self.llm_provider, "complete_with_tools_streaming"):
+                from src.observability.events import LLMTokenEvent
+
+                def emit_token(token: str) -> None:
+                    self._hook.on_llm_token(LLMTokenEvent(token=token, is_tool_use=False))
+
+                response = await self.llm_provider.complete_with_tools_streaming(
+                    messages=messages,
+                    tools=tools,
+                    system_prompt=self._current_system_prompt,
+                    temperature=0.7,
+                    max_tokens=2048,
+                    on_token=emit_token,
+                )
+            else:
+                response = await self.llm_provider.complete_with_tools(
+                    messages=messages,
+                    tools=tools,
+                    system_prompt=self._current_system_prompt,
+                    temperature=0.7,
+                    max_tokens=2048,
+                    think=False,
+                )
 
             llm_duration = (time.perf_counter() - llm_start) * 1000
 
-            # Calculate response tokens (rough estimate)
-            resp_tokens = len(response.content or "") // 4
+            # Get actual token count and cache stats from usage if available
+            resp_tokens = 0
+            cache_read = 0
+            cache_creation = 0
+            if response.usage:
+                resp_tokens = response.usage.completion_tokens
+                cache_read = response.usage.cache_read_tokens
+                cache_creation = response.usage.cache_creation_tokens
+            else:
+                # Fall back to rough estimate
+                resp_tokens = len(response.content or "") // 4
 
             # Emit LLM call end event
             self._hook.on_llm_call_end(LLMCallEndEvent(
@@ -663,6 +718,8 @@ class GMNode:
                 has_tool_calls=response.has_tool_calls,
                 tool_count=len(response.tool_calls) if response.tool_calls else 0,
                 text_preview=(response.content or "")[:50],
+                cache_read_tokens=cache_read,
+                cache_creation_tokens=cache_creation,
             ))
 
             # Accumulate any text content from this response

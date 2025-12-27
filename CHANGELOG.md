@@ -37,6 +37,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key files: `src/gm/gm_node.py`, `src/gm/tools.py`, `src/llm/anthropic_provider.py`
 
 ### Added
+- **Minimal Context Mode for Local LLMs** - 70-80% token reduction for Ollama/vLLM
+  - Action classifier detects action type from keywords (look, eat, attack, etc.)
+  - Pre-fetches only relevant context based on action category
+  - 4 new context tools: `get_rules()`, `get_scene_details()`, `get_player_state()`, `get_story_context()`
+  - Auto-enabled for `ollama` and `qwen-agent` providers
+  - New config: `use_minimal_context` (None=auto-detect, True/False=override)
+  - Key files: `src/gm/action_classifier.py`, `src/gm/rule_content.py`, `src/gm/context_builder.py`
+
+- **Anthropic Prompt Caching** - Faster subsequent LLM calls via cached system prompts
+  - Added `cache_control: {"type": "ephemeral"}` to system prompts
+  - First call caches (~40s), subsequent calls read from cache (10x cheaper)
+  - Cache stats displayed in verbose mode: `⚡cached:3344` or `📦caching:3344`
+  - Token streaming via `complete_with_tools_streaming()` with `on_token` callback
+  - Key files: `src/llm/anthropic_provider.py`, `src/observability/console_observer.py`
+
+- **E2E Test Grounding Validation** - Detect GM hallucinations in test assessment
+  - `GME2EAssessor` class with entity grounding checks
+  - Fails tests when GM response doesn't mention expected scene entities
+  - Proper `Location` record creation in test setup (fixes context building)
+  - Key files: `src/gm/e2e_assessor.py`, `scripts/gm_e2e_immersive_runner.py`
+
 - **GM Pipeline Observability** - Real-time visibility into long-running E2E tests
   - New `src/observability/` module with observer pattern architecture
   - `RichConsoleObserver` renders colored console output with phase timings

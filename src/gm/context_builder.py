@@ -1009,6 +1009,112 @@ class GMContextBuilder(BaseManager):
 
         return "\n".join(sections)
 
+    def build_minimal_system_prompt(
+        self,
+        player_id: int,
+        location_key: str,
+        action_category: "ActionCategory",
+    ) -> str:
+        """Build minimal system prompt for local LLMs.
+
+        Uses action classification to pre-fetch only relevant context,
+        reducing token usage by 70-80% compared to full prompt.
+
+        Args:
+            player_id: Player entity ID.
+            location_key: Current location key.
+            action_category: Classified action type.
+
+        Returns:
+            Minimal system prompt string.
+        """
+        from src.gm.prompts import MINIMAL_GM_CORE_PROMPT
+        from src.gm.rule_content import RULE_CONTENT
+        from src.gm.action_classifier import ActionCategory
+
+        sections = [MINIMAL_GM_CORE_PROMPT]
+
+        # Build minimal grounding manifest (entity keys only)
+        manifest = self.build_grounding_manifest(player_id, location_key)
+        sections.append(manifest.format_for_prompt())
+
+        # Pre-fetch context based on action category
+        if action_category == ActionCategory.LOOK:
+            # Observation needs scene details
+            sections.append("## SCENE")
+            sections.append(f"**Location**: {self._get_location_name(location_key)}")
+            sections.append(self._get_location_description(location_key))
+            sections.append(f"\n**NPCs Present**:\n{self._get_npcs_present(location_key, player_id)}")
+            sections.append(f"\n**Items**:\n{self._get_items_present(location_key)}")
+            sections.append(f"\n**Exits**:\n{self._get_exits(location_key)}")
+
+        elif action_category == ActionCategory.TAKE_DROP:
+            # Item manipulation needs inventory and items at location
+            sections.append("## ITEMS")
+            sections.append(f"**At Location**:\n{self._get_items_present(location_key)}")
+            sections.append(f"\n**Your Inventory**:\n{self._get_inventory(player_id)}")
+            sections.append("\n" + RULE_CONTENT.get("items", ""))
+
+        elif action_category == ActionCategory.NEEDS:
+            # Need satisfaction needs player state and rules
+            sections.append("## PLAYER STATE")
+            sections.append(self._get_needs_summary(player_id))
+            sections.append("\n" + RULE_CONTENT.get("needs", ""))
+
+        elif action_category == ActionCategory.SOCIAL:
+            # Social interaction needs NPCs and relationships
+            sections.append("## SOCIAL CONTEXT")
+            sections.append(f"**NPCs Present**:\n{self._get_npcs_present(location_key, player_id)}")
+            sections.append(f"\n**Relationships**:\n{self._get_relationships(player_id)}")
+            sections.append("\n" + RULE_CONTENT.get("npc_dialogue", ""))
+
+        elif action_category == ActionCategory.COMBAT:
+            # Combat needs equipped items and combat rules
+            sections.append("## COMBAT CONTEXT")
+            sections.append(f"**Equipped**:\n{self._get_equipped(player_id)}")
+            sections.append(f"\n**Enemies**:\n{self._get_npcs_present(location_key, player_id)}")
+            sections.append("\n" + RULE_CONTENT.get("combat", ""))
+
+        elif action_category == ActionCategory.MOVEMENT:
+            # Movement just needs exits
+            sections.append("## EXITS")
+            sections.append(self._get_exits(location_key))
+
+        else:
+            # DEFAULT: Minimal context - just location name
+            sections.append(f"## LOCATION: {self._get_location_name(location_key)}")
+
+        return "\n\n".join(sections)
+
+    def build_minimal_user_prompt(
+        self,
+        player_id: int,
+        location_key: str,
+        player_input: str,
+        turn_number: int = 1,
+    ) -> str:
+        """Build minimal user prompt with recent conversation.
+
+        Args:
+            player_id: Player entity ID.
+            location_key: Current location key.
+            player_input: Current player input.
+            turn_number: Current turn number.
+
+        Returns:
+            User prompt string.
+        """
+        from src.gm.prompts import MINIMAL_GM_USER_TEMPLATE
+
+        recent_turns = self._get_recent_turns(turn_number, limit=5)
+
+        return MINIMAL_GM_USER_TEMPLATE.format(
+            location_name=self._get_location_name(location_key),
+            context_sections="",  # Context is in system prompt
+            recent_turns=recent_turns,
+            player_input=player_input,
+        )
+
     def _is_valid_turn(self, turn: Turn) -> bool:
         """Check if a turn should be included in conversation context.
 

@@ -1,7 +1,7 @@
 """Anthropic Claude provider implementation."""
 
 import json
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from anthropic import AsyncAnthropic
 from anthropic import (
@@ -286,7 +286,15 @@ class AnthropicProvider:
                 "tools": api_tools,
             }
             if final_system:
-                kwargs["system"] = final_system
+                # Use cache_control to enable prompt caching for system prompt
+                # This dramatically reduces latency on subsequent calls
+                kwargs["system"] = [
+                    {
+                        "type": "text",
+                        "text": final_system,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
 
             # Handle tool_choice
             if isinstance(tool_choice, str):
@@ -301,6 +309,85 @@ class AnthropicProvider:
 
             response = await self._get_client().messages.create(**kwargs)
             return self._parse_response(response)
+        except Exception as e:
+            await self._handle_api_error(e)
+            raise
+
+    async def complete_with_tools_streaming(
+        self,
+        messages: Sequence[Message],
+        tools: Sequence[ToolDefinition],
+        model: str | None = None,
+        max_tokens: int = 4096,
+        temperature: float = 0.7,
+        tool_choice: str | dict[str, Any] = "auto",
+        system_prompt: str | None = None,
+        on_token: Callable[[str], None] | None = None,
+    ) -> LLMResponse:
+        """Generate a completion with streaming token output.
+
+        Same as complete_with_tools but streams tokens via callback.
+
+        Args:
+            messages: Conversation history.
+            tools: Available tools/functions.
+            model: Model to use.
+            max_tokens: Maximum tokens to generate.
+            temperature: Sampling temperature.
+            tool_choice: "auto", "any", "none", or specific tool.
+            system_prompt: System-level instructions.
+            on_token: Callback for each streamed text token.
+
+        Returns:
+            LLMResponse with text and/or tool_calls.
+        """
+        extracted_system, api_messages = self._convert_messages(messages)
+        final_system = system_prompt or extracted_system
+
+        # Convert tools to Anthropic format
+        api_tools = [tool.to_anthropic_format() for tool in tools]
+
+        try:
+            kwargs: dict[str, Any] = {
+                "model": model or self._default_model,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": api_messages,
+                "tools": api_tools,
+            }
+            if final_system:
+                # Use cache_control to enable prompt caching for system prompt
+                # This dramatically reduces latency on subsequent calls
+                kwargs["system"] = [
+                    {
+                        "type": "text",
+                        "text": final_system,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+
+            # Handle tool_choice
+            if isinstance(tool_choice, str):
+                if tool_choice == "any":
+                    kwargs["tool_choice"] = {"type": "any"}
+                elif tool_choice == "none":
+                    del kwargs["tools"]
+            elif isinstance(tool_choice, dict):
+                kwargs["tool_choice"] = tool_choice
+
+            # Use streaming API
+            async with self._get_client().messages.stream(**kwargs) as stream:
+                # Stream text tokens
+                async for event in stream:
+                    if event.type == "content_block_delta":
+                        if hasattr(event.delta, "text") and event.delta.text:
+                            if on_token:
+                                on_token(event.delta.text)
+
+                # Get final message with full response
+                final_message = await stream.get_final_message()
+                return self._parse_response(final_message)
+
         except Exception as e:
             await self._handle_api_error(e)
             raise

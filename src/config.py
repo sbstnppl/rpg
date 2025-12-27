@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     log_llm_calls: bool = False
     llm_log_dir: str = "logs/llm"
 
+    # Minimal Context Mode (for local LLMs)
+    # None = auto-detect based on provider (enabled for ollama/qwen-agent)
+    # True = always use minimal context
+    # False = always use full context
+    use_minimal_context: bool | None = None
+
     # ==========================================================================
     # Parsed Configuration Properties
     # ==========================================================================

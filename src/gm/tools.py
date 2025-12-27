@@ -698,6 +698,59 @@ class GMTools:
                     "required": ["need", "amount", "activity"],
                 },
             },
+            # Context-fetching tools for minimal context mode (local LLMs)
+            {
+                "name": "get_rules",
+                "description": (
+                    "Get detailed game rules for a category. "
+                    "Categories: needs, combat, time, entity_format, examples, storage, items, npc_dialogue"
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "enum": ["needs", "combat", "time", "entity_format", "examples",
+                                     "storage", "items", "npc_dialogue"],
+                            "description": "Rule category to retrieve",
+                        },
+                    },
+                    "required": ["category"],
+                },
+            },
+            {
+                "name": "get_scene_details",
+                "description": (
+                    "Get full scene details including location description, "
+                    "NPCs present, items visible, and available exits."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            {
+                "name": "get_player_state",
+                "description": (
+                    "Get the player's current state including inventory, "
+                    "equipped items, needs levels, and relationships."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            {
+                "name": "get_story_context",
+                "description": (
+                    "Get narrative context including background story, "
+                    "recent events summary, and known facts."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
         ]
 
     def execute_tool(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
@@ -779,6 +832,15 @@ class GMTools:
         # Need satisfaction tool
         elif tool_name == "satisfy_need":
             return self.satisfy_need(**filtered)
+        # Context-fetching tools for minimal context mode
+        elif tool_name == "get_rules":
+            return self._get_rules(**filtered)
+        elif tool_name == "get_scene_details":
+            return self._get_scene_details()
+        elif tool_name == "get_player_state":
+            return self._get_player_state()
+        elif tool_name == "get_story_context":
+            return self._get_story_context()
         else:
             return {"error": f"Unknown tool: {tool_name}"}
 
@@ -1938,4 +2000,180 @@ class GMTools:
             "change": new_value - old_value,
             "item_consumed": item_key if (item_key and destroys_item) else None,
             "message": f"Satisfied {need}: {old_value} -> {new_value}",
+        }
+
+    # =========================================================================
+    # Context-Fetching Tools for Minimal Context Mode
+    # =========================================================================
+
+    def _get_rules(self, category: str) -> dict[str, Any]:
+        """Get rule content for a category.
+
+        Args:
+            category: Rule category (needs, combat, time, entity_format, examples, etc.)
+
+        Returns:
+            Dict with rule content or error.
+        """
+        from src.gm.rule_content import get_rule_content, get_all_categories
+
+        content = get_rule_content(category)
+        if content is None:
+            return {
+                "error": f"Unknown category: {category}",
+                "available": get_all_categories(),
+            }
+
+        return {"category": category, "content": content}
+
+    def _get_scene_details(self) -> dict[str, Any]:
+        """Get full scene details for current location.
+
+        Returns:
+            Dict with location, NPCs, items, and exits.
+        """
+        if not self.location_key:
+            return {"error": "No location set"}
+
+        # Get location
+        location = (
+            self.db.query(Location)
+            .filter(
+                Location.session_id == self.session_id,
+                Location.location_key == self.location_key,
+            )
+            .first()
+        )
+
+        location_info = {
+            "key": self.location_key,
+            "name": location.display_name if location else self.location_key,
+            "description": location.description if location else "No description",
+            "atmosphere": location.atmosphere if location else None,
+        }
+
+        # Get NPCs
+        npcs = self.entity_manager.get_npcs_in_scene(self.location_key)
+        npc_list = []
+        for npc in npcs[:10]:
+            npc_info = {
+                "key": npc.entity_key,
+                "name": npc.display_name,
+            }
+            if npc.occupation:
+                npc_info["occupation"] = npc.occupation
+            if npc.npc_extension and npc.npc_extension.current_mood:
+                npc_info["mood"] = npc.npc_extension.current_mood
+            npc_list.append(npc_info)
+
+        # Get items at location
+        items = self.item_manager.get_items_at_location(self.location_key)
+        item_list = [{"key": i.item_key, "name": i.display_name} for i in items[:15]]
+
+        # Get exits
+        from src.managers.location_manager import LocationManager
+        loc_manager = LocationManager(self.db, self.game_session)
+        try:
+            accessible = loc_manager.get_accessible_locations(self.location_key)
+            exits = [{"key": loc.location_key, "name": loc.display_name} for loc in accessible]
+        except Exception:
+            exits = []
+
+        return {
+            "location": location_info,
+            "npcs": npc_list,
+            "items": item_list,
+            "exits": exits,
+        }
+
+    def _get_player_state(self) -> dict[str, Any]:
+        """Get player's current state.
+
+        Returns:
+            Dict with inventory, equipped, needs, and relationships.
+        """
+        # Get inventory
+        inventory_items = self.item_manager.get_inventory(self.player_id)
+        inventory = [{"key": i.item_key, "name": i.display_name} for i in inventory_items[:20]]
+
+        # Get equipped items
+        equipped_items = self.item_manager.get_equipped_items(self.player_id)
+        equipped = []
+        for item in equipped_items:
+            equipped.append({
+                "key": item.item_key,
+                "name": item.display_name,
+                "slot": item.body_slot or "unknown",
+            })
+
+        # Get needs
+        needs_record = self.needs_manager.get_needs(self.player_id)
+        needs = {}
+        if needs_record:
+            needs = {
+                "hunger": needs_record.hunger,
+                "thirst": needs_record.thirst,
+                "stamina": needs_record.stamina,
+                "hygiene": needs_record.hygiene,
+                "comfort": needs_record.comfort,
+                "wellness": needs_record.wellness,
+                "sleep_pressure": needs_record.sleep_pressure,
+            }
+
+        # Get relationships
+        relationships_data = self.relationship_manager.get_relationships_for_entity(
+            self.player_id, direction="to"
+        )
+        relationships = []
+        for rel in relationships_data[:10]:
+            if rel.knows:
+                npc = self.db.query(Entity).filter(Entity.id == rel.from_entity_id).first()
+                if npc:
+                    relationships.append({
+                        "npc": npc.display_name,
+                        "trust": rel.trust or 50,
+                        "liking": rel.liking or 50,
+                    })
+
+        return {
+            "inventory": inventory,
+            "equipped": equipped,
+            "needs": needs,
+            "relationships": relationships,
+        }
+
+    def _get_story_context(self) -> dict[str, Any]:
+        """Get narrative context.
+
+        Returns:
+            Dict with story summary, recent events, and known facts.
+        """
+        from src.database.models.world import Fact
+        from src.managers.summary_manager import SummaryManager
+
+        summary_manager = SummaryManager(self.db, self.game_session)
+
+        # Get story and recent summaries
+        story_summary = summary_manager.get_story_summary() or "Story just beginning"
+        recent_summary = summary_manager.get_recent_summary() or "No recent events"
+
+        # Get known facts
+        facts = (
+            self.db.query(Fact)
+            .filter(
+                Fact.session_id == self.session_id,
+                Fact.is_secret == False,
+            )
+            .limit(20)
+            .all()
+        )
+        fact_list = [
+            {"subject": f.subject_key, "predicate": f.predicate, "value": f.value}
+            for f in facts
+        ]
+
+        return {
+            "story_summary": story_summary,
+            "recent_events": recent_summary,
+            "known_facts": fact_list,
         }
