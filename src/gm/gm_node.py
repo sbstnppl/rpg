@@ -6,6 +6,7 @@ Handles tool execution loop for skill checks, combat, and entity creation.
 
 import json
 import logging
+import re
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -40,6 +41,42 @@ class GMNode:
     _MARKDOWN_HEADER_PATTERNS = (
         r"^\*\*[A-Za-z ]+(\([^)]+\))?:\*\*\s*$",  # **Section:** or **Updated Inventory (Finn):**
         r"^#+\s+.*$",  # ## Header or # Header
+    )
+
+    # Patterns that indicate the model broke character (speaking as AI/assistant)
+    _CHARACTER_BREAK_PATTERNS = (
+        # AI self-identification
+        r"\bmy name is\b",  # Speaking as self (should be narrating NPC)
+        r"\bi'?m an? (?:ai|llm|language model|assistant)\b",
+        r"\bi am an? (?:ai|llm|language model|assistant)\b",
+        r"\bas an? (?:ai|llm|assistant)\b",
+        r"\bi don'?t have (?:a )?(?:name|feelings|emotions)\b",
+        # Chatbot phrases
+        r"\bfeel free to (?:ask|reach out)\b",
+        r"\byou'?re welcome\b",
+        r"\bhow can i help\b",
+        r"\bhappy to (?:help|assist)\b",
+        # Third-person narration (should be second-person "you")
+        r"\bthe player\b",  # Should be "you", not "the player"
+        r"\bplayer has\b",
+        r"\bplayer's (?:actions|character|inventory)\b",
+        # Meta-commentary about errors/tools (technical debugging)
+        r"\bthe error (?:arises|occurs|is|indicates|shows)\b",
+        r"\b(?:this|the) (?:error|issue) (?:can be|is) (?:resolved|fixed)\b",
+        r"\bto (?:resolve|fix) this\b",
+        r"\bfunction call\b",
+        r"\bjson\s*\{",  # JSON code blocks
+        r"\b(?:the|this) (?:function|tool|api)\b",
+        r"\breferencing an? (?:undefined|invalid)\b",
+        r"\bentity.+not found\b",
+        r"\bitem.+(?:not|doesn't) exist\b",
+        r"\bis not recognized\b",  # Technical debugging
+        r"\bhas not been (?:introduced|provided|defined)\b",
+        r"\bno prior (?:mention|information|context)\b",
+        r"\bin the current context\b",  # Technical scoping language
+        # Game design / strategy game style
+        r"\bnext steps?:\b",  # Strategy game prompt
+        r"\bnarratively,?\s+this\b",  # Meta-commentary on narrative
     )
 
     @staticmethod
@@ -152,6 +189,26 @@ class GMNode:
     def _clean_narrative(self, narrative: str) -> str:
         """Instance method wrapper for _clean_narrative_static."""
         return self._clean_narrative_static(narrative)
+
+    @classmethod
+    def _detect_character_break(cls, text: str) -> tuple[bool, str | None]:
+        """Detect if the model broke character (responding as AI instead of GM).
+
+        Args:
+            text: The narrative text to check.
+
+        Returns:
+            Tuple of (is_broken, matched_pattern) where matched_pattern
+            is the pattern that triggered detection, or None.
+        """
+        if not text:
+            return False, None
+
+        text_lower = text.lower()
+        for pattern in cls._CHARACTER_BREAK_PATTERNS:
+            if re.search(pattern, text_lower):
+                return True, pattern
+        return False, None
 
     def __init__(
         self,
@@ -307,6 +364,9 @@ class GMNode:
         if self.grounding_enabled and self._current_manifest:
             response = await self._validate_grounding(response, messages, tools)
 
+        # Validate character consistency (detect AI-like responses)
+        response = await self._validate_character(response, messages)
+
         # Parse response into GMResponse
         return self._parse_response(response, player_input, turn_number)
 
@@ -376,17 +436,17 @@ class GMNode:
             if attempt < self.grounding_max_retries:
                 error_feedback = result.error_feedback()
                 messages.append(Message.user(
-                    f"GROUNDING ERROR - Please fix and respond again:\n\n{error_feedback}"
+                    f"GROUNDING ERROR - Please fix your narrative and respond again.\n\n"
+                    f"{error_feedback}\n\n"
+                    "Write ONLY the corrected narrative text - do NOT call any tools."
                 ))
 
-                # Get new response
-                response = await self.llm_provider.complete_with_tools(
+                # Get new response (no tools to force narrative-only response)
+                response = await self.llm_provider.complete(
                     messages=messages,
-                    tools=tools,
                     system_prompt=self._current_system_prompt,
                     temperature=0.7,
                     max_tokens=2048,
-                    think=False,
                 )
 
         # After max retries or in log-only mode, return as-is
@@ -396,6 +456,71 @@ class GMNode:
             "proceeding with response"
         )
         return response
+
+    async def _validate_character(
+        self,
+        response: LLMResponse,
+        messages: list[Message],
+    ) -> LLMResponse:
+        """Validate that the response stays in GM character.
+
+        Detects AI-assistant patterns (e.g., "My name is...", "You're welcome",
+        "How can I help") and retries with correction if found.
+
+        Args:
+            response: The LLM response to validate.
+            messages: Current conversation messages (for retry).
+
+        Returns:
+            Validated or corrected response.
+        """
+        if not response.content:
+            return response
+
+        has_break, pattern = self._detect_character_break(response.content)
+
+        if not has_break:
+            return response
+
+        logger.warning(
+            f"Character break detected (pattern: {pattern}): "
+            f"{response.content[:100]}..."
+        )
+
+        # Retry with explicit correction
+        messages.append(Message.user(
+            "CHARACTER ERROR - You broke character and responded as an AI assistant.\n\n"
+            "CRITICAL RULES:\n"
+            "- You ARE the Game Master narrating a fantasy RPG\n"
+            "- NEVER say 'My name is...' - narrators don't have names\n"
+            "- NEVER use assistant phrases like 'You're welcome' or 'How can I help'\n"
+            "- NEVER refer to 'the player' - use 'you' (second person)\n"
+            "- NEVER write 'Next steps:' or game design commentary\n"
+            "- NEVER explain errors, debug tools, or provide technical commentary\n"
+            "- If a tool fails, handle it gracefully IN THE STORY\n"
+            "- Write immersive second-person narrative prose: 'You see...', 'You notice...'\n\n"
+            "Now write the proper GM narrative response to the player's input. "
+            "Stay in character as the invisible narrator describing the game world."
+        ))
+
+        corrected = await self.llm_provider.complete(
+            messages=messages,
+            system_prompt=self._current_system_prompt,
+            temperature=0.7,
+            max_tokens=2048,
+        )
+
+        # Check if correction worked
+        still_broken, _ = self._detect_character_break(corrected.content or "")
+        if still_broken:
+            logger.error(
+                "Character break persists after correction attempt, "
+                "proceeding with original response"
+            )
+            return response
+
+        logger.info("Character validation passed after correction")
+        return corrected
 
     async def _run_tool_loop(
         self,
@@ -465,7 +590,7 @@ class GMNode:
                 # Execute the tool
                 result = await self._execute_tool_call(tool_call)
 
-                # Create tool result message
+                # Create tool result message (TOOL role for provider compatibility)
                 result_str = json.dumps(result) if isinstance(result, dict) else str(result)
                 tool_result_messages.append(Message.tool_result(
                     tool_call_id=tool_call.id,
@@ -487,22 +612,11 @@ class GMNode:
                 content=tuple(assistant_content_blocks),
             ))
 
-            # Add tool result messages
+            # Add tool result messages (TOOL role)
+            # The Anthropic provider will merge these into a single user message
+            # No separate narrative reminder - system prompt already instructs this
             for tool_result_msg in tool_result_messages:
                 messages.append(tool_result_msg)
-
-            # Add narrative reminder after tool results
-            # Reference the original player input to keep response grounded
-            messages.append(Message(
-                role=MessageRole.USER,
-                content=(
-                    "Now write your narrative response to the player's action. "
-                    "Write 2-5 sentences in second person that directly describe what happens "
-                    "in response to the player's input. Stay grounded in the scene context - "
-                    "only reference NPCs, items, and locations that exist. "
-                    "Do NOT explain tools or summarize mechanics - just tell the story."
-                ),
-            ))
 
         logger.warning(f"GM tool loop reached max iterations ({self.MAX_TOOL_ITERATIONS})")
         # Return with accumulated text even on max iterations

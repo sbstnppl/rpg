@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **GM Character Consistency** - Multi-layer defense against AI-like responses
+  - Layer 1: Strengthened GM persona in system prompt with explicit character rules
+  - Layer 2: `_validate_character()` detects character breaks with regex patterns and retries
+  - Layer 3: `_is_valid_turn()` filters bad turns from conversation history
+  - Patterns detect: AI self-identification, chatbot phrases, third-person narration, technical meta-commentary
+  - E2E test pass rate: 40% → 100%
+  - Key files: `src/gm/gm_node.py`, `src/gm/context_builder.py`, `src/gm/prompts.py`
+
+- **GM Grounding Retry Loop** - Fixed retry to use text-only completion
+  - Changed from `complete_with_tools()` to `complete()` for grounding retries
+  - Prevents model from calling more tools instead of fixing narrative
+  - Key file: `src/gm/gm_node.py`
+
 - **GM Tool Calling Consistency** - Improved prompt structure for reliable tool execution
   - Restructured GM system prompt with "MANDATORY TOOL CALLS" section at top
   - Added all 10 needs with trigger words in table format

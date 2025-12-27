@@ -105,6 +105,49 @@ class GMTools:
             self._needs_manager = NeedsManager(self.db, self.game_session)
         return self._needs_manager
 
+    def _get_valid_params(self, tool_name: str) -> set[str]:
+        """Get valid parameter names for a tool from its definition.
+
+        Args:
+            tool_name: Name of the tool.
+
+        Returns:
+            Set of valid parameter names.
+        """
+        for tool in self.get_tool_definitions():
+            if tool["name"] == tool_name:
+                return set(tool["input_schema"].get("properties", {}).keys())
+        return set()
+
+    def _filter_tool_input(self, tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+        """Filter tool input to only valid parameters.
+
+        Prevents crashes when LLM hallucinates extra parameters.
+
+        Args:
+            tool_name: Name of the tool.
+            tool_input: Raw input from LLM.
+
+        Returns:
+            Filtered input with only valid parameters.
+        """
+        valid_params = self._get_valid_params(tool_name)
+        if not valid_params:
+            # Unknown tool, return as-is
+            return tool_input
+
+        filtered = {k: v for k, v in tool_input.items() if k in valid_params}
+
+        # Log any filtered params for debugging
+        extra_params = set(tool_input.keys()) - valid_params
+        if extra_params:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Tool {tool_name}: Ignored hallucinated params: {extra_params}"
+            )
+
+        return filtered
+
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """Get tool definitions for Claude API.
 
@@ -667,15 +710,15 @@ class GMTools:
         Returns:
             Tool result as a dictionary.
         """
+        # Filter input to prevent LLM hallucinated params
+        filtered = self._filter_tool_input(tool_name, tool_input)
+
         if tool_name == "skill_check":
-            return self.skill_check(**tool_input).model_dump()
+            return self.skill_check(**filtered).model_dump()
         elif tool_name == "attack_roll":
-            return self.attack_roll(**tool_input).model_dump()
+            return self.attack_roll(**filtered).model_dump()
         elif tool_name == "damage_entity":
-            # Filter to only expected parameters
-            allowed = {"target", "amount", "damage_type"}
-            filtered_input = {k: v for k, v in tool_input.items() if k in allowed}
-            return self.damage_entity(**filtered_input).model_dump()
+            return self.damage_entity(**filtered).model_dump()
         elif tool_name == "create_entity":
             # Normalize parameter aliases - LLM sometimes uses shorthand names
             if "type" in tool_input and "entity_type" not in tool_input:
@@ -704,38 +747,38 @@ class GMTools:
             return self.record_fact(**tool_input)
         # Relationship tools
         elif tool_name == "get_npc_attitude":
-            return self.get_npc_attitude(**tool_input)
+            return self.get_npc_attitude(**filtered)
         # Quest tools
         elif tool_name == "assign_quest":
-            return self.assign_quest(**tool_input)
+            return self.assign_quest(**filtered)
         elif tool_name == "update_quest":
-            return self.update_quest(**tool_input)
+            return self.update_quest(**filtered)
         elif tool_name == "complete_quest":
-            return self.complete_quest(**tool_input)
+            return self.complete_quest(**filtered)
         # Task & Appointment tools
         elif tool_name == "create_task":
-            return self.create_task(**tool_input)
+            return self.create_task(**filtered)
         elif tool_name == "complete_task":
-            return self.complete_task(**tool_input)
+            return self.complete_task(**filtered)
         elif tool_name == "create_appointment":
-            return self.create_appointment(**tool_input)
+            return self.create_appointment(**filtered)
         elif tool_name == "complete_appointment":
-            return self.complete_appointment(**tool_input)
+            return self.complete_appointment(**filtered)
         # Needs tools (Tier 3)
         elif tool_name == "apply_stimulus":
-            return self.apply_stimulus(**tool_input)
+            return self.apply_stimulus(**filtered)
         elif tool_name == "mark_need_communicated":
-            return self.mark_need_communicated(**tool_input)
+            return self.mark_need_communicated(**filtered)
         # Item manipulation tools
         elif tool_name == "take_item":
-            return self.take_item(**tool_input)
+            return self.take_item(**filtered)
         elif tool_name == "drop_item":
-            return self.drop_item(**tool_input)
+            return self.drop_item(**filtered)
         elif tool_name == "give_item":
-            return self.give_item(**tool_input)
+            return self.give_item(**filtered)
         # Need satisfaction tool
         elif tool_name == "satisfy_need":
-            return self.satisfy_need(**tool_input)
+            return self.satisfy_need(**filtered)
         else:
             return {"error": f"Unknown tool: {tool_name}"}
 

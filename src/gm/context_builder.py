@@ -4,6 +4,8 @@ Wraps the existing ContextCompiler manager and formats output
 for the new GM prompt template.
 """
 
+import re
+
 from sqlalchemy.orm import Session
 
 from src.database.models.entities import Entity, EntityAttribute, EntitySkill
@@ -30,6 +32,45 @@ class GMContextBuilder(BaseManager):
     Uses the existing ContextCompiler for most data gathering,
     then formats it according to the new GM prompt template.
     """
+
+    # Minimum response length for a turn to be included in context
+    _MIN_RESPONSE_LENGTH = 30
+
+    # Patterns that indicate the model broke character (speaking as AI/assistant)
+    _CHARACTER_BREAK_PATTERNS = (
+        # AI self-identification
+        r"\bmy name is\b",  # Speaking as self (should be narrating NPC)
+        r"\bi'?m an? (?:ai|llm|language model|assistant)\b",
+        r"\bi am an? (?:ai|llm|language model|assistant)\b",
+        r"\bas an? (?:ai|llm|assistant)\b",
+        r"\bi don'?t have (?:a )?(?:name|feelings|emotions)\b",
+        # Chatbot phrases
+        r"\bfeel free to (?:ask|reach out)\b",
+        r"\byou'?re welcome\b",
+        r"\bhow can i help\b",
+        r"\bhappy to (?:help|assist)\b",
+        # Third-person narration (should be second-person "you")
+        r"\bthe player\b",  # Should be "you", not "the player"
+        r"\bplayer has\b",
+        r"\bplayer's (?:actions|character|inventory)\b",
+        # Meta-commentary about errors/tools (technical debugging)
+        r"\bthe error (?:arises|occurs|is|indicates|shows)\b",
+        r"\b(?:this|the) (?:error|issue) (?:can be|is) (?:resolved|fixed)\b",
+        r"\bto (?:resolve|fix) this\b",
+        r"\bfunction call\b",
+        r"\bjson\s*\{",  # JSON code blocks
+        r"\b(?:the|this) (?:function|tool|api)\b",
+        r"\breferencing an? (?:undefined|invalid)\b",
+        r"\bentity.+not found\b",
+        r"\bitem.+(?:not|doesn't) exist\b",
+        r"\bis not recognized\b",  # Technical debugging
+        r"\bhas not been (?:introduced|provided|defined)\b",
+        r"\bno prior (?:mention|information|context)\b",
+        r"\bin the current context\b",  # Technical scoping language
+        # Game design / strategy game style
+        r"\bnext steps?:\b",  # Strategy game prompt
+        r"\bnarratively,?\s+this\b",  # Meta-commentary on narrative
+    )
 
     def __init__(self, db: Session, game_session: GameSession) -> None:
         super().__init__(db, game_session)
@@ -968,6 +1009,36 @@ class GMContextBuilder(BaseManager):
 
         return "\n".join(sections)
 
+    def _is_valid_turn(self, turn: Turn) -> bool:
+        """Check if a turn should be included in conversation context.
+
+        Filters out turns that would "poison" the context:
+        - Empty or too-short responses
+        - Responses containing character breaks (AI-like patterns)
+
+        Including bad turns in context can cause cascade failures where
+        the model learns to repeat the bad patterns.
+
+        Args:
+            turn: The turn to validate.
+
+        Returns:
+            True if the turn should be included in context.
+        """
+        # Check for empty or too-short response
+        if not turn.gm_response:
+            return False
+        if len(turn.gm_response) < self._MIN_RESPONSE_LENGTH:
+            return False
+
+        # Check for character breaks
+        text_lower = turn.gm_response.lower()
+        for pattern in self._CHARACTER_BREAK_PATTERNS:
+            if re.search(pattern, text_lower):
+                return False
+
+        return True
+
     def build_conversation_messages(
         self,
         player_id: int,
@@ -978,7 +1049,9 @@ class GMContextBuilder(BaseManager):
         """Build conversation history as USER/ASSISTANT message pairs.
 
         Creates a natural conversation flow with past turns as message pairs,
-        ending with the current player input.
+        ending with the current player input. Invalid turns (empty, too short,
+        or containing character breaks) are filtered out to prevent cascade
+        failures.
 
         Args:
             player_id: Player entity ID.
@@ -994,8 +1067,12 @@ class GMContextBuilder(BaseManager):
         # Get historical turns
         history_turns = self._select_turns_for_context(turn_number)
 
-        # Convert history to message pairs
+        # Convert history to message pairs, filtering out bad turns
         for turn in history_turns:
+            if not self._is_valid_turn(turn):
+                # Skip invalid turns to prevent poisoning context
+                continue
+
             # User message (player input)
             messages.append(
                 Message(role=MessageRole.USER, content=turn.player_input)

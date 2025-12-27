@@ -371,3 +371,129 @@ class TestTier3NeedsTools:
 
         assert result["success"] is True
         assert result["need_name"] == "hunger"
+
+
+class TestExecuteToolFiltering:
+    """Tests for execute_tool input filtering to handle LLM hallucinated params."""
+
+    def test_take_item_ignores_hallucinated_storage_location(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """take_item ignores hallucinated storage_location parameter."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id)
+
+        # Call execute_tool with hallucinated param - should not raise TypeError
+        result = tools.execute_tool("take_item", {
+            "item_key": "nonexistent_item",
+            "storage_location": "chest"  # hallucinated param
+        })
+
+        # Should get item not found error, not TypeError
+        assert "error" in result
+        assert "not found" in result["error"].lower() or "item not found" in result["error"].lower()
+
+    def test_drop_item_ignores_extra_params(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """drop_item ignores any extra hallucinated parameters."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id)
+
+        # Call with hallucinated params
+        result = tools.execute_tool("drop_item", {
+            "item_key": "nonexistent_item",
+            "target_location": "floor",  # hallucinated
+            "carefully": True  # hallucinated
+        })
+
+        # Should get item not found error, not TypeError
+        assert "error" in result
+
+    def test_skill_check_ignores_extra_params(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """skill_check ignores hallucinated parameters."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id)
+
+        # Call with hallucinated params - should work without TypeError
+        result = tools.execute_tool("skill_check", {
+            "skill": "perception",
+            "dc": 10,
+            "bonus_modifier": 5,  # hallucinated
+            "advantage": True  # hallucinated
+        })
+
+        # Should succeed (not raise TypeError)
+        assert "success" in result or "roll" in result
+
+    def test_get_valid_params_returns_correct_set(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """_get_valid_params returns correct parameter set for tools."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id)
+
+        # Check take_item
+        take_params = tools._get_valid_params("take_item")
+        assert take_params == {"item_key"}
+
+        # Check skill_check
+        skill_params = tools._get_valid_params("skill_check")
+        assert "skill" in skill_params
+        assert "dc" in skill_params
+
+    def test_filter_tool_input_removes_invalid_params(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """_filter_tool_input removes params not in tool definition."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id)
+
+        # Filter take_item input
+        input_data = {
+            "item_key": "sword_001",
+            "storage_location": "chest",
+            "quantity": 1
+        }
+        filtered = tools._filter_tool_input("take_item", input_data)
+
+        assert filtered == {"item_key": "sword_001"}
+        assert "storage_location" not in filtered
+        assert "quantity" not in filtered

@@ -155,6 +155,12 @@ class AnthropicProvider:
                             "name": block.tool_name,
                             "input": block.tool_input or {},
                         })
+                    elif block.type == "tool_result":
+                        content_blocks.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.tool_use_id,
+                            "content": block.tool_result or "",
+                        })
                 api_messages.append({
                     "role": role,
                     "content": content_blocks,
