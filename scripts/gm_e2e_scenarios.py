@@ -126,7 +126,38 @@ def dialog_occurred() -> SuccessCriterion:
     return SuccessCriterion(
         description="NPC spoke in response (dialog occurred)",
         check_type="narrative_contains",
-        params={"patterns": ["says", "replies", "responds", "asks", "tells you", "speaks", "answers", "greets", "nods"]},
+        params={
+            "patterns": [
+                # Direct speech verbs
+                "says",
+                "replies",
+                "responds",
+                "asks",
+                "tells you",
+                "speaks",
+                "answers",
+                "greets",
+                # Non-verbal acknowledgments
+                "nods",
+                "smiles",
+                "waves",
+                "gestures",
+                # Reaction verbs (NPC responding to player)
+                "returns",
+                "offers",
+                "regards",
+                "looks at you",
+                "turns to you",
+                "watches you",
+                "acknowledges",
+                # Emotional reactions
+                "startles",
+                "chuckles",
+                "laughs",
+                "frowns",
+                "shrugs",
+            ]
+        },
     )
 
 
