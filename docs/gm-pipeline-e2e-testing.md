@@ -4,8 +4,40 @@ This document provides a **reusable reference** for end-to-end testing of the GM
 
 ## Quick Start
 
+### Immersive Testing (LLM-Driven) - RECOMMENDED
+
+Uses an LLM (Ollama qwen3:32b) to play the game naturally:
+
 ```bash
-# Run all E2E test scenarios (creates fresh sessions automatically)
+# Run all 100 immersive scenarios (creates fresh sessions automatically)
+python scripts/gm_e2e_immersive_runner.py
+
+# Run quick test subset (5 scenarios)
+python scripts/gm_e2e_immersive_runner.py --quick
+
+# Run only priority 1 (critical) scenarios
+python scripts/gm_e2e_immersive_runner.py --priority 1
+
+# Run scenarios for a specific category
+python scripts/gm_e2e_immersive_runner.py --category hunger
+python scripts/gm_e2e_immersive_runner.py --category dialog
+
+# Use different Ollama model
+python scripts/gm_e2e_immersive_runner.py --model gpt-oss:120b
+
+# Don't stop on fundamental errors (run all scenarios)
+python scripts/gm_e2e_immersive_runner.py --no-stop
+
+# View test logs
+ls logs/gm_e2e/
+```
+
+### Static Testing (Legacy)
+
+Uses predefined player actions:
+
+```bash
+# Run all E2E test scenarios
 python scripts/gm_e2e_test_runner.py
 
 # Run a specific scenario
@@ -13,9 +45,6 @@ python scripts/gm_e2e_test_runner.py --scenario dialog
 
 # Run quick test subset
 python scripts/gm_e2e_test_runner.py --quick
-
-# View test logs
-ls logs/gm_e2e/
 ```
 
 ### Manual Testing
@@ -73,6 +102,38 @@ The GM uses a grounding system to prevent entity hallucination:
 GM Output: "[marcus_001:Marcus] waves at you from behind [counter_001:the counter]."
 Validation: ✓ marcus_001 in manifest, ✓ counter_001 in manifest
 Display: "Marcus waves at you from behind the counter."
+```
+
+### Character Break Detection (Multi-Layer Defense)
+
+The GM uses a multi-layer defense system to prevent the model from breaking character:
+
+**Layer 1 - System Prompt** (`src/gm/prompts.py`):
+- Explicit rules in system prompt: "You are NOT an AI assistant"
+- ABSOLUTE RULES section with examples of what NOT to do
+- Instructs GM to narrate NPCs in third person, not speak as them
+
+**Layer 2 - Response Validation** (`src/gm/gm_node.py:_validate_character()`):
+Detects character break patterns and retries with correction:
+- AI self-identification: "My name is", "I'm an AI", "I don't have feelings"
+- Chatbot phrases: "Feel free to ask", "How can I help", "You're welcome"
+- Third-person narration: "the player", "player has" (should be "you")
+- Meta-commentary: "the error occurs", "function call", "JSON"
+- Strategy game style: "Next steps:", "Narratively, this..."
+
+**Layer 3 - Context Filtering** (`src/gm/context_builder.py:_is_valid_turn()`):
+Filters "poisoned" turns from conversation history:
+- Removes turns with character breaks from context
+- Prevents bad patterns from cascading to future turns
+- Minimum response length check (30 chars)
+
+**Example Flow**:
+```
+GM Output: "My name is Marcus. How can I help you today?"
+           ↑ Character break detected (AI phrases)
+Retry with: "Your response broke character. Narrate in third person..."
+GM Output 2: "[farmer_marcus:Marcus] scratches his beard. 'Name's Marcus,' he says."
+             ✓ Correct - third person narration
 ```
 
 ---
@@ -367,6 +428,8 @@ The GM pipeline uses StateChange for mechanical effects instead of dedicated too
 - [ ] No raw data structures in output
 - [ ] No hallucinated items/NPCs not in DB
 - [ ] Entity references use `[key:text]` format (stripped for display)
+- [ ] No character breaks (AI phrases, "My name is", "How can I help")
+- [ ] No meta-commentary ("the error occurs", "function call")
 
 #### B. Database Queries
 
@@ -643,6 +706,27 @@ FROM character_needs WHERE entity_id = ?;
 - Max 2 retries before invalid refs are stripped
 - Enable `grounding_log_only=True` to log issues without blocking
 
+### Character break detected
+- Check `gm_node.py:_validate_character()` logs for detected patterns
+- Check `gm_node.py:_CHARACTER_BREAK_PATTERNS` for pattern list
+- Common causes:
+  - Model speaking as NPC: "My name is Marcus" instead of "[marcus] says 'Name's Marcus'"
+  - AI assistant phrases: "Feel free to ask", "How can I help"
+  - Third-person: "the player" instead of "you"
+  - Meta-commentary: "the error occurs", "function call"
+- Layer 2 retries once with correction feedback
+- Layer 3 (`context_builder.py:_is_valid_turn()`) filters bad turns from context
+- If breaks persist across turns, check system prompt in `prompts.py`
+
+### Fundamental error in immersive testing
+- Check `logs/gm_e2e/gm_e2e_error.md` for diagnostic dump
+- Error types:
+  - `CHARACTER_BREAK`: GM broke character 3x consecutively
+  - `EMPTY_RESPONSE`: GM returned empty/short response 3x
+  - `GM_EXCEPTION`: Unhandled exception in GM pipeline
+  - `PLAYER_AGENT_ERROR`: Ollama player agent failed
+- Resume with Claude Code: `cc` then `/tackle logs/gm_e2e/gm_e2e_error.md`
+
 ---
 
 ## Quick DB Connection
@@ -657,6 +741,11 @@ PGPASSWORD=bRXAKO0T8t23Wz3l9tyB psql -h 138.199.236.25 -U langgraphrpg -d langgr
 
 - **New GM Pipeline**: `src/gm/`
 - **Grounding Tests**: `tests/test_gm/test_grounding.py` (36 unit tests)
+- **Character Break Detection**: `src/gm/gm_node.py:_validate_character()`, `src/gm/context_builder.py:_is_valid_turn()`
+- **Immersive Test Runner**: `scripts/gm_e2e_immersive_runner.py` (LLM-driven)
+- **Test Player Agent**: `scripts/gm_e2e_player_agent.py` (Ollama qwen3:32b)
+- **Immersive Scenarios**: `scripts/gm_e2e_scenarios.py` (100 goal-based scenarios)
+- **Static Test Runner**: `scripts/gm_e2e_test_runner.py` (predefined actions)
 - **Legacy Pipeline**: `src/agents/nodes/game_master_node.py`
 - **Legacy Tools**: `src/agents/tools/gm_tools.py`
 - **Gameplay Testing Guide**: `.claude/docs/gameplay-testing-guide.md`

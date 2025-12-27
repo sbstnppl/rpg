@@ -37,6 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key files: `src/gm/gm_node.py`, `src/gm/tools.py`, `src/llm/anthropic_provider.py`
 
 ### Added
+- **Immersive E2E Test Runner** - LLM-driven gameplay testing with natural player behavior
+  - `TestPlayerAgent` uses Ollama qwen3:32b to decide contextually appropriate actions
+  - 100 goal-based scenarios across 20 categories (5+ tests per need type)
+  - Hybrid error handling: stops on 3 consecutive fundamental errors, generates diagnostic dump
+  - Dump at `logs/gm_e2e/gm_e2e_error.md` for `/tackle` in Claude Code
+  - Key files: `scripts/gm_e2e_immersive_runner.py`, `scripts/gm_e2e_player_agent.py`, `scripts/gm_e2e_scenarios.py`
+
 - **Grounded Narration System** - Prevent GM from hallucinating entities with validation
   - `GroundingManifest` schema tracks all valid entity keys (NPCs, items, storages, exits)
   - `GroundingValidator` checks `[key:text]` refs exist in manifest, detects unkeyed mentions
