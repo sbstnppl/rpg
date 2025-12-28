@@ -259,10 +259,10 @@ PLAYER: "I pick up the iron key"
 
 ### Example 4: NPC Sharing Information
 PLAYER: "Who are you?"
-→ TOOL: get_npc_attitude(from_entity="farmer_001", to_entity="player")
-→ TOOL: record_fact("entity", "farmer_001", "name", "Marcus")
-→ TOOL: record_fact("entity", "farmer_001", "occupation", "farmer")
-→ NARRATIVE: "'Name's Marcus,' [farmer_001:the man] says. 'Been farming here for twenty years.'"
+→ TOOL: get_npc_attitude(from_entity="farmer_marcus", to_entity="test_hero")
+→ TOOL: record_fact("entity", "farmer_marcus", "name", "Marcus")
+→ TOOL: record_fact("entity", "farmer_marcus", "occupation", "farmer")
+→ NARRATIVE: "'Name's Marcus,' [farmer_marcus:the man] says. 'Been farming here for twenty years.'"
 
 ### Example 5: WRONG - Missing [key:text] Format
 PLAYER: "I look at Marcus"

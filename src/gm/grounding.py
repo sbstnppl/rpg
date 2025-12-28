@@ -140,6 +140,36 @@ class GroundingManifest(BaseModel):
                 return category[key]
         return None
 
+    def find_similar_key(
+        self, invalid_key: str, threshold: float = 0.6
+    ) -> str | None:
+        """Find a valid key similar to an invalid one using fuzzy matching.
+
+        Used to suggest corrections when the LLM hallucinates entity keys.
+        For example, if the model uses 'farmer_001' but 'farmer_marcus' exists,
+        this will find and suggest the correct key.
+
+        Args:
+            invalid_key: The hallucinated/invalid key to match.
+            threshold: Minimum similarity score (0.0-1.0) to consider a match.
+                       Default 0.6 balances finding typos vs false positives.
+
+        Returns:
+            The most similar valid key if above threshold, None otherwise.
+        """
+        from difflib import SequenceMatcher
+
+        best_match: str | None = None
+        best_score = threshold
+
+        for valid_key in self.all_keys():
+            score = SequenceMatcher(None, invalid_key.lower(), valid_key.lower()).ratio()
+            if score > best_score:
+                best_match = valid_key
+                best_score = score
+
+        return best_match
+
     def format_for_prompt(self) -> str:
         """Format manifest for inclusion in GM system prompt.
 
@@ -153,28 +183,41 @@ class GroundingManifest(BaseModel):
             "- [marcus_001:Marcus] waves at you.",
             "- You pick up [sword_001:the iron sword].",
             "",
+            "### TOOL KEY REMINDER",
+            "When calling tools, copy the KEY exactly (the part BEFORE the colon):",
+            "- For 'bread_001: Bread' → use item_key=\"bread_001\" (NOT \"bread\")",
+            "- For 'farmer_marcus: Marcus' → use from_entity=\"farmer_marcus\"",
+            "",
             "### Available Entities",
             "",
         ]
 
-        # NPCs
+        # NPCs - with tool call reminder
         if self.npcs:
-            lines.append("**NPCs at location:**")
+            lines.append("**NPCs at location** (use KEY in get_npc_attitude, etc.):")
             for key, entity in self.npcs.items():
                 desc = f" ({entity.short_description})" if entity.short_description else ""
                 lines.append(f"- {key}: {entity.display_name}{desc}")
+            # Add example with first NPC key
+            first_npc = next(iter(self.npcs.keys()), None)
+            if first_npc:
+                lines.append(f"  → Example: get_npc_attitude(from_entity=\"{first_npc}\", ...)")
             lines.append("")
 
-        # Items at location
+        # Items at location - with tool call reminder
         if self.items_at_location:
-            lines.append("**Items at location:**")
+            lines.append("**Items at location** (use KEY in take_item, etc.):")
             for key, entity in self.items_at_location.items():
                 lines.append(f"- {key}: {entity.display_name}")
+            # Add example with first item key
+            first_item = next(iter(self.items_at_location.keys()), None)
+            if first_item:
+                lines.append(f"  → Example: take_item(item_key=\"{first_item}\")")
             lines.append("")
 
-        # Player inventory
+        # Player inventory - with tool call reminder
         if self.inventory:
-            lines.append("**Your inventory:**")
+            lines.append("**Your inventory** (use KEY in drop_item, give_item, etc.):")
             for key, entity in self.inventory.items():
                 lines.append(f"- {key}: {entity.display_name}")
             lines.append("")
@@ -242,8 +285,14 @@ class GroundingValidationResult(BaseModel):
         """Total number of grounding errors."""
         return len(self.invalid_keys) + len(self.unkeyed_mentions)
 
-    def error_feedback(self) -> str:
-        """Format errors for retry prompt.
+    def error_feedback(
+        self, manifest: "GroundingManifest | None" = None
+    ) -> str:
+        """Format errors for retry prompt with suggestions.
+
+        Args:
+            manifest: Optional manifest for fuzzy matching suggestions.
+                     If provided, will suggest similar valid keys.
 
         Returns:
             Human-readable error message for LLM retry.
@@ -256,7 +305,33 @@ class GroundingValidationResult(BaseModel):
         if self.invalid_keys:
             lines.append("**Invalid keys (not in manifest):**")
             for err in self.invalid_keys:
-                lines.append(f"- [{err.key}:{err.text}] - key '{err.key}' does not exist")
+                suggestion = ""
+                if manifest:
+                    similar = manifest.find_similar_key(err.key)
+                    if similar:
+                        entity = manifest.get_entity(similar)
+                        name = entity.display_name if entity else similar
+                        suggestion = f" → Did you mean: {similar} ({name})?"
+                lines.append(
+                    f"- [{err.key}:{err.text}] - key '{err.key}' does not exist{suggestion}"
+                )
+
+            # Show valid keys of the detected entity types
+            if manifest:
+                lines.append("")
+                lines.append("**Valid keys you can use:**")
+                if manifest.npcs:
+                    lines.append("NPCs:")
+                    for key, entity in list(manifest.npcs.items())[:5]:
+                        lines.append(f"  - {key}: {entity.display_name}")
+                if manifest.items_at_location:
+                    lines.append("Items at location:")
+                    for key, entity in list(manifest.items_at_location.items())[:5]:
+                        lines.append(f"  - {key}: {entity.display_name}")
+                if manifest.inventory:
+                    lines.append("Inventory:")
+                    for key, entity in list(manifest.inventory.items())[:5]:
+                        lines.append(f"  - {key}: {entity.display_name}")
             lines.append("")
 
         if self.unkeyed_mentions:

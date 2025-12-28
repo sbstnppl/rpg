@@ -4,8 +4,9 @@ Provides tool functions for skill checks, combat, and entity creation.
 These tools are called by the GM LLM during generation.
 """
 
+import logging
 import random
-from typing import Any, Callable
+from typing import Any, Callable, TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
@@ -34,6 +35,61 @@ from src.managers.relationship_manager import RelationshipManager
 from src.managers.task_manager import TaskManager
 from src.managers.needs import NeedsManager
 
+if TYPE_CHECKING:
+    from src.gm.grounding import GroundingManifest
+
+logger = logging.getLogger(__name__)
+
+
+class KeyResolver:
+    """Resolves entity keys with fuzzy matching fallback.
+
+    When the LLM hallucinates entity keys (e.g., uses 'farmer_001' instead
+    of 'farmer_marcus'), this class attempts to find the correct key using
+    fuzzy string matching.
+
+    Attributes:
+        manifest: The grounding manifest with valid entity keys.
+        threshold: Minimum similarity score (0.0-1.0) to consider a match.
+    """
+
+    def __init__(
+        self,
+        manifest: "GroundingManifest",
+        threshold: float = 0.6,
+    ) -> None:
+        """Initialize the key resolver.
+
+        Args:
+            manifest: Grounding manifest with valid entity keys.
+            threshold: Minimum similarity score to accept a fuzzy match.
+        """
+        self.manifest = manifest
+        self.threshold = threshold
+
+    def resolve(self, key: str) -> tuple[str, bool]:
+        """Resolve an entity key, with fuzzy matching fallback.
+
+        Args:
+            key: The entity key to resolve (possibly hallucinated).
+
+        Returns:
+            Tuple of (resolved_key, was_corrected). If was_corrected is True,
+            the key was fuzzy-matched to a valid alternative.
+        """
+        # Exact match - return immediately
+        if self.manifest.contains_key(key):
+            return key, False
+
+        # Fuzzy match
+        similar = self.manifest.find_similar_key(key, self.threshold)
+        if similar:
+            logger.warning(f"Fuzzy matched entity key: '{key}' -> '{similar}'")
+            return similar, True
+
+        # No match found - return original (tool will fail with error)
+        return key, False
+
 
 class GMTools:
     """Tool provider for the GM LLM.
@@ -51,6 +107,7 @@ class GMTools:
         roll_mode: str = "auto",
         location_key: str | None = None,
         turn_number: int = 1,
+        manifest: "GroundingManifest | None" = None,
     ) -> None:
         """Initialize tools.
 
@@ -61,6 +118,7 @@ class GMTools:
             roll_mode: "auto" for background rolls, "manual" for player animation.
             location_key: Current location key (for placing created items).
             turn_number: Current turn number for recording facts.
+            manifest: Optional grounding manifest for fuzzy key matching.
         """
         self.db = db
         self.game_session = game_session
@@ -69,6 +127,8 @@ class GMTools:
         self.roll_mode = roll_mode
         self.location_key = location_key
         self.turn_number = turn_number
+        self.manifest = manifest
+        self.resolver = KeyResolver(manifest) if manifest else None
 
         self._entity_manager: EntityManager | None = None
         self._item_manager: ItemManager | None = None
@@ -112,6 +172,20 @@ class GMTools:
         if self._needs_manager is None:
             self._needs_manager = NeedsManager(self.db, self.game_session)
         return self._needs_manager
+
+    def _resolve_key(self, key: str) -> str:
+        """Resolve an entity key, applying fuzzy matching if available.
+
+        Args:
+            key: Entity key (possibly hallucinated by the LLM).
+
+        Returns:
+            Resolved key (may be auto-corrected if fuzzy match found).
+        """
+        if not self.resolver:
+            return key
+        resolved, _ = self.resolver.resolve(key)
+        return resolved
 
     def _get_valid_params(self, tool_name: str) -> set[str]:
         """Get valid parameter names for a tool from its definition.
@@ -346,11 +420,17 @@ class GMTools:
                     "properties": {
                         "from_entity": {
                             "type": "string",
-                            "description": "NPC entity key whose attitude to check",
+                            "description": (
+                                "EXACT NPC entity key from context (copy the text BEFORE the colon). "
+                                "Example: for 'farmer_marcus: Marcus', use 'farmer_marcus'."
+                            ),
                         },
                         "to_entity": {
                             "type": "string",
-                            "description": "Target entity key (usually 'player')",
+                            "description": (
+                                "Target entity key. Use the player's entity key from context, "
+                                "NOT just 'player'. Example: 'test_hero' or 'hero_001'."
+                            ),
                         },
                     },
                     "required": ["from_entity", "to_entity"],
@@ -625,7 +705,10 @@ class GMTools:
                     "properties": {
                         "item_key": {
                             "type": "string",
-                            "description": "Item key of the item to take (from Items Present or storage)",
+                            "description": (
+                                "EXACT item key from context (copy the text BEFORE the colon). "
+                                "Example: for 'bread_001: Bread', use 'bread_001' NOT 'bread'."
+                            ),
                         },
                     },
                     "required": ["item_key"],
@@ -642,7 +725,10 @@ class GMTools:
                     "properties": {
                         "item_key": {
                             "type": "string",
-                            "description": "Item key of the item to drop (from Inventory)",
+                            "description": (
+                                "EXACT item key from inventory (copy the text BEFORE the colon). "
+                                "Example: for 'sword_001: Iron Sword', use 'sword_001'."
+                            ),
                         },
                     },
                     "required": ["item_key"],
@@ -659,11 +745,16 @@ class GMTools:
                     "properties": {
                         "item_key": {
                             "type": "string",
-                            "description": "Item key of the item to give",
+                            "description": (
+                                "EXACT item key from inventory (copy the text BEFORE the colon)."
+                            ),
                         },
                         "recipient_key": {
                             "type": "string",
-                            "description": "Entity key of the NPC receiving the item",
+                            "description": (
+                                "EXACT NPC entity key from context (copy the text BEFORE the colon). "
+                                "Example: for 'farmer_marcus: Marcus', use 'farmer_marcus'."
+                            ),
                         },
                     },
                     "required": ["item_key", "recipient_key"],
@@ -1499,6 +1590,12 @@ class GMTools:
         Returns:
             Dict with attitude dimensions.
         """
+        # Resolve keys (fuzzy match if needed)
+        from_entity = self._resolve_key(from_entity)
+        # Don't resolve "player" - it's a special keyword
+        if to_entity != "player":
+            to_entity = self._resolve_key(to_entity)
+
         from_ent = self.entity_manager.get_entity(from_entity)
         if not from_ent:
             return {"error": f"Entity '{from_entity}' not found"}
@@ -1912,6 +2009,9 @@ class GMTools:
         Returns:
             Result dict with success status.
         """
+        # Resolve key (fuzzy match if needed)
+        item_key = self._resolve_key(item_key)
+
         item = self.item_manager.get_item(item_key)
         if not item:
             return {"error": f"Item not found: {item_key}"}
@@ -1942,6 +2042,9 @@ class GMTools:
         Returns:
             Result dict with success status.
         """
+        # Resolve key (fuzzy match if needed)
+        item_key = self._resolve_key(item_key)
+
         item = self.item_manager.get_item(item_key)
         if not item:
             return {"error": f"Item not found: {item_key}"}
@@ -1974,6 +2077,10 @@ class GMTools:
         Returns:
             Result dict with success status.
         """
+        # Resolve keys (fuzzy match if needed)
+        item_key = self._resolve_key(item_key)
+        recipient_key = self._resolve_key(recipient_key)
+
         item = self.item_manager.get_item(item_key)
         if not item:
             return {"error": f"Item not found: {item_key}"}

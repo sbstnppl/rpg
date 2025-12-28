@@ -22,7 +22,7 @@ from src.gm.context_builder import GMContextBuilder
 from src.gm.grounding import GroundingManifest
 from src.gm.grounding_validator import GroundingValidator, strip_key_references
 from src.llm.audit_logger import set_audit_context
-from src.gm.tools import GMTools
+from src.gm.tools import GMTools, KeyResolver
 from src.gm.schemas import GMResponse, StateChange, NewEntity, StateChangeType
 # GM_SYSTEM_PROMPT is now built dynamically by context_builder.build_system_prompt()
 
@@ -430,6 +430,10 @@ class GMNode:
             player_id=self.player_id,
             location_key=self.location_key,
         )
+
+        # Update tools with manifest for fuzzy key matching
+        self.tools.manifest = self._current_manifest
+        self.tools.resolver = KeyResolver(self._current_manifest) if self._current_manifest else None
 
         # Build system prompt (minimal or full depending on provider)
         if self._use_minimal_context:

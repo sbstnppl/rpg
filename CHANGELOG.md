@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `scripts/gameplay_monitor.py`
 
 ### Fixed
+- **GM Hallucinates Entity Keys** - Multi-layer fix for LLM inventing keys like `farmer_001` instead of copying `farmer_marcus`
+  - **Layer 1 (Prevention)**: Fixed inconsistent examples in prompts.py, enhanced manifest format with inline key reminders
+  - **Layer 2 (Recovery)**: Added fuzzy matching suggestions to error feedback ("Did you mean: farmer_marcus?")
+  - **Layer 3 (Graceful Degradation)**: Added `KeyResolver` class for auto-correcting close key matches in tool calls
+  - Key files: `src/gm/grounding.py`, `src/gm/tools.py`, `src/gm/gm_node.py`
+  - Issue tracking: `docs/issues/gm-hallucinates-entity-keys/`
 - **Character Break on Tool Errors** - LLM now handles tool failures gracefully in-story
   - Added HANDLING TOOL FAILURES section to GM_SYSTEM_PROMPT and MINIMAL_GM_CORE_PROMPT
   - LLM instructed to narrate success or give in-story reason instead of exposing technical errors

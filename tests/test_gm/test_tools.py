@@ -1088,3 +1088,172 @@ class TestMoveTo:
 
         # Instance should be updated for subsequent tool calls
         assert tools.location_key == "village_square"
+
+
+class TestKeyResolver:
+    """Tests for KeyResolver fuzzy entity key matching."""
+
+    def test_key_resolver_exact_match(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """KeyResolver returns exact match without correction."""
+        from src.gm.tools import KeyResolver
+        from src.gm.grounding import GroundingManifest, GroundedEntity
+
+        manifest = GroundingManifest(
+            location_key="tavern",
+            location_display="Tavern",
+            player_key="test_hero",
+            player_display="Hero",
+            npcs={
+                "farmer_marcus": GroundedEntity(
+                    key="farmer_marcus",
+                    display_name="Marcus",
+                    entity_type="npc",
+                ),
+            },
+            items_at_location={},
+            inventory={},
+            equipped={},
+            storages={},
+            exits={},
+        )
+
+        resolver = KeyResolver(manifest)
+        key, was_corrected = resolver.resolve("farmer_marcus")
+
+        assert key == "farmer_marcus"
+        assert was_corrected is False
+
+    def test_key_resolver_fuzzy_match(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """KeyResolver fuzzy matches hallucinated keys."""
+        from src.gm.tools import KeyResolver
+        from src.gm.grounding import GroundingManifest, GroundedEntity
+
+        manifest = GroundingManifest(
+            location_key="tavern",
+            location_display="Tavern",
+            player_key="test_hero",
+            player_display="Hero",
+            npcs={
+                "farmer_marcus": GroundedEntity(
+                    key="farmer_marcus",
+                    display_name="Marcus",
+                    entity_type="npc",
+                ),
+            },
+            items_at_location={
+                "bread_001": GroundedEntity(
+                    key="bread_001",
+                    display_name="Bread",
+                    entity_type="item",
+                ),
+            },
+            inventory={},
+            equipped={},
+            storages={},
+            exits={},
+        )
+
+        resolver = KeyResolver(manifest)
+
+        # Test NPC hallucination: farmer_001 -> farmer_marcus
+        key, was_corrected = resolver.resolve("farmer_001")
+        assert key == "farmer_marcus"
+        assert was_corrected is True
+
+        # Test item simplification: bread -> bread_001
+        key, was_corrected = resolver.resolve("bread")
+        assert key == "bread_001"
+        assert was_corrected is True
+
+    def test_key_resolver_no_match(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """KeyResolver returns original key if no close match."""
+        from src.gm.tools import KeyResolver
+        from src.gm.grounding import GroundingManifest, GroundedEntity
+
+        manifest = GroundingManifest(
+            location_key="tavern",
+            location_display="Tavern",
+            player_key="test_hero",
+            player_display="Hero",
+            npcs={
+                "farmer_marcus": GroundedEntity(
+                    key="farmer_marcus",
+                    display_name="Marcus",
+                    entity_type="npc",
+                ),
+            },
+            items_at_location={},
+            inventory={},
+            equipped={},
+            storages={},
+            exits={},
+        )
+
+        resolver = KeyResolver(manifest)
+        key, was_corrected = resolver.resolve("completely_different_xyz")
+
+        assert key == "completely_different_xyz"
+        assert was_corrected is False
+
+    def test_tools_resolve_key_with_manifest(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """GMTools._resolve_key uses manifest when available."""
+        from src.gm.grounding import GroundingManifest, GroundedEntity
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        manifest = GroundingManifest(
+            location_key="tavern",
+            location_display="Tavern",
+            player_key="player",
+            player_display="Test Player",
+            npcs={
+                "farmer_marcus": GroundedEntity(
+                    key="farmer_marcus",
+                    display_name="Marcus",
+                    entity_type="npc",
+                ),
+            },
+            items_at_location={},
+            inventory={},
+            equipped={},
+            storages={},
+            exits={},
+        )
+
+        tools = GMTools(db_session, game_session, player.id, manifest=manifest)
+
+        # Should resolve farmer_001 to farmer_marcus
+        resolved = tools._resolve_key("farmer_001")
+        assert resolved == "farmer_marcus"
+
+    def test_tools_resolve_key_without_manifest(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """GMTools._resolve_key returns original key without manifest."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id)  # No manifest
+
+        # Should return original key unchanged
+        resolved = tools._resolve_key("farmer_001")
+        assert resolved == "farmer_001"
