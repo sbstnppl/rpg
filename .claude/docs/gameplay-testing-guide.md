@@ -240,6 +240,22 @@ pytest -k "character"
 pytest --cov=src
 ```
 
+## Interactive Gameplay Monitor
+
+For hands-on debugging, use the gameplay monitor script:
+
+```bash
+python scripts/gameplay_monitor.py
+```
+
+This creates a test session and runs predefined actions while displaying:
+- All LLM calls with tokens
+- Tool calls and results
+- State changes (needs, time, location)
+- Automatic issue and milestone tracking
+
+The script includes 15 predefined actions covering scene intro, dialog, item interaction, skill checks, and time passage. It stops after 5 milestones or 5 issues.
+
 ## Debugging Tips
 
 1. **Enable debug logging**: Check `src/llm/` for provider logging

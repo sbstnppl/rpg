@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Gameplay Monitor Script** - Interactive debugging tool for GM pipeline observation
+  - Real-time display of LLM calls, tool executions, and state changes
+  - Automated test scenarios with milestone and issue tracking
+  - Session summary with issues found and milestones achieved
+  - Key file: `scripts/gameplay_monitor.py`
+
 ### Fixed
 - **Character Break on Tool Errors** - LLM now handles tool failures gracefully in-story
   - Added HANDLING TOOL FAILURES section to GM_SYSTEM_PROMPT and MINIMAL_GM_CORE_PROMPT
