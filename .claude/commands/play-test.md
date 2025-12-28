@@ -13,6 +13,7 @@ for issues and comparing against documented expectations.
 
 - Ollama running with qwen3:32b model
 - Database accessible
+- Anticipation enabled (optional): Check `src/config.py` for `anticipation_enabled = True`
 
 ## Instructions
 
@@ -78,7 +79,21 @@ Execute each turn by
    - Needs: `SELECT hunger, thirst, stamina FROM character_needs WHERE session_id = {ID};`
    - Items: `SELECT display_name, holder_id FROM items WHERE session_id = {ID};`
 
-6. **Compare against expectations**:
+6. **Check anticipation** (if enabled):
+
+   In the audit log, look for:
+   - `"Using pre-generated scene for {location}"` → Cache HIT (instant response)
+   - No such message → Cache MISS (normal LLM generation)
+
+   Check cached scenes:
+   ```bash
+   # In logs, grep for anticipation activity
+   grep -r "pre-generated\|anticipation\|cache hit" logs/llm/session_{SESSION_ID}/
+   ```
+
+   After player moves to a new location, anticipation should pre-generate adjacent scenes while they read.
+
+7. **Compare against expectations**:
 
    | Check | Expected |
    |-------|----------|
@@ -101,14 +116,15 @@ Execute each turn by
    | Drinking | 1-5 min |
    | Skill check | 1-10 min |
 
-7. **Record milestone** if criteria met:
+8. **Record milestone** if criteria met:
    - First good narrative → "Scene Introduction"
    - NPC dialog → "Dialog Exchange"
    - Item take/drop/use → "Item Interaction"
    - Dice roll (skill_check tool) → "Skill Check"
    - Time > 5 min → "Time Passage"
+   - Cache hit on location change → "Anticipation Cache Hit" (if enabled)
 
-8. **Create issue** if problem found:
+9. **Create issue** if problem found:
    - Run `/issue <brief description of problem>`
    - Let the issue command create the folder and README
    - Continue playing after creating issue
@@ -141,6 +157,7 @@ MILESTONES:
 [ ] Item Interaction
 [ ] Skill Check
 [ ] Time Passage
+[ ] Anticipation Cache Hit (if enabled)
 
 ISSUES CREATED:
 1. {issue-folder-1} - {brief description}
@@ -167,3 +184,5 @@ Log location: logs/llm/session_{id}/
 - **Database connection failed**: Check `.env` for DATABASE_URL
 - **No audit logs**: Check `logs/llm/` directory exists
 - **Game crashes**: Check for stack trace, create /issue
+- **No cache hits**: Check `anticipation_enabled` in `src/config.py`, verify player has moved locations
+- **Anticipation not triggering**: Ensure CLI triggers anticipation after narrative display (check `src/cli/commands/game.py`)

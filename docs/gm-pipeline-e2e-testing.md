@@ -84,6 +84,47 @@ gm_node → validator_node → applier_node → END
 | `src/gm/schemas.py` | GMResponse and StateChange schemas |
 | `src/gm/grounding.py` | GroundingManifest schema for entity validation |
 | `src/gm/grounding_validator.py` | Validates `[key:text]` references in GM output |
+| `src/world_server/` | Anticipation engine for pre-generating scenes |
+
+### World Server Anticipation
+
+The World Server provides anticipatory scene generation to hide LLM latency:
+
+```
+Player Input → GMNode.run()
+                   │
+                   ├── Check pre-generated cache FIRST
+                   │       │
+                   │       ├── Cache HIT → Return immediately (~0.1s)
+                   │       │
+                   │       └── Cache MISS → Fall through to LLM (50-80s)
+                   │
+                   └── After narrative display → Trigger anticipation
+                                                        │
+                                                        └── Pre-generate adjacent locations
+```
+
+**Key Components:**
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `AnticipationEngine` | `src/world_server/anticipation.py` | Predicts next locations |
+| `SceneGenerator` | `src/world_server/scene_generator.py` | Generates scene data |
+| `WorldServerManager` | `src/world_server/integration.py` | Coordinates cache check |
+| `GMNode._check_pre_generated_scene()` | `src/gm/gm_node.py` | Cache check before LLM |
+
+**Cache Hit Behavior:**
+
+When player moves to a location that was pre-generated:
+1. `GMNode.run()` calls `_check_pre_generated_scene()` before context building
+2. If cache hit, returns `GMResponse` instantly (no LLM call)
+3. Narrative comes from cached `CollapseResult.narrator_manifest`
+4. Anticipation re-triggers for new adjacent locations
+
+**Configuration:**
+- `anticipation_enabled` in `src/config.py` (default: True)
+- Cache expiry: 5 minutes
+- Predicted locations: Adjacent + quest targets
 
 ### Grounding System
 
@@ -497,6 +538,29 @@ FROM turns WHERE session_id = ? ORDER BY turn_number DESC LIMIT 5;
 - `needs_manager.apply_time_decay()` should be called
 - Decay rate depends on activity type
 
+#### F. Anticipation (if enabled)
+- [ ] Cache check happens BEFORE context building (check logs)
+- [ ] Cache hits return instant response (~0.1s vs 50-80s)
+- [ ] Cache misses fall through to normal LLM generation
+- [ ] After movement, adjacent locations are pre-generated
+
+**Verification in logs:**
+```bash
+# Look for cache hit message
+grep "Using pre-generated scene" logs/llm/session_{SESSION_ID}/*.log
+
+# Look for anticipation trigger
+grep "trigger_anticipation\|pre-generate" logs/llm/session_{SESSION_ID}/*.log
+```
+
+**Expected behavior by turn:**
+| Turn | Action | Cache Status |
+|------|--------|--------------|
+| 1 | Start game | MISS (first scene) |
+| 2 | Look around | N/A (no location change) |
+| 3 | Move to adjacent | HIT (if anticipated) or MISS |
+| 4+ | Continue exploration | HIT rate should increase |
+
 ---
 
 ## Tool Reliability Testing
@@ -727,6 +791,24 @@ FROM character_needs WHERE entity_id = ?;
   - `PLAYER_AGENT_ERROR`: Ollama player agent failed
 - Resume with Claude Code: `cc` then `/tackle logs/gm_e2e/gm_e2e_error.md`
 
+### Anticipation not working
+- Check `anticipation_enabled` in `src/config.py` is `True`
+- Check `WorldServerManager` is properly initialized
+- Verify `GMNode._check_pre_generated_scene()` is called (add logging if needed)
+- Check cache expiry (default 5 minutes) - stale scenes are discarded
+
+### No cache hits despite movement
+- Check `AnticipationEngine.predict_next_locations()` returns adjacent locations
+- Check `SceneGenerator.generate_scene()` successfully generates scenes
+- Verify player is moving to predicted locations (adjacent or quest targets)
+- Check logs for `"Using pre-generated scene for"` messages
+- If still missing, check `CollapseResult` is properly converted to `GMResponse`
+
+### Cache hit but bad narrative
+- Check `_collapse_result_to_response()` builds proper `GMResponse`
+- Check `_synthesize_scene_narrative()` for fallback narrative generation
+- Verify `narrator_manifest` has required fields (location_display_name, npcs, atmosphere)
+
 ---
 
 ## Quick DB Connection
@@ -740,6 +822,9 @@ PGPASSWORD=bRXAKO0T8t23Wz3l9tyB psql -h 138.199.236.25 -U langgraphrpg -d langgr
 ## References
 
 - **New GM Pipeline**: `src/gm/`
+- **World Server Anticipation**: `src/world_server/` (92 unit tests)
+- **GM Cache Integration**: `src/gm/gm_node.py:_check_pre_generated_scene()`
+- **Cache Integration Tests**: `tests/test_gm/test_cache_integration.py` (12 unit tests)
 - **Grounding Tests**: `tests/test_gm/test_grounding.py` (36 unit tests)
 - **Character Break Detection**: `src/gm/gm_node.py:_validate_character()`, `src/gm/context_builder.py:_is_valid_turn()`
 - **Immersive Test Runner**: `scripts/gm_e2e_immersive_runner.py` (LLM-driven)
