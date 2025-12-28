@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `scripts/gameplay_monitor.py`
 
 ### Fixed
+- **Error Messages Leaked into Narrative** - Technical failure messages now converted to immersive prose
+  - "FAILED talk Baker: 'Baker' is not here." → "You look around but don't see Baker here."
+  - Added `FAILED_ACTION_TEMPLATES` with narrative templates for 20+ action types
+  - Added `_convert_failed_action_to_narrative()` helper for template-based conversion
+  - Covers social (talk, ask, give), item (take, drop, equip), combat (attack), and movement actions
+  - Added 18 unit tests for narrative conversion
+  - Key file: `src/narrator/narrator.py`
+  - Issue tracking: `docs/issues/error-message-leaked-narrative/`
+
 - **GM Hallucinates Entity Keys** - Multi-layer fix for LLM inventing keys like `farmer_001` instead of copying `farmer_marcus`
   - **Layer 1 (Prevention)**: Fixed inconsistent examples in prompts.py, enhanced manifest format with inline key reminders
   - **Layer 2 (Recovery)**: Added fuzzy matching suggestions to error feedback ("Did you mean: farmer_marcus?")

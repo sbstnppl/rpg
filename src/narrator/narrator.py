@@ -8,6 +8,77 @@ from dataclasses import dataclass
 from typing import Any, Protocol, Sequence
 
 
+# Templates for converting technical failure messages to narrative-friendly format.
+# Maps action type patterns to template strings where {target} is replaced.
+FAILED_ACTION_TEMPLATES = {
+    # Social actions - target is a person
+    "talk": "You look around but don't see {target} here.",
+    "ask": "You look around but don't see {target} to ask.",
+    "tell": "You look around but don't see {target} to tell.",
+    "trade": "You look around but don't see {target} to trade with.",
+    "persuade": "You look around but don't see {target} here.",
+    "intimidate": "You look around but don't see {target} here.",
+    "give": "You look around but don't see {target} to give that to.",
+    # Item actions - target is an item
+    "take": "You don't see {target} here to take.",
+    "drop": "You don't have {target} to drop.",
+    "use": "You don't have {target} to use.",
+    "equip": "You don't have {target} to equip.",
+    "unequip": "You're not wearing or wielding {target}.",
+    "examine": "You don't see {target} here to examine.",
+    "open": "You don't see {target} here to open.",
+    "close": "You don't see {target} here to close.",
+    # Consumption - target is consumable
+    "eat": "You don't have {target} to eat.",
+    "drink": "You don't have {target} to drink.",
+    # Combat
+    "attack": "You look around but don't see {target} to attack.",
+    # Movement
+    "move": "You can't go to {target} from here.",
+    "enter": "You can't enter {target} from here.",
+    # Skills
+    "lockpick": "You don't see {target} to pick the lock on.",
+    # Fallback for unknown action types
+    "default": "You can't do that with {target} - it's not here.",
+}
+
+
+def _convert_failed_action_to_narrative(action_type: str, target: str, reason: str) -> str:
+    """Convert a technical failure message to narrative-friendly text.
+
+    Instead of exposing "FAILED talk Baker: 'Baker' is not here." to the narrator,
+    this converts it to "You look around but don't see the baker here."
+
+    Args:
+        action_type: The action type (e.g., "talk", "take", "attack").
+        target: The target of the failed action (e.g., "Baker", "sword").
+        reason: The technical reason for failure (used as fallback context).
+
+    Returns:
+        A narrative-friendly description of why the action couldn't be performed.
+    """
+    # Normalize action type to lowercase
+    action_type_lower = action_type.lower()
+
+    # Get template for this action type (or default)
+    template = FAILED_ACTION_TEMPLATES.get(
+        action_type_lower,
+        FAILED_ACTION_TEMPLATES["default"]
+    )
+
+    # Clean target: strip quotes, make it more natural for display
+    clean_target = target.strip("'\"")
+
+    # Make target more conversational (add article if appropriate)
+    # Skip if target already has an article or is a proper noun (starts uppercase)
+    if clean_target and not clean_target[0].isupper():
+        # Add "the" for common nouns if not already present
+        if not clean_target.lower().startswith(("the ", "a ", "an ", "any ", "some ")):
+            clean_target = f"the {clean_target}"
+
+    return template.format(target=clean_target)
+
+
 class LLMProviderProtocol(Protocol):
     """Protocol for LLM providers."""
 
@@ -184,7 +255,7 @@ class ConstrainedNarrator:
                     if change and not change.startswith("Time"):
                         facts.append(change)
 
-        # Extract from failed actions
+        # Extract from failed actions - convert to narrative-friendly format
         for failed in turn_result.get("failed_actions", []):
             action = failed.get("action", {})
             reason = failed.get("reason", "")
@@ -192,7 +263,11 @@ class ConstrainedNarrator:
             target = action.get("target", "")
 
             if reason:
-                facts.append(f"FAILED {action_type} {target}: {reason}")
+                # Convert technical error message to narrative-friendly text
+                narrative_fact = _convert_failed_action_to_narrative(
+                    action_type, target, reason
+                )
+                facts.append(narrative_fact)
 
         # Extract complication if present
         complication = turn_result.get("complication")
@@ -225,10 +300,7 @@ class ConstrainedNarrator:
         parts = []
         for i, fact in enumerate(facts):
             if i == 0:
-                parts.append(fact.capitalize())
-            elif fact.startswith("FAILED"):
-                # Format failed actions
-                parts.append(f"However, {fact.lower()}")
+                parts.append(fact.capitalize() if fact[0].islower() else fact)
             elif fact.startswith("COMPLICATION"):
                 parts.append(f"Then, unexpectedly, {fact.lower()}")
             else:
