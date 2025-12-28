@@ -518,6 +518,98 @@ def _create_auto_character_state() -> "CharacterCreationState":
     )
 
 
+def _create_auto_world(
+    db: "Session",
+    game_session: "GameSession",
+    player: "Entity",
+) -> str:
+    """Create minimal starter world for --auto sessions.
+
+    Creates a small village with tavern, square, and market - enough to test
+    the GM pipeline and anticipation system.
+
+    Args:
+        db: Database session.
+        game_session: The game session to populate.
+        player: The player entity.
+
+    Returns:
+        The starting location key.
+    """
+    from src.managers.location_manager import LocationManager
+    from src.managers.entity_manager import EntityManager
+    from src.database.models.enums import EntityType
+    from src.database.models.entities import NPCExtension
+
+    loc_mgr = LocationManager(db, game_session)
+    ent_mgr = EntityManager(db, game_session)
+
+    # Create locations with exits via spatial_layout
+    loc_mgr.create_location(
+        location_key="village_tavern",
+        display_name="The Rusty Tankard",
+        description="A cozy village tavern with worn wooden tables and a crackling fireplace. The bar runs along the back wall, lined with stools.",
+        category="tavern",
+        atmosphere="Warm firelight flickers across the room. The smell of ale and roasted meat fills the air.",
+        spatial_layout={"exits": ["village_square"]},
+    )
+
+    loc_mgr.create_location(
+        location_key="village_square",
+        display_name="Village Square",
+        description="The central square of a small village, with a stone well at its center. Cobblestones worn smooth by generations of footsteps.",
+        category="outdoor",
+        atmosphere="Villagers go about their daily business under the open sky.",
+        spatial_layout={"exits": ["village_tavern", "village_market"]},
+    )
+
+    loc_mgr.create_location(
+        location_key="village_market",
+        display_name="Market Stalls",
+        description="A row of merchant stalls selling various wares and supplies. Colorful awnings shade the goods from the sun.",
+        category="market",
+        atmosphere="Vendors call out their wares while customers haggle over prices.",
+        spatial_layout={"exits": ["village_square"]},
+    )
+
+    # Create NPCs with EntityManager + NPCExtension
+    innkeeper = ent_mgr.create_entity(
+        entity_key="innkeeper_tom",
+        display_name="Old Tom",
+        entity_type=EntityType.NPC,
+        occupation="Innkeeper",
+    )
+    tom_ext = NPCExtension(
+        entity_id=innkeeper.id,
+        current_location="village_tavern",
+        home_location="village_tavern",
+        current_activity="wiping down the bar",
+        current_mood="friendly",
+    )
+    db.add(tom_ext)
+
+    merchant = ent_mgr.create_entity(
+        entity_key="merchant_anna",
+        display_name="Anna",
+        entity_type=EntityType.NPC,
+        occupation="Merchant",
+    )
+    anna_ext = NPCExtension(
+        entity_id=merchant.id,
+        current_location="village_market",
+        home_location="village_market",
+        current_activity="arranging goods on display",
+        current_mood="busy",
+    )
+    db.add(anna_ext)
+
+    # Set player's starting location
+    ent_mgr.update_location(player.entity_key, "village_tavern")
+
+    db.flush()
+    return "village_tavern"
+
+
 async def _start_wizard_async(
     preset_name: str | None = None,
     preset_setting: str | None = None,
@@ -704,9 +796,12 @@ async def _start_wizard_async(
             ]
             display_starting_equipment(item_dicts)
 
-        # Auto mode: just create session, don't start game loop
+        # Auto mode: create minimal world and exit without game loop
         if auto:
+            starting_location = _create_auto_world(db, game_session, entity)
+            db.commit()
             display_success(f"Session {game_session.id} ready for testing.")
+            display_success(f"Starting location: {starting_location}")
             return
 
         # Phase 4: Start the game loop directly

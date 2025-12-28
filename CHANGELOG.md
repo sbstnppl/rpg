@@ -30,6 +30,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `scripts/gameplay_monitor.py`
 
 ### Fixed
+- **Auto-Start Creates Blank Location** - `game start --auto` now creates proper starter world
+  - Added `_create_auto_world()` function to create Village Tavern, Square, and Market
+  - Creates 2 NPCs: Old Tom (innkeeper) and Anna (merchant)
+  - Sets up bidirectional exits between locations
+  - Player starts in The Rusty Tankard with proper scene context
+  - Key file: `src/cli/commands/game.py`
+  - Issue tracking: `docs/issues/session-auto-start-blank-location/`
+
 - **Error Messages Leaked into Narrative** - Technical failure messages now converted to immersive prose
   - "FAILED talk Baker: 'Baker' is not here." → "You look around but don't see Baker here."
   - Added `FAILED_ACTION_TEMPLATES` with narrative templates for 20+ action types
