@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **World Server Anticipation System** - Pre-generate scenes while player reads to hide LLM latency
+  - `WorldServerManager` integration layer for CLI (`src/world_server/integration.py`)
+  - `LocationPredictor` predicts likely next locations (adjacent, quest targets, mentioned) (`src/world_server/predictor.py`)
+  - `PreGenerationCache` async LRU cache for pre-generated scenes (`src/world_server/cache.py`)
+  - `StateCollapseManager` commits pre-generated content on observation (`src/world_server/collapse.py`)
+  - `SceneGenerator` creates scene data for anticipated locations (`src/world_server/scene_generator.py`)
+  - `AnticipationEngine` orchestrates background generation (`src/world_server/anticipation.py`)
+  - `--anticipation/--no-anticipation` CLI flag for `rpg game play`
+  - Config options: `anticipation_enabled`, `anticipation_cache_size` in `src/config.py`
+  - 92 tests covering all world_server components
+
 - **Gameplay Monitor Script** - Interactive debugging tool for GM pipeline observation
   - Real-time display of LLM calls, tool executions, and state changes
   - Automated test scenarios with milestone and issue tracking

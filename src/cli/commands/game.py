@@ -1015,10 +1015,20 @@ def play(
         "-r",
         help="Roll mode: 'auto' (background) or 'manual' (player rolls)",
     ),
+    anticipation: Optional[bool] = typer.Option(
+        None,
+        "--anticipation/--no-anticipation",
+        help="Enable/disable anticipatory scene generation (default: from config)",
+    ),
 ) -> None:
     """Start the interactive game loop."""
     # Validate pipeline option
     normalized_pipeline = validate_pipeline(pipeline)
+
+    # Determine anticipation setting
+    from src.config import get_settings
+    settings = get_settings()
+    use_anticipation = anticipation if anticipation is not None else settings.anticipation_enabled
 
     # Validate roll mode
     if roll_mode not in ("auto", "manual"):
@@ -1073,6 +1083,7 @@ def play(
                 db, game_session, player,
                 pipeline=normalized_pipeline,
                 roll_mode=roll_mode,
+                anticipation_enabled=use_anticipation,
             ))
 
     except KeyboardInterrupt:
@@ -1202,6 +1213,7 @@ async def _game_loop(
     pipeline: str = "gm",
     initial_location: str | None = None,
     roll_mode: str = "auto",
+    anticipation_enabled: bool = False,
 ) -> None:
     """Main game loop.
 
@@ -1212,11 +1224,21 @@ async def _game_loop(
         pipeline: Pipeline to use (gm, legacy, system-authority, scene-first).
         initial_location: Optional starting location key from character creation.
         roll_mode: "auto" or "manual" for dice rolls (GM pipeline only).
+        anticipation_enabled: Whether to enable anticipatory scene generation.
     """
     display_welcome(game_session.session_name)
 
     # Build and compile the appropriate graph
     compiled, pipeline_name = get_pipeline_graph(pipeline)
+
+    # Initialize World Server for anticipation (if enabled)
+    world_server = None
+    scene_generator = None
+    if anticipation_enabled:
+        from src.world_server import get_world_server_manager, create_scene_generator_callback
+        world_server = get_world_server_manager(db, game_session, enabled=True)
+        scene_generator = create_scene_generator_callback(db, game_session)
+        display_info("Anticipation engine enabled")
     display_info(f"Using {pipeline_name} pipeline")
 
     # Get player location - use initial_location if provided, otherwise find suitable location
@@ -1309,6 +1331,9 @@ async def _game_loop(
                 display_info("Saving and exiting...")
                 game_session.status = "paused"
                 db.commit()
+                # Shutdown world server if enabled
+                if world_server:
+                    await world_server.shutdown()
                 break
             elif cmd == "help":
                 _show_help()
@@ -1429,6 +1454,15 @@ async def _game_loop(
                 player_location=result.get("player_location", player_location),
                 is_ooc=result.get("is_ooc", False),
             )
+
+            # Trigger anticipation for likely next locations (runs in background)
+            if world_server and not result.get("is_ooc"):
+                current_loc = result.get("player_location", player_location)
+                await world_server.trigger_anticipation(
+                    current_location=current_loc,
+                    recent_actions=[player_input],
+                    scene_generator=scene_generator,
+                )
         else:
             display_error("No response from GM (empty narrative). Try rephrasing your action.")
 

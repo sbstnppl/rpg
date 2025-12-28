@@ -111,6 +111,13 @@ class Settings(BaseSettings):
     log_llm_calls: bool = False
     llm_log_dir: str = "logs/llm"
 
+    # ==========================================================================
+    # World Server / Anticipation Settings
+    # ==========================================================================
+    # Enable anticipatory scene generation (pre-generates likely next scenes)
+    anticipation_enabled: bool = False  # Disabled by default until stable
+    anticipation_cache_size: int = 5  # Max number of pre-generated scenes to cache
+
     # Minimal Context Mode (for local LLMs)
     # None = auto-detect based on provider (enabled for ollama/qwen-agent)
     # True = always use minimal context
