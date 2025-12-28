@@ -389,6 +389,130 @@ class GMNode:
                 return True, player_input[len(prefix):].strip()
         return False, player_input
 
+    async def _check_pre_generated_scene(self, turn_number: int) -> "GMResponse | None":
+        """Check if location has pre-generated content.
+
+        If anticipation is enabled and a pre-generated scene exists for the
+        current location, returns a GMResponse immediately without calling
+        the LLM. This can reduce latency from 50-80s to <0.1s.
+
+        Args:
+            turn_number: Current turn number for collapse tracking.
+
+        Returns:
+            GMResponse if cache hit, None to fall through to normal LLM generation.
+        """
+        from src.config import settings
+
+        if not settings.anticipation_enabled:
+            return None
+
+        from src.world_server.integration import get_world_server_manager
+
+        world_server = get_world_server_manager(self.db, self.game_session)
+        collapse_result = await world_server.check_pre_generated(
+            self.location_key, turn_number
+        )
+
+        if not collapse_result:
+            return None  # Cache miss - fall through to LLM
+
+        logger.info(
+            f"Using pre-generated scene for {self.location_key} "
+            f"(age={collapse_result.cache_age_seconds:.1f}s, "
+            f"latency={collapse_result.latency_ms:.1f}ms)"
+        )
+
+        # Convert CollapseResult to GMResponse
+        return self._collapse_result_to_response(collapse_result)
+
+    def _collapse_result_to_response(self, collapse) -> "GMResponse":
+        """Convert a CollapseResult from cache into GMResponse format.
+
+        Args:
+            collapse: CollapseResult from the World Server cache.
+
+        Returns:
+            GMResponse suitable for the game loop.
+        """
+        from src.world_server.schemas import CollapseResult
+
+        # Build narrative from pre-generated scene data
+        manifest = collapse.narrator_manifest
+
+        # Use scene description if available, otherwise synthesize
+        scene_manifest = manifest.get("scene_manifest", {})
+        narrative = scene_manifest.get("description", "")
+        if not narrative:
+            narrative = self._synthesize_scene_narrative(manifest)
+
+        # Extract NPC keys for referenced_entities
+        npcs = manifest.get("npcs", [])
+        npc_keys = [npc.get("entity_key", "") for npc in npcs if npc.get("entity_key")]
+
+        # Extract atmosphere for mood
+        atmosphere = manifest.get("atmosphere", {})
+        mood = atmosphere.get("mood") if atmosphere else None
+
+        return GMResponse(
+            narrative=narrative,
+            is_ooc=False,
+            referenced_entities=npc_keys,
+            new_entities=[],
+            state_changes=[],
+            time_passed_minutes=1,  # Entry observation takes ~1 minute
+            mood=mood,
+            tool_results=[],
+        )
+
+    def _synthesize_scene_narrative(self, manifest: dict) -> str:
+        """Build basic scene narrative from manifest when description missing.
+
+        This is a fallback when the pre-generated scene doesn't have a full
+        description. It creates a simple but functional scene introduction.
+
+        Args:
+            manifest: NarratorManifest dict from the cache.
+
+        Returns:
+            Synthesized scene narrative string.
+        """
+        location_name = manifest.get("location_display_name", "this location")
+        atmosphere = manifest.get("atmosphere", {})
+        atmosphere_desc = atmosphere.get("description", "") if atmosphere else ""
+
+        # Build NPC mention
+        npcs = manifest.get("npcs", [])
+        npc_text = ""
+        if npcs:
+            npc_names = [npc.get("display_name", "someone") for npc in npcs[:3]]
+            if len(npc_names) == 1:
+                npc_text = f" {npc_names[0]} is here."
+            elif len(npc_names) == 2:
+                npc_text = f" {npc_names[0]} and {npc_names[1]} are here."
+            else:
+                npc_text = f" {', '.join(npc_names[:-1])}, and {npc_names[-1]} are here."
+
+        # Build item mention (only obvious items)
+        items = manifest.get("items", [])
+        visible_items = [i for i in items if i.get("is_visible", True)]
+        item_text = ""
+        if visible_items and len(visible_items) <= 3:
+            item_names = [item.get("display_name", "something") for item in visible_items[:3]]
+            if len(item_names) == 1:
+                item_text = f" You notice {item_names[0]}."
+            else:
+                item_text = f" You notice {', '.join(item_names[:-1])}, and {item_names[-1]}."
+
+        # Combine into narrative
+        narrative = f"You are at {location_name}."
+        if atmosphere_desc:
+            narrative += f" {atmosphere_desc}"
+        narrative += npc_text
+        narrative += item_text
+
+        return narrative.strip()
+
     async def run(
         self,
         player_input: str,
@@ -420,6 +544,13 @@ class GMNode:
 
         # Detect explicit OOC prefix
         is_explicit_ooc, cleaned_input = self._detect_explicit_ooc(player_input)
+
+        # Check for pre-generated scene FIRST (before expensive context building)
+        # Only check if not explicit OOC (OOC responses don't need scene data)
+        if not is_explicit_ooc:
+            pre_gen_result = await self._check_pre_generated_scene(turn_number)
+            if pre_gen_result:
+                return pre_gen_result
 
         # Phase: Context Building
         self._hook.on_phase_start(PhaseStartEvent(phase="context_building"))

@@ -686,6 +686,54 @@ tail -f logs/gm_e2e/live.log
 
 ---
 
+## World Server Anticipation
+
+The World Server pre-generates scenes while the player reads narrative, hiding LLM latency.
+
+### Timing Analysis
+- Player reading time: 48-120 seconds (200-400 words at 200-250 WPM)
+- LLM generation time: 50-80 seconds (qwen3:32b at 10-12 tok/s)
+- **Result**: Reading time ≈ Generation time = perfect overlap for anticipation
+
+### Architecture
+```
+Player reads narrative → Anticipation triggers in background
+         ↓                           ↓
+    (48-120s)              Pre-generate likely destinations
+         ↓                           ↓
+  Player moves to X        Cache check in GMNode.run()
+         ↓                           ↓
+    [Cache HIT]                [Cache MISS]
+    Return in 0.1s            Fall back to LLM (50-80s)
+```
+
+### Components
+1. **LocationPredictor** - Predicts likely next locations (adjacent, quest targets, mentioned)
+2. **AnticipationEngine** - Orchestrates background generation
+3. **PreGenerationCache** - LRU cache for pre-generated scenes (default: 5 scenes)
+4. **SceneGenerator** - Creates scene data for anticipated locations
+5. **StateCollapseManager** - Commits cached content on observation
+6. **GM Integration** - `GMNode._check_pre_generated_scene()` checks cache before LLM
+
+### Configuration
+```bash
+# Enable anticipation (disabled by default)
+ANTICIPATION_ENABLED=true
+ANTICIPATION_CACHE_SIZE=5  # Max cached scenes
+
+# CLI flag
+rpg game play --anticipation
+```
+
+### Current Limitations
+- **vLLM not supported**: GB10 (sm_121a) not yet supported by Triton ecosystem
+- **Sequential generation**: Ollama processes one scene at a time (no parallel)
+- **First location miss**: First turn always generates synchronously
+
+**Key files**: `src/world_server/`, `src/gm/gm_node.py`
+
+---
+
 ## State Persistence
 
 ### Immutable Turn History

@@ -15,9 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `StateCollapseManager` commits pre-generated content on observation (`src/world_server/collapse.py`)
   - `SceneGenerator` creates scene data for anticipated locations (`src/world_server/scene_generator.py`)
   - `AnticipationEngine` orchestrates background generation (`src/world_server/anticipation.py`)
+  - **GM Cache Integration** - GMNode checks cache before expensive LLM generation (`src/gm/gm_node.py`)
+    - `_check_pre_generated_scene()` returns cached scene if available
+    - `_collapse_result_to_response()` converts cache data to GMResponse
+    - `_synthesize_scene_narrative()` builds narrative from manifest when needed
   - `--anticipation/--no-anticipation` CLI flag for `rpg game play`
   - Config options: `anticipation_enabled`, `anticipation_cache_size` in `src/config.py`
-  - 92 tests covering all world_server components
+  - 104 tests covering world_server and GM cache integration
 
 - **Gameplay Monitor Script** - Interactive debugging tool for GM pipeline observation
   - Real-time display of LLM calls, tool executions, and state changes
