@@ -1,8 +1,9 @@
 # Gold Stack Splitting - Dropping "One Coin" Drops Entire Stack
 
-**Status:** Investigating
+**Status:** Done
 **Priority:** Medium
 **Detected:** 2025-12-29
+**Completed:** 2025-12-29
 **Related Sessions:** Session 302, Turn 10
 
 ## Problem Statement
@@ -29,78 +30,60 @@ SELECT item_key, display_name, holder_id FROM items WHERE item_key LIKE '%gold%'
 
 The entire "Gold Coins (10)" item was dropped, not split into 9+1.
 
-## Expected Behavior
+## Solution Implemented
 
-When player specifies a partial quantity:
-1. Stack should split: "Gold Coins (10)" → "Gold Coins (9)" (kept) + "Gold Coin" (dropped)
-2. Or: GM should recognize this and create a new single coin entity
-3. Or: System should prevent dropping currency entirely and use a "pay" mechanism
+Added quantity-based operations for stackable items. The Item model already had `quantity` and `is_stackable` fields - we only needed to add business logic.
 
-## Investigation Notes
+### Design Decisions
+- `quantity` parameter: Optional on give_item/drop_item/take_item, defaults to "all" (entire stack)
+- Auto-merge: When taking/receiving stackable items, merge with existing stacks of same type
 
-The item system treats items as indivisible units. There's no concept of:
-- Stack quantity as a property
-- Stack splitting
-- Partial operations
+### New ItemManager Methods
 
-Items like "Gold Coins (10)" have the quantity baked into the display_name, not as a separate field.
+1. **`split_stack(item_key, quantity)`** - Split quantity from stackable item, creating new item
+2. **`merge_stacks(target_key, source_key)`** - Combine two stacks of same type
+3. **`find_mergeable_stack(holder_id, display_name)`** - Find existing stack to merge into
+4. **`transfer_quantity(item_key, quantity, to_entity_id, to_storage_key)`** - Transfer with auto-split and auto-merge
 
-## Root Cause
+### GM Tool Updates
 
-The item model doesn't support stackable items with quantities. Each item is a unique entity. The "(10)" in "Gold Coins (10)" is just part of the display name, not a quantity field.
+All three tools now accept an optional `quantity` parameter:
 
-The GM correctly called `drop_item` for the gold, but the system has no way to split stacks.
-
-## Proposed Solution
-
-### Option 1: Add quantity field to items (recommended)
 ```python
-class Item:
-    ...
-    quantity: int = 1
-    is_stackable: bool = False
+drop_item(item_key: str, quantity: int | None = None) -> dict[str, Any]
+take_item(item_key: str, quantity: int | None = None) -> dict[str, Any]
+give_item(item_key: str, recipient_key: str, quantity: int | None = None) -> dict[str, Any]
 ```
 
-When dropping partial amounts:
-1. Reduce quantity on original
-2. Create new item with dropped quantity
+## Files Modified
 
-### Option 2: LLM-side workaround
-Instruct GM to create a new "single gold coin" entity when player wants to give partial stack, and leave the original reduced in name.
-
-### Option 3: Currency as special case
-Treat gold/coins differently - as a numeric value on player rather than an item.
-
-## Implementation Details
-
-Option 1 requires:
-1. Add `quantity` and `is_stackable` fields to Item model
-2. Add migration
-3. Update `drop_item` tool to accept optional `quantity` parameter
-4. Implement stack splitting logic
-5. Update `take_item` and `give_item` similarly
-
-## Files to Modify
-
-- [ ] `src/database/models/item.py` - Add quantity field
-- [ ] `src/gm/tools.py` - Update drop_item/take_item/give_item
-- [ ] `alembic/versions/` - Migration for quantity field
-- [ ] Tests for stack operations
+- [x] `src/managers/item_manager.py` - Added 4 new methods for stack operations
+- [x] `src/gm/tools.py` - Updated drop_item/take_item/give_item with quantity parameter
+- [x] `tests/test_managers/test_item_manager_stacking.py` - New test file (23 tests)
+- [x] `tests/test_gm/test_tools_stacking.py` - New test file (9 tests)
 
 ## Test Cases
 
-- [ ] Test case 1: Drop partial stack creates two items
-- [ ] Test case 2: Taking partial stack from ground works
-- [ ] Test case 3: Stacking same items combines quantities
-- [ ] Test case 4: Non-stackable items remain singular
+- [x] Test case 1: Drop partial stack creates two items (split + remaining)
+- [x] Test case 2: Taking partial stack from ground works with auto-merge
+- [x] Test case 3: Giving partial stack to NPC auto-merges with their existing stack
+- [x] Test case 4: Non-stackable items with quantity specified return error
 
-## Related Issues
+## Example Usage
 
-- This is a feature gap, not a bug per se
-- Related to item system design
+```python
+# Player has 50 gold, wants to give 10 to merchant
+result = tools.give_item("player_gold", "merchant", quantity=10)
+# Player now has 40 gold, merchant receives 10 (auto-merged if they had gold)
+
+# Player wants to drop 1 coin as tip
+result = tools.drop_item("player_gold", quantity=1)
+# Player now has 49 gold, 1 coin is on the ground
+```
 
 ## References
 
-- `src/database/models/item.py` - Item model
-- `src/gm/tools.py:drop_item` - Drop tool implementation
-- `logs/llm/session_302/turn_010_20251229_161555_gm.md` - Audit log
+- `src/managers/item_manager.py:1548-1765` - Stack operation methods
+- `src/gm/tools.py:2066-2234` - Updated GM tools
+- `tests/test_managers/test_item_manager_stacking.py` - ItemManager stacking tests
+- `tests/test_gm/test_tools_stacking.py` - GM tools stacking tests

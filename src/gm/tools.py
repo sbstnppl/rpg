@@ -2063,11 +2063,17 @@ class GMTools:
     # Item Manipulation Tools
     # ===================================================================
 
-    def take_item(self, item_key: str) -> dict[str, Any]:
-        """Transfer item to player's inventory.
+    def take_item(self, item_key: str, quantity: int | None = None) -> dict[str, Any]:
+        """Transfer item (or partial quantity) to player's inventory.
+
+        For stackable items, can take a specific quantity. If quantity is None,
+        takes the entire item/stack. When taking partial quantity, the stack
+        is split and auto-merged with any existing stack of the same type in
+        player's inventory.
 
         Args:
             item_key: Item key to take.
+            quantity: Amount to take (None = all). Only valid for stackable items.
 
         Returns:
             Result dict with success status.
@@ -2078,6 +2084,15 @@ class GMTools:
         item = self.item_manager.get_item(item_key)
         if not item:
             return {"error": f"Item not found: {item_key}"}
+
+        # Validate quantity for stackable items
+        if quantity is not None:
+            if not item.is_stackable:
+                return {"error": f"Item '{item.display_name}' is not stackable. Cannot specify quantity."}
+            if quantity <= 0:
+                return {"error": "Quantity must be greater than 0"}
+            if quantity > item.quantity:
+                return {"error": f"Quantity ({quantity}) exceeds available ({item.quantity})"}
 
         # Check if item is available (not held by another entity)
         if item.holder_id and item.holder_id != self.player_id:
@@ -2086,21 +2101,30 @@ class GMTools:
             holder_name = holder.display_name if holder else "someone"
             return {"error": f"Item is held by {holder_name}"}
 
-        # Transfer to player
-        self.item_manager.transfer_item(item_key, to_entity_id=self.player_id)
+        # Transfer to player (with quantity support and auto-merge)
+        transferred = self.item_manager.transfer_quantity(
+            item_key, quantity, to_entity_id=self.player_id
+        )
 
+        qty_msg = f" (x{quantity})" if quantity and quantity != item.quantity else ""
         return {
             "success": True,
-            "item_key": item_key,
+            "item_key": transferred.item_key,
             "item_name": item.display_name,
-            "message": f"Took {item.display_name}",
+            "quantity": quantity or item.quantity,
+            "message": f"Took {item.display_name}{qty_msg}",
         }
 
-    def drop_item(self, item_key: str) -> dict[str, Any]:
-        """Drop item at current location.
+    def drop_item(self, item_key: str, quantity: int | None = None) -> dict[str, Any]:
+        """Drop item (or partial quantity) at current location.
+
+        For stackable items, can drop a specific quantity. If quantity is None,
+        drops the entire item/stack. When dropping partial quantity, the stack
+        is split and the specified amount is placed at the location.
 
         Args:
             item_key: Item key to drop.
+            quantity: Amount to drop (None = all). Only valid for stackable items.
 
         Returns:
             Result dict with success status.
@@ -2111,6 +2135,15 @@ class GMTools:
         item = self.item_manager.get_item(item_key)
         if not item:
             return {"error": f"Item not found: {item_key}"}
+
+        # Validate quantity for stackable items
+        if quantity is not None:
+            if not item.is_stackable:
+                return {"error": f"Item '{item.display_name}' is not stackable. Cannot specify quantity."}
+            if quantity <= 0:
+                return {"error": "Quantity must be greater than 0"}
+            if quantity > item.quantity:
+                return {"error": f"Quantity ({quantity}) exceeds available ({item.quantity})"}
 
         # Check if player holds the item
         if item.holder_id != self.player_id:
@@ -2120,22 +2153,42 @@ class GMTools:
         if not self.location_key:
             return {"error": "No current location"}
 
-        self.item_manager.drop_item(item_key, self.location_key)
+        # Handle partial quantity drops
+        if quantity is not None and quantity < item.quantity:
+            # Split the stack first
+            split_item = self.item_manager.split_stack(item_key, quantity)
+            # Drop the split item
+            self.item_manager.drop_item(split_item.item_key, self.location_key)
+            dropped_key = split_item.item_key
+        else:
+            # Drop the entire item
+            self.item_manager.drop_item(item_key, self.location_key)
+            dropped_key = item_key
 
+        qty_msg = f" (x{quantity})" if quantity and quantity != item.quantity else ""
         return {
             "success": True,
-            "item_key": item_key,
+            "item_key": dropped_key,
             "item_name": item.display_name,
+            "quantity": quantity or item.quantity,
             "location": self.location_key,
-            "message": f"Dropped {item.display_name}",
+            "message": f"Dropped {item.display_name}{qty_msg}",
         }
 
-    def give_item(self, item_key: str, recipient_key: str) -> dict[str, Any]:
-        """Give item to an NPC.
+    def give_item(
+        self, item_key: str, recipient_key: str, quantity: int | None = None
+    ) -> dict[str, Any]:
+        """Give item (or partial quantity) to an NPC.
+
+        For stackable items, can give a specific quantity. If quantity is None,
+        gives the entire item/stack. When giving partial quantity, the stack
+        is split and auto-merged with any existing stack of the same type in
+        the recipient's inventory.
 
         Args:
             item_key: Item key to give.
             recipient_key: Recipient NPC entity key.
+            quantity: Amount to give (None = all). Only valid for stackable items.
 
         Returns:
             Result dict with success status.
@@ -2148,6 +2201,15 @@ class GMTools:
         if not item:
             return {"error": f"Item not found: {item_key}"}
 
+        # Validate quantity for stackable items
+        if quantity is not None:
+            if not item.is_stackable:
+                return {"error": f"Item '{item.display_name}' is not stackable. Cannot specify quantity."}
+            if quantity <= 0:
+                return {"error": "Quantity must be greater than 0"}
+            if quantity > item.quantity:
+                return {"error": f"Quantity ({quantity}) exceeds available ({item.quantity})"}
+
         if item.holder_id != self.player_id:
             return {"error": f"Player does not have {item.display_name}"}
 
@@ -2155,15 +2217,20 @@ class GMTools:
         if not recipient:
             return {"error": f"Recipient not found: {recipient_key}"}
 
-        self.item_manager.transfer_item(item_key, to_entity_id=recipient.id)
+        # Transfer with quantity support and auto-merge
+        transferred = self.item_manager.transfer_quantity(
+            item_key, quantity, to_entity_id=recipient.id
+        )
 
+        qty_msg = f" (x{quantity})" if quantity and quantity != item.quantity else ""
         return {
             "success": True,
-            "item_key": item_key,
+            "item_key": transferred.item_key,
             "item_name": item.display_name,
+            "quantity": quantity or item.quantity,
             "recipient_key": recipient_key,
             "recipient_name": recipient.display_name,
-            "message": f"Gave {item.display_name} to {recipient.display_name}",
+            "message": f"Gave {item.display_name}{qty_msg} to {recipient.display_name}",
         }
 
     def satisfy_need(

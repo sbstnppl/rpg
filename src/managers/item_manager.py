@@ -1544,3 +1544,222 @@ class ItemManager(BaseManager):
 
         self.db.flush()
         return removed_count
+
+    # ==================== Stack Operations ====================
+
+    def split_stack(self, item_key: str, quantity: int) -> Item:
+        """Split quantity from a stackable item, creating a new item.
+
+        The original item keeps its key with reduced quantity. A new item
+        is created with the split quantity and a key derived from the
+        original (e.g., "gold_coins_split_abc123").
+
+        Args:
+            item_key: Item key to split from.
+            quantity: Amount to split off.
+
+        Returns:
+            Newly created Item with the split quantity.
+
+        Raises:
+            ValueError: If item not found, not stackable, or invalid quantity.
+        """
+        from uuid import uuid4
+
+        item = self.get_item(item_key)
+        if item is None:
+            raise ValueError(f"Item not found: {item_key}")
+
+        if not item.is_stackable:
+            raise ValueError(f"Item '{item_key}' is not stackable")
+
+        if quantity <= 0:
+            raise ValueError("Split quantity must be greater than 0")
+
+        if quantity >= item.quantity:
+            if quantity == item.quantity:
+                raise ValueError(
+                    f"Split quantity ({quantity}) equals total quantity. "
+                    "Use transfer instead of split."
+                )
+            raise ValueError(
+                f"Split quantity ({quantity}) exceeds available ({item.quantity})"
+            )
+
+        # Reduce original item quantity
+        item.quantity -= quantity
+
+        # Generate unique key for split item
+        new_key = f"{item_key}_split_{uuid4().hex[:6]}"
+
+        # Create new item with split quantity
+        split_item = Item(
+            session_id=self.session_id,
+            item_key=new_key,
+            display_name=item.display_name,
+            item_type=item.item_type,
+            quantity=quantity,
+            is_stackable=True,
+            weight=item.weight,
+            owner_id=item.owner_id,
+            holder_id=item.holder_id,
+            storage_location_id=item.storage_location_id,
+            body_slot=item.body_slot,
+            body_layer=item.body_layer,
+            properties=dict(item.properties) if item.properties else None,
+            condition=item.condition,
+            durability=item.durability,
+        )
+        self.db.add(split_item)
+        self.db.flush()
+
+        return split_item
+
+    def merge_stacks(self, target_key: str, source_key: str) -> Item:
+        """Merge two stacks of the same item type into one.
+
+        The source item is deleted after its quantity is added to the target.
+        Both items must be stackable and have the same display_name.
+
+        Args:
+            target_key: Item key to merge into.
+            source_key: Item key to merge from (will be deleted).
+
+        Returns:
+            Updated target Item with combined quantity.
+
+        Raises:
+            ValueError: If items not found, not stackable, or not same type.
+        """
+        target = self.get_item(target_key)
+        if target is None:
+            raise ValueError(f"Target item not found: {target_key}")
+
+        source = self.get_item(source_key)
+        if source is None:
+            raise ValueError(f"Source item not found: {source_key}")
+
+        if not target.is_stackable:
+            raise ValueError(f"Target item '{target_key}' is not stackable")
+
+        if not source.is_stackable:
+            raise ValueError(f"Source item '{source_key}' is not stackable")
+
+        if target.display_name != source.display_name:
+            raise ValueError(
+                f"Cannot merge items of different types: "
+                f"'{target.display_name}' vs '{source.display_name}'. "
+                "Items must be the same type to merge."
+            )
+
+        # Add source quantity to target
+        target.quantity += source.quantity
+
+        # Delete source item
+        self.db.delete(source)
+        self.db.flush()
+
+        return target
+
+    def find_mergeable_stack(
+        self,
+        holder_id: int,
+        display_name: str,
+    ) -> Item | None:
+        """Find an existing stack in holder's inventory that can be merged.
+
+        Searches for a stackable item with matching display_name that is
+        held by the specified entity.
+
+        Args:
+            holder_id: Entity ID of the holder.
+            display_name: Display name to match.
+
+        Returns:
+            Matching Item if found, None otherwise.
+        """
+        return (
+            self.db.query(Item)
+            .filter(
+                Item.session_id == self.session_id,
+                Item.holder_id == holder_id,
+                Item.display_name == display_name,
+                Item.is_stackable == True,
+            )
+            .first()
+        )
+
+    def transfer_quantity(
+        self,
+        item_key: str,
+        quantity: int | None,
+        to_entity_id: int | None = None,
+        to_storage_key: str | None = None,
+    ) -> Item:
+        """Transfer quantity from item to entity or storage, with auto-merge.
+
+        If quantity is None or equals item.quantity, transfers entire item.
+        Otherwise splits stack first. When transferring to an entity, will
+        attempt to merge with any existing stack of the same item type.
+
+        Args:
+            item_key: Item to transfer from.
+            quantity: Amount to transfer (None = all).
+            to_entity_id: Target entity ID.
+            to_storage_key: Target storage key.
+
+        Returns:
+            The transferred Item (original, split, or merged).
+
+        Raises:
+            ValueError: If invalid quantity or transfer target.
+        """
+        item = self.get_item(item_key)
+        if item is None:
+            raise ValueError(f"Item not found: {item_key}")
+
+        # Determine if we need to split
+        needs_split = (
+            quantity is not None
+            and quantity < item.quantity
+            and item.is_stackable
+        )
+
+        if needs_split:
+            # Split off the quantity to transfer
+            transferred_item = self.split_stack(item_key, quantity)
+        else:
+            # Transfer the whole item
+            transferred_item = item
+
+        # Perform the transfer
+        if to_entity_id is not None:
+            transferred_item.holder_id = to_entity_id
+            transferred_item.storage_location_id = None
+
+            # Check for mergeable stack at destination
+            if transferred_item.is_stackable:
+                existing_stack = self.find_mergeable_stack(
+                    to_entity_id, transferred_item.display_name
+                )
+                if existing_stack and existing_stack.item_key != transferred_item.item_key:
+                    # Merge into existing stack
+                    transferred_item = self.merge_stacks(
+                        existing_stack.item_key, transferred_item.item_key
+                    )
+        elif to_storage_key is not None:
+            storage = (
+                self.db.query(StorageLocation)
+                .filter(
+                    StorageLocation.session_id == self.session_id,
+                    StorageLocation.location_key == to_storage_key,
+                )
+                .first()
+            )
+            if storage is None:
+                raise ValueError(f"Storage not found: {to_storage_key}")
+            transferred_item.storage_location_id = storage.id
+            transferred_item.holder_id = None
+
+        self.db.flush()
+        return transferred_item

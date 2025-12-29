@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Gold Stack Splitting** - Quantity-based operations for stackable items (gold, potions, etc.)
+  - `ItemManager.split_stack()` - Split quantity from stackable item (`src/managers/item_manager.py`)
+  - `ItemManager.merge_stacks()` - Combine two stacks of same type
+  - `ItemManager.find_mergeable_stack()` - Find existing stack to merge into
+  - `ItemManager.transfer_quantity()` - Transfer with auto-split and auto-merge
+  - `drop_item(quantity=N)` - Drop partial stack at current location (`src/gm/tools.py`)
+  - `take_item(quantity=N)` - Take partial stack with auto-merge into inventory
+  - `give_item(recipient, quantity=N)` - Give partial stack to NPC with auto-merge
+  - 32 new tests covering stack operations
+
 - **vLLM Multi-Port Support** - Task-specific base URLs for vLLM deployments with different models on different ports
   - Added `narrator_base_url`, `reasoning_base_url`, `cheap_base_url` settings (`src/config.py`)
   - Factory functions now use task-specific URLs for OpenAI-compatible providers (`src/llm/factory.py`)
