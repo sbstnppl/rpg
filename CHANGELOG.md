@@ -55,6 +55,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `scripts/gameplay_monitor.py`
 
 ### Fixed
+- **GM Hallucinates Item Keys** - GM now uses exact keys from context instead of inventing them
+  - Changed key format to `KEY=x | Name` for visual distinction (`src/gm/grounding.py`)
+  - Added key validation in `execute_tool()` for take_item/drop_item/give_item (`src/gm/tools.py`)
+  - Fixed error handling: removed "narrate as if succeeded" option (`src/gm/prompts.py`)
+  - 4 new tests for key validation behavior (`tests/test_gm/test_tools.py`)
+
 - **Grounding Manifest Not Updated After create_entity** - Entities created mid-turn now valid for narrative
   - Added `additional_valid_keys` field to `GroundingManifest` (`src/gm/grounding.py`)
   - Track created entity keys in `_execute_tool_call()` (`src/gm/gm_node.py:1058-1063`)

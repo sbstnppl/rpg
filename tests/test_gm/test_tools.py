@@ -8,6 +8,7 @@ from src.database.models.enums import EntityType
 from src.database.models.session import GameSession
 from src.gm.tools import GMTools
 from src.gm.schemas import EntityType as GMEntityType
+from src.gm.grounding import GroundingManifest, GroundedEntity
 from src.managers.entity_manager import EntityManager
 from src.managers.relationship_manager import RelationshipManager
 from src.managers.task_manager import TaskManager
@@ -1301,3 +1302,179 @@ class TestKeyResolver:
         # Should return original key unchanged
         resolved = tools._resolve_key("farmer_001")
         assert resolved == "farmer_001"
+
+
+class TestItemKeyValidation:
+    """Tests for item key validation in execute_tool."""
+
+    def test_take_item_invalid_key_returns_helpful_error(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """take_item with invalid key returns error with valid key hints."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # Create manifest with known items
+        manifest = GroundingManifest(
+            location_key="tavern_001",
+            location_display="Tavern",
+            player_key="player",
+            items_at_location={
+                "ale_mug_001": GroundedEntity(
+                    key="ale_mug_001",
+                    display_name="Ale Mug",
+                    entity_type="item",
+                ),
+            },
+            inventory={},
+            equipped={},
+            npcs={},
+            storages={},
+            exits={},
+        )
+
+        tools = GMTools(db_session, game_session, player.id, manifest=manifest)
+
+        # Try to take with hallucinated key
+        result = tools.execute_tool("take_item", {"item_key": "mug_of_ale"})
+
+        assert "error" in result
+        assert "Invalid item key" in result["error"]
+        assert "hint" in result
+        assert "ale_mug_001" in str(result["hint"])
+
+    def test_drop_item_invalid_key_returns_helpful_error(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """drop_item with invalid key returns error with valid key hints."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # Create manifest with inventory items
+        manifest = GroundingManifest(
+            location_key="tavern_001",
+            location_display="Tavern",
+            player_key="player",
+            items_at_location={},
+            inventory={
+                "gold_coins_001": GroundedEntity(
+                    key="gold_coins_001",
+                    display_name="Gold Coins",
+                    entity_type="item",
+                ),
+            },
+            equipped={},
+            npcs={},
+            storages={},
+            exits={},
+        )
+
+        tools = GMTools(db_session, game_session, player.id, manifest=manifest)
+
+        # Try to drop with hallucinated key
+        result = tools.execute_tool("drop_item", {"item_key": "gold_coin_001"})
+
+        assert "error" in result
+        assert "Invalid item key" in result["error"]
+        assert "hint" in result
+        assert "gold_coins_001" in str(result["hint"])
+
+    def test_give_item_invalid_key_returns_helpful_error(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """give_item with invalid key returns error with valid key hints."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # Create manifest with inventory items
+        manifest = GroundingManifest(
+            location_key="tavern_001",
+            location_display="Tavern",
+            player_key="player",
+            items_at_location={},
+            inventory={
+                "bread_loaf_001": GroundedEntity(
+                    key="bread_loaf_001",
+                    display_name="Loaf of Bread",
+                    entity_type="item",
+                ),
+            },
+            equipped={},
+            npcs={
+                "marcus_001": GroundedEntity(
+                    key="marcus_001",
+                    display_name="Marcus",
+                    entity_type="npc",
+                ),
+            },
+            storages={},
+            exits={},
+        )
+
+        tools = GMTools(db_session, game_session, player.id, manifest=manifest)
+
+        # Try to give with hallucinated key
+        result = tools.execute_tool("give_item", {
+            "item_key": "bread",
+            "recipient_key": "marcus_001",
+        })
+
+        assert "error" in result
+        assert "Invalid item key" in result["error"]
+        assert "hint" in result
+        assert "bread_loaf_001" in str(result["hint"])
+
+    def test_take_item_valid_key_proceeds_normally(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """take_item with valid key proceeds to actual item lookup."""
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        db_session.flush()
+
+        # Create manifest with the key we'll use
+        manifest = GroundingManifest(
+            location_key="tavern_001",
+            location_display="Tavern",
+            player_key="player",
+            items_at_location={
+                "ale_mug_001": GroundedEntity(
+                    key="ale_mug_001",
+                    display_name="Ale Mug",
+                    entity_type="item",
+                ),
+            },
+            inventory={},
+            equipped={},
+            npcs={},
+            storages={},
+            exits={},
+        )
+
+        tools = GMTools(db_session, game_session, player.id, manifest=manifest)
+
+        # Valid key should proceed past validation (may fail at DB lookup)
+        result = tools.execute_tool("take_item", {"item_key": "ale_mug_001"})
+
+        # Should not get "Invalid item key" - should get "Item not found" from DB
+        if "error" in result:
+            assert "Invalid item key" not in result["error"]

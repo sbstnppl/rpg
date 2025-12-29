@@ -1,6 +1,6 @@
 # GM Hallucinates Item Keys Instead of Using Keys from Context
 
-**Status:** Investigating
+**Status:** Done
 **Priority:** High
 **Detected:** 2025-12-29
 **Related Sessions:** Session 302, Turn 11

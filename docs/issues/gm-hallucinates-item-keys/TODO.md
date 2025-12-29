@@ -9,22 +9,22 @@
 ## Design Phase
 - [x] Propose solution
 - [x] Identify files to modify
-- [ ] Define test cases
-- [ ] Review with user (if needed)
+- [x] Define test cases
+- [x] Review with user (if needed)
 
 ## Implementation Phase
-- [ ] Improve key formatting in context
-- [ ] Add key validation in tool execution
-- [ ] Fix error handling instructions in prompt
-- [ ] Add valid keys to error messages
-- [ ] Add/update tests
+- [x] Improve key formatting in context (KEY=x | Name format)
+- [x] Add key validation in tool execution
+- [x] Fix error handling instructions in prompt (remove "narrate as if succeeded")
+- [x] Add valid keys to error messages
+- [x] Add/update tests
 
 ## Verification Phase
-- [ ] Test manually with item operations
-- [ ] Verify keys are copied correctly
-- [ ] Run test suite
+- [x] Test manually with item operations
+- [x] Verify keys are copied correctly
+- [x] Run test suite
 - [ ] Verify fix in gameplay
 
 ## Completion
-- [ ] Update README.md status to "Done"
+- [x] Update README.md status to "Done"
 - [ ] Create commit with `/commit`

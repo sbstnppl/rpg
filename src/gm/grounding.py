@@ -192,10 +192,15 @@ class GroundingManifest(BaseModel):
             "- [marcus_001:Marcus] waves at you.",
             "- You pick up [sword_001:the iron sword].",
             "",
-            "### TOOL KEY REMINDER",
-            "When calling tools, copy the KEY exactly (the part BEFORE the colon):",
-            "- For 'bread_001: Bread' → use item_key=\"bread_001\" (NOT \"bread\")",
-            "- For 'farmer_marcus: Marcus' → use from_entity=\"farmer_marcus\"",
+            "### TOOL KEY REMINDER (CRITICAL!)",
+            "Copy the KEY= value EXACTLY when calling tools. NEVER invent keys!",
+            "",
+            "Format: KEY=actual_key | Display Name",
+            "- For 'KEY=bread_001 | Bread' → item_key=\"bread_001\"",
+            "- For 'KEY=farmer_marcus | Marcus' → from_entity=\"farmer_marcus\"",
+            "",
+            "CORRECT: take_item(item_key=\"bread_001\")",
+            "WRONG:   take_item(item_key=\"bread\") ← invented from display name!",
             "",
             "### Available Entities",
             "",
@@ -203,21 +208,21 @@ class GroundingManifest(BaseModel):
 
         # NPCs - with tool call reminder
         if self.npcs:
-            lines.append("**NPCs at location** (use KEY in get_npc_attitude, etc.):")
+            lines.append("**NPCs at location** (use KEY= value in tools):")
             for key, entity in self.npcs.items():
                 desc = f" ({entity.short_description})" if entity.short_description else ""
-                lines.append(f"- {key}: {entity.display_name}{desc}")
+                lines.append(f"- KEY={key} | {entity.display_name}{desc}")
             # Add example with first NPC key
             first_npc = next(iter(self.npcs.keys()), None)
             if first_npc:
-                lines.append(f"  → Example: get_npc_attitude(from_entity=\"{first_npc}\", ...)")
+                lines.append(f"  → Example: get_npc_attitude(from_entity=\"{first_npc}\")")
             lines.append("")
 
         # Items at location - with tool call reminder
         if self.items_at_location:
-            lines.append("**Items at location** (use KEY in take_item, etc.):")
+            lines.append("**Items at location** (use KEY= value in take_item):")
             for key, entity in self.items_at_location.items():
-                lines.append(f"- {key}: {entity.display_name}")
+                lines.append(f"- KEY={key} | {entity.display_name}")
             # Add example with first item key
             first_item = next(iter(self.items_at_location.keys()), None)
             if first_item:
@@ -226,30 +231,30 @@ class GroundingManifest(BaseModel):
 
         # Player inventory - with tool call reminder
         if self.inventory:
-            lines.append("**Your inventory** (use KEY in drop_item, give_item, etc.):")
+            lines.append("**Your inventory** (use KEY= value in drop_item, give_item):")
             for key, entity in self.inventory.items():
-                lines.append(f"- {key}: {entity.display_name}")
+                lines.append(f"- KEY={key} | {entity.display_name}")
             lines.append("")
 
         # Equipped items
         if self.equipped:
             lines.append("**Equipped/wearing:**")
             for key, entity in self.equipped.items():
-                lines.append(f"- {key}: {entity.display_name}")
+                lines.append(f"- KEY={key} | {entity.display_name}")
             lines.append("")
 
         # Storage containers
         if self.storages:
             lines.append("**Storage containers:**")
             for key, entity in self.storages.items():
-                lines.append(f"- {key}: {entity.display_name}")
+                lines.append(f"- KEY={key} | {entity.display_name}")
             lines.append("")
 
         # Exits
         if self.exits:
             lines.append("**Exits/accessible locations:**")
             for key, entity in self.exits.items():
-                lines.append(f"- {key}: {entity.display_name}")
+                lines.append(f"- KEY={key} | {entity.display_name}")
             lines.append("")
 
         lines.append(

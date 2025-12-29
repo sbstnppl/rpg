@@ -1007,12 +1007,33 @@ class GMTools:
             return self.apply_stimulus(**filtered)
         elif tool_name == "mark_need_communicated":
             return self.mark_need_communicated(**filtered)
-        # Item manipulation tools
+        # Item manipulation tools (with key validation)
         elif tool_name == "take_item":
+            item_key = filtered.get("item_key")
+            if item_key and self.manifest and not self.manifest.contains_key(item_key):
+                valid_keys = list(self.manifest.items_at_location.keys())[:5]
+                return {
+                    "error": f"Invalid item key: {item_key}",
+                    "hint": f"Copy KEY= value from context. Valid items: {valid_keys}",
+                }
             return self.take_item(**filtered)
         elif tool_name == "drop_item":
+            item_key = filtered.get("item_key")
+            if item_key and self.manifest and not self.manifest.contains_key(item_key):
+                valid_keys = list(self.manifest.inventory.keys())[:5]
+                return {
+                    "error": f"Invalid item key: {item_key}",
+                    "hint": f"Copy KEY= value from context. Valid inventory: {valid_keys}",
+                }
             return self.drop_item(**filtered)
         elif tool_name == "give_item":
+            item_key = filtered.get("item_key")
+            if item_key and self.manifest and not self.manifest.contains_key(item_key):
+                valid_keys = list(self.manifest.inventory.keys())[:5]
+                return {
+                    "error": f"Invalid item key: {item_key}",
+                    "hint": f"Copy KEY= value from context. Valid inventory: {valid_keys}",
+                }
             return self.give_item(**filtered)
         # Need satisfaction tool
         elif tool_name == "satisfy_need":
