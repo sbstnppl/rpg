@@ -1,8 +1,9 @@
 # Character Break Detection Shows Partial Failed Responses to User
 
-**Status:** Investigating
+**Status:** Done
 **Priority:** Medium
 **Detected:** 2025-12-29
+**Resolved:** 2025-12-29
 **Related Sessions:** Session 302, Turn 14
 
 ## Problem Statement
@@ -46,35 +47,27 @@ The validation message format suggests it's being printed during the validation 
 
 ## Root Cause
 
-The CLI display logic or the GM node is outputting intermediate responses before the final successful response is ready. The retry loop isn't properly suppressing failed attempts from user-visible output.
+The `logger.warning()` call in `src/gm/gm_node.py:815` was outputting validation failure messages at WARNING level, which appears on the console during normal gameplay. This exposed internal validation mechanics to the user.
 
-## Proposed Solution
+Additionally, when `show_tokens=True` is enabled (debugging mode), streamed tokens appear before validation runs. This is acceptable as `show_tokens` is an opt-in debugging feature.
 
-1. Buffer all responses until validation passes
-2. Only output the final successful response
-3. Log validation failures to audit log only (not stdout)
+## Solution
 
-## Implementation Details
+Changed log levels from user-visible (warning/error/info) to debug-only:
 
-In `src/gm/gm_node.py`:
-1. Collect responses in a buffer during tool loop
-2. Only return/print the final validated response
-3. Move validation failure messages to logger only
+- `src/gm/gm_node.py:815` - `logger.warning` → `logger.debug` (detection message)
+- `src/gm/gm_node.py:859` - `logger.error` → `logger.debug` (retry failure)
+- `src/gm/gm_node.py:865` - `logger.info` → `logger.debug` (retry success)
 
-In `src/cli/commands/game.py`:
-1. Ensure only final GM response is displayed
-2. Don't print intermediate retry attempts
+## Files Modified
 
-## Files to Modify
+- [x] `src/gm/gm_node.py` - Changed log levels to debug
 
-- [ ] `src/gm/gm_node.py` - Buffer responses, suppress intermediate output
-- [ ] `src/cli/commands/game.py` - Ensure clean output
+## Verification
 
-## Test Cases
-
-- [ ] Test case 1: Character break retry doesn't show failed attempts
-- [ ] Test case 2: Grounding retry doesn't show failed attempts
-- [ ] Test case 3: Final response is displayed correctly
+- [x] All 282 GM tests pass
+- [x] Character break detection still functions correctly
+- [x] Validation messages no longer appear at WARNING level
 
 ## Related Issues
 

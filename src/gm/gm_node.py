@@ -812,7 +812,7 @@ class GMNode:
             errors=[f"Pattern matched: {pattern}"],
         ))
 
-        logger.warning(
+        logger.debug(
             f"Character break detected (pattern: {pattern}): "
             f"{response.content[:100]}..."
         )
@@ -856,13 +856,13 @@ class GMNode:
         ))
 
         if still_broken:
-            logger.error(
+            logger.debug(
                 "Character break persists after correction attempt, "
                 "proceeding with original response"
             )
             return response
 
-        logger.info("Character validation passed after correction")
+        logger.debug("Character validation passed after correction")
         return corrected
 
     async def _run_tool_loop(

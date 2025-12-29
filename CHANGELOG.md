@@ -65,6 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `scripts/gameplay_monitor.py`
 
 ### Fixed
+- **Character Break Detection Leaks to Console** - Validation messages now hidden from player
+  - Changed `logger.warning/error/info` to `logger.debug` for character validation (`src/gm/gm_node.py:815-865`)
+  - Prevents "Character break detected..." messages from appearing during gameplay
+  - Issue tracking: `docs/issues/character-break-shows-partial-response/`
+
 - **GM Chatbot Question Endings** - Detect and prevent chatbot-like questions that break immersion
   - Added patterns: "would you like to", "do you want to", "is there anything else/specific", "what do you want to" (`src/gm/gm_node.py`)
   - Updated ABSOLUTE RULES in system prompt to explicitly forbid these endings (`src/gm/prompts.py`)
