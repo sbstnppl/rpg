@@ -127,7 +127,7 @@ class TestOpenAIProviderComplete:
         provider = OpenAIProvider(api_key="test-key", client=mock_client)
 
         messages = [Message.user("Hello")]
-        await provider.complete(messages, system_prompt="You are helpful.")
+        await provider.complete(messages, system_prompt="You are helpful.", think=True)
 
         # Verify system prompt was added as first message
         call_args = mock_client.chat.completions.create.call_args
@@ -231,7 +231,7 @@ class TestOpenAIProviderMessageConversion:
         provider = OpenAIProvider(api_key="test-key", client=mock_client)
 
         messages = [Message.user("Hello")]
-        await provider.complete(messages)
+        await provider.complete(messages, think=True)
 
         call_args = mock_client.chat.completions.create.call_args
         api_messages = call_args.kwargs["messages"]
@@ -248,7 +248,7 @@ class TestOpenAIProviderMessageConversion:
             Message.assistant("Hi there!"),
             Message.user("How are you?"),
         ]
-        await provider.complete(messages)
+        await provider.complete(messages, think=True)
 
         call_args = mock_client.chat.completions.create.call_args
         api_messages = call_args.kwargs["messages"]
@@ -265,7 +265,7 @@ class TestOpenAIProviderMessageConversion:
             Message.system("You are helpful."),
             Message.user("Hello"),
         ]
-        await provider.complete(messages)
+        await provider.complete(messages, think=True)
 
         call_args = mock_client.chat.completions.create.call_args
         api_messages = call_args.kwargs["messages"]
@@ -366,3 +366,129 @@ class TestOpenAICompatibleAPIs:
             default_model="llama2",
         )
         assert provider.default_model == "llama2"
+
+
+class TestOpenAIProviderThinkingMode:
+    """Tests for thinking mode (Qwen3-style /nothink prefix)."""
+
+    @pytest.mark.asyncio
+    async def test_complete_default_nothink(self, mock_client):
+        """Test that complete() defaults to think=False and adds /nothink prefix."""
+        provider = OpenAIProvider(api_key="test-key", client=mock_client)
+
+        messages = [Message.user("Hello")]
+        await provider.complete(messages, system_prompt="You are helpful.")
+
+        call_args = mock_client.chat.completions.create.call_args
+        api_messages = call_args.kwargs["messages"]
+        assert api_messages[0]["role"] == "system"
+        assert api_messages[0]["content"] == "/nothink\nYou are helpful."
+
+    @pytest.mark.asyncio
+    async def test_complete_think_true_no_prefix(self, mock_client):
+        """Test that think=True does not add /nothink prefix."""
+        provider = OpenAIProvider(api_key="test-key", client=mock_client)
+
+        messages = [Message.user("Hello")]
+        await provider.complete(messages, system_prompt="You are helpful.", think=True)
+
+        call_args = mock_client.chat.completions.create.call_args
+        api_messages = call_args.kwargs["messages"]
+        assert api_messages[0]["role"] == "system"
+        assert api_messages[0]["content"] == "You are helpful."
+
+    @pytest.mark.asyncio
+    async def test_complete_nothink_without_system_prompt(self, mock_client):
+        """Test that /nothink is added even without system prompt."""
+        provider = OpenAIProvider(api_key="test-key", client=mock_client)
+
+        messages = [Message.user("Hello")]
+        await provider.complete(messages)
+
+        call_args = mock_client.chat.completions.create.call_args
+        api_messages = call_args.kwargs["messages"]
+        assert api_messages[0]["role"] == "system"
+        assert api_messages[0]["content"] == "/nothink"
+
+    @pytest.mark.asyncio
+    async def test_complete_with_tools_default_think(self, mock_client):
+        """Test that complete_with_tools() defaults to think=True."""
+        provider = OpenAIProvider(api_key="test-key", client=mock_client)
+
+        messages = [Message.user("Hello")]
+        tools = [
+            ToolDefinition(
+                name="test_tool",
+                description="A test tool",
+                parameters=(
+                    ToolParameter(name="arg1", type="string", description="First arg"),
+                ),
+            ),
+        ]
+        await provider.complete_with_tools(
+            messages, tools, system_prompt="You are helpful."
+        )
+
+        call_args = mock_client.chat.completions.create.call_args
+        api_messages = call_args.kwargs["messages"]
+        assert api_messages[0]["role"] == "system"
+        # Default think=True means no /nothink prefix
+        assert api_messages[0]["content"] == "You are helpful."
+
+    @pytest.mark.asyncio
+    async def test_complete_with_tools_think_false(self, mock_client):
+        """Test that complete_with_tools(think=False) adds /nothink prefix."""
+        provider = OpenAIProvider(api_key="test-key", client=mock_client)
+
+        messages = [Message.user("Hello")]
+        tools = [
+            ToolDefinition(
+                name="test_tool",
+                description="A test tool",
+                parameters=(
+                    ToolParameter(name="arg1", type="string", description="First arg"),
+                ),
+            ),
+        ]
+        await provider.complete_with_tools(
+            messages, tools, system_prompt="You are helpful.", think=False
+        )
+
+        call_args = mock_client.chat.completions.create.call_args
+        api_messages = call_args.kwargs["messages"]
+        assert api_messages[0]["role"] == "system"
+        assert api_messages[0]["content"] == "/nothink\nYou are helpful."
+
+    def test_strip_thinking_complete_block(self):
+        """Test stripping complete <think>...</think> blocks."""
+        content = "<think>Let me think about this...</think>Here is my answer."
+        result = OpenAIProvider._strip_thinking(content)
+        assert result == "Here is my answer."
+
+    def test_strip_thinking_multiple_blocks(self):
+        """Test stripping multiple thinking blocks."""
+        content = "<think>First thought</think>Part 1 <think>Second thought</think>Part 2"
+        result = OpenAIProvider._strip_thinking(content)
+        assert result == "Part 1 Part 2"
+
+    def test_strip_thinking_incomplete_block(self):
+        """Test stripping incomplete thinking block (cut off)."""
+        content = "Start of response <think>incomplete thinking that was cut off"
+        result = OpenAIProvider._strip_thinking(content)
+        assert result == "Start of response"
+
+    def test_strip_thinking_no_thinking(self):
+        """Test that content without thinking tags is unchanged."""
+        content = "Just a normal response without any thinking."
+        result = OpenAIProvider._strip_thinking(content)
+        assert result == "Just a normal response without any thinking."
+
+    def test_strip_thinking_multiline(self):
+        """Test stripping multiline thinking blocks."""
+        content = """<think>
+This is a long
+multiline
+thinking block
+</think>Final answer here."""
+        result = OpenAIProvider._strip_thinking(content)
+        assert result == "Final answer here."

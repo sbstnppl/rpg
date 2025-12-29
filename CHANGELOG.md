@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Factory functions now use task-specific URLs for OpenAI-compatible providers (`src/llm/factory.py`)
   - Enables running different models (e.g., qwen3, magmell) on separate vLLM instances
 
+- **vLLM Thinking Mode Toggle** - Enable/disable thinking for Qwen3 models via `/nothink` prefix
+  - Added `think: bool` parameter to `OpenAIProvider.complete()` (default: False for speed)
+  - Added `think: bool` parameter to `OpenAIProvider.complete_with_tools()` (default: True for reasoning)
+  - `_strip_thinking()` method removes `<think>` tags from responses
+  - Key file: `src/llm/openai_provider.py`
+
 - **Quantum Branching Pipeline** - Unified pipeline that pre-generates action outcome branches for instant responses
   - **ActionPredictor** - Predicts likely player actions from scene context (NPCs, items, exits) (`src/world_server/quantum/action_predictor.py`)
   - **ActionMatcher** - Fuzzy matches player input to cached predictions with configurable confidence threshold (`src/world_server/quantum/action_matcher.py`)

@@ -4,6 +4,7 @@ Supports OpenAI API and OpenAI-compatible APIs (DeepSeek, Ollama, vLLM).
 """
 
 import json
+import re
 from typing import Any, Sequence
 
 from openai import AsyncOpenAI
@@ -37,7 +38,25 @@ class OpenAIProvider:
     - JSON mode / structured outputs
     - Vision (image inputs)
     - OpenAI-compatible APIs via custom base_url (DeepSeek, Ollama, vLLM)
+    - Thinking mode control for reasoning models (Qwen3)
     """
+
+    # Match complete thinking blocks (Qwen3 style)
+    THINKING_PATTERN = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
+    # Match incomplete thinking blocks (cut off before closing tag)
+    THINKING_INCOMPLETE = re.compile(r"<think>.*$", re.DOTALL)
+
+    @staticmethod
+    def _strip_thinking(content: str) -> str:
+        """Remove <think>...</think> tags from response content.
+
+        Handles both complete and incomplete (cut-off) thinking blocks.
+        """
+        # First remove complete blocks
+        result = OpenAIProvider.THINKING_PATTERN.sub("", content)
+        # Then remove any incomplete block at the end
+        result = OpenAIProvider.THINKING_INCOMPLETE.sub("", result)
+        return result.strip()
 
     def __init__(
         self,
@@ -142,7 +161,9 @@ class OpenAIProvider:
         choice = response.choices[0]
         message = choice.message
 
-        content = message.content or ""
+        # Strip any thinking tags from response (Qwen3 models)
+        raw_content = message.content or ""
+        content = self._strip_thinking(raw_content)
         tool_calls: list[ToolCall] = []
 
         if message.tool_calls:
@@ -205,9 +226,26 @@ class OpenAIProvider:
         temperature: float = 0.7,
         stop_sequences: Sequence[str] | None = None,
         system_prompt: str | None = None,
+        think: bool = False,
     ) -> LLMResponse:
-        """Generate a completion from messages."""
-        api_messages = self._convert_messages(messages, system_prompt)
+        """Generate a completion from messages.
+
+        Args:
+            messages: Conversation messages.
+            model: Model to use (defaults to provider's default).
+            max_tokens: Maximum tokens to generate.
+            temperature: Sampling temperature.
+            stop_sequences: Stop sequences to end generation.
+            system_prompt: System prompt to prepend.
+            think: Enable thinking mode for reasoning models (Qwen3).
+                   Defaults to False for faster responses.
+        """
+        # Apply thinking mode control (Qwen3-style: /nothink prefix)
+        effective_system = system_prompt or ""
+        if not think:
+            effective_system = "/nothink\n" + effective_system if effective_system else "/nothink"
+
+        api_messages = self._convert_messages(messages, effective_system)
 
         try:
             kwargs: dict[str, Any] = {
@@ -234,9 +272,27 @@ class OpenAIProvider:
         temperature: float = 0.7,
         tool_choice: str | dict[str, Any] = "auto",
         system_prompt: str | None = None,
+        think: bool = True,
     ) -> LLMResponse:
-        """Generate a completion that may include tool calls."""
-        api_messages = self._convert_messages(messages, system_prompt)
+        """Generate a completion that may include tool calls.
+
+        Args:
+            messages: Conversation messages.
+            tools: Available tool definitions.
+            model: Model to use (defaults to provider's default).
+            max_tokens: Maximum tokens to generate.
+            temperature: Sampling temperature.
+            tool_choice: Tool selection mode ("auto", "none", or specific tool).
+            system_prompt: System prompt to prepend.
+            think: Enable thinking mode for reasoning models (Qwen3).
+                   Defaults to True for tool calls (reasoning helps).
+        """
+        # Apply thinking mode control (Qwen3-style: /nothink prefix)
+        effective_system = system_prompt or ""
+        if not think:
+            effective_system = "/nothink\n" + effective_system if effective_system else "/nothink"
+
+        api_messages = self._convert_messages(messages, effective_system)
 
         # Convert tools to OpenAI format
         api_tools = [tool.to_openai_format() for tool in tools]
