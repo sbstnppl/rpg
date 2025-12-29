@@ -11,17 +11,18 @@ for issues and comparing against documented expectations.
 
 ## Pre-requisites
 
-- Ollama running with qwen3:32b model
+- Ollama running with qwen3:32b model (for reasoning) and optionally magmell:32b (for narration)
 - Database accessible
-- Anticipation enabled (optional): Check `src/config.py` for `anticipation_enabled = True`
+- Quantum anticipation (optional): Set `quantum_anticipation_enabled = True` in `src/config.py`
 
 ## Instructions
 
 ### Phase 1: Setup
 
 1. **Read documentation for expectations**:
-   - Read `docs/gm-pipeline-e2e-testing.md`
-   - Note: LLM is qwen3 via Ollama, not Anthropic
+   - Read `docs/gm-pipeline-e2e-testing.md` for general expectations
+   - Read `docs/quantum-branching/README.md` for quantum pipeline specifics
+   - Note: LLM is qwen3 via Ollama (reasoning) and magmell (narration), not Anthropic
 
 2. **Create game session**:
    ```bash
@@ -39,9 +40,14 @@ for issues and comparing against documented expectations.
 
 **Repeat until stop condition:**
 
-Execute each turn by
+Execute each turn using the quantum pipeline:
    ```bash
-   python -m src.main game turn -p gm -s <session_id> "<player input>"
+   python -m src.main game turn -p quantum -s <session_id> "<player input>"
+   ```
+
+Alternative: Use the interactive `play` command (quantum is default):
+   ```bash
+   python -m src.main play -s <session_id>
    ```
 
 1. **Decide action naturally** - Play like a human exploring:
@@ -55,9 +61,10 @@ Execute each turn by
 
 3. **Observe response** - Note from game output:
    - Narrative displayed
-   - Tool calls shown (if verbose)
+   - Skill check results (dice rolls)
    - Time passed
    - Any errors
+   - Pipeline phase indicators (quantum_match, quantum_collapse, etc.)
 
 4. **Inspect audit log** - Read the latest turn log:
    ```bash
@@ -66,7 +73,7 @@ Execute each turn by
    Then read that file to see:
    - System prompt sent to LLM
    - Messages/context provided
-   - Tool calls made and results
+   - Branch predictions and matches
    - Raw LLM response
    - Token usage
 
@@ -79,30 +86,71 @@ Execute each turn by
    - Needs: `SELECT hunger, thirst, stamina FROM character_needs WHERE session_id = {ID};`
    - Items: `SELECT display_name, holder_id FROM items WHERE session_id = {ID};`
 
-6. **Check anticipation** (if enabled):
+6. **Check quantum anticipation** (if enabled):
 
-   In the audit log, look for:
-   - `"Using pre-generated scene for {location}"` → Cache HIT (instant response)
-   - No such message → Cache MISS (normal LLM generation)
+   In the output or logs, look for quantum pipeline phases:
+   - `"Checking prepared outcomes..."` → Branch matching phase
+   - `"Rolling dice..."` → Branch collapse (cache HIT - instant response)
+   - `"Generating narrative..."` → Cache MISS (LLM generation required)
 
-   Check cached scenes:
+   Check anticipation activity:
    ```bash
-   # In logs, grep for anticipation activity
-   grep -r "pre-generated\|anticipation\|cache hit" logs/llm/session_{SESSION_ID}/
+   # In logs, grep for quantum anticipation
+   grep -r "quantum\|branch\|cache\|anticipat" logs/llm/session_{SESSION_ID}/
    ```
 
-   After player moves to a new location, anticipation should pre-generate adjacent scenes while they read.
+   With `--anticipation` enabled, the system pre-generates likely action outcomes in the background.
 
-7. **Compare against expectations**:
+7. **Validate anticipated branches** (if anticipation enabled):
+
+   The quantum pipeline validates pre-generated branches before use. Check validation health:
+
+   ```bash
+   # Check for validation issues in logs
+   grep -rE "ValidationIssue|grounding.*ERROR|ai_identity|StaleStateError" logs/llm/session_{SESSION_ID}/
+
+   # Check branch cache metrics
+   grep -r "cache_hit\|cache_miss\|branch_expired\|branch_invalidated" logs/llm/session_{SESSION_ID}/
+   ```
+
+   **Validation checks performed by quantum pipeline:**
+
+   | Validator | Checks | Error = Branch Rejected |
+   |-----------|--------|-------------------------|
+   | Grounding | `[key:text]` refs exist in manifest | Invalid entity keys |
+   | AI Identity | No "I'm an AI/assistant" leaks | Character break in pre-gen |
+   | Meta-questions | No "what would you do?" endings | Immersion-breaking prompts |
+   | Placeholders | No `[TODO]`, `<placeholder>` | Incomplete generation |
+   | Delta conflicts | No CREATE+DELETE same entity | Inconsistent state changes |
+   | Staleness | Expected state = current state | World changed since generation |
+
+   **What to look for:**
+
+   | Log Pattern | Meaning | Action |
+   |-------------|---------|--------|
+   | `grounding.*ERROR` | Invalid entity reference | Create /issue |
+   | `ai_identity` | Character break in cached branch | Create /issue |
+   | `StaleStateError` | Branch rejected at collapse (OK) | Note in observations |
+   | `branch_expired` | TTL exceeded (normal) | Note if excessive |
+   | `branch_invalidated` | Location state changed (normal) | Note count |
+
+   **Healthy anticipation metrics:**
+   - Cache hit rate > 30% after 5+ turns
+   - Zero grounding ERRORs
+   - Zero AI identity leaks
+   - Some StaleStateErrors OK (shows detection working)
+
+8. **Compare against expectations**:
 
    | Check | Expected |
    |-------|----------|
    | Narrative length | >= 50 chars |
    | Perspective | Second-person ("you" not "the player") |
    | Character breaks | None: "my name is", "i'm an ai", "feel free to ask", etc. |
-   | Tool calls | Appropriate for action type |
+   | Skill checks | Appropriate for uncertain outcomes |
    | Time passed | Reasonable (dialog < 10 min, travel 10-30 min) |
    | State changes | Match narrative |
+   | Branch collapse | Dice rolled at runtime, not pre-determined |
 
    **Time expectations reference:**
    | Action | Duration |
@@ -116,15 +164,16 @@ Execute each turn by
    | Drinking | 1-5 min |
    | Skill check | 1-10 min |
 
-8. **Record milestone** if criteria met:
+9. **Record milestone** if criteria met:
    - First good narrative → "Scene Introduction"
    - NPC dialog → "Dialog Exchange"
    - Item take/drop/use → "Item Interaction"
-   - Dice roll (skill_check tool) → "Skill Check"
+   - Dice roll with visible result → "Skill Check"
    - Time > 5 min → "Time Passage"
-   - Cache hit on location change → "Anticipation Cache Hit" (if enabled)
+   - Quantum branch cache hit → "Branch Cache Hit" (if anticipation enabled)
+   - Zero validation errors in branches → "Clean Branch Validation" (if anticipation enabled)
 
-9. **Create issue** if problem found:
+10. **Create issue** if problem found:
    - Run `/issue <brief description of problem>`
    - Let the issue command create the folder and README
    - Continue playing after creating issue
@@ -148,8 +197,9 @@ PLAY TEST REPORT
 ═══════════════════════════════════════════
 
 Session ID: {id}
+Pipeline: Quantum
 Turns Played: {n}
-Milestones Reached: {m}/5
+Milestones Reached: {m}/7
 
 MILESTONES:
 [✓] Scene Introduction - Turn 1
@@ -157,7 +207,8 @@ MILESTONES:
 [ ] Item Interaction
 [ ] Skill Check
 [ ] Time Passage
-[ ] Anticipation Cache Hit (if enabled)
+[ ] Branch Cache Hit (if anticipation enabled)
+[ ] Clean Branch Validation (if anticipation enabled)
 
 ISSUES CREATED:
 1. {issue-folder-1} - {brief description}
@@ -172,11 +223,21 @@ Log location: logs/llm/session_{id}/
 
 ## Important Notes
 
-- **LLM Model**: qwen3 via Ollama (not Anthropic)
+- **Pipeline**: Quantum branching pipeline (pre-generates action outcomes)
+- **LLM Models**: qwen3:32b (reasoning/tools) and magmell:32b (narration) via Ollama
 - **Play naturally**: Don't follow a script, explore like a curious player
 - **Be thorough**: Check audit logs and database, don't just trust the output
 - **Create issues promptly**: Use /issue for each problem, don't batch them
 - **Keep playing**: Don't stop for minor issues, document and continue
+
+## Pipeline Options
+
+| Pipeline | Command | Use Case |
+|----------|---------|----------|
+| `quantum` (default) | `-p quantum` or `-p q` | Pre-generated branches, instant responses |
+| `gm` | `-p gm` | Simplified GM pipeline, tool-based |
+| `system-authority` | `-p system-authority` | System decides outcomes mechanically |
+| `legacy` | `-p legacy` | Original LLM-decides-everything |
 
 ## Troubleshooting
 
@@ -184,5 +245,24 @@ Log location: logs/llm/session_{id}/
 - **Database connection failed**: Check `.env` for DATABASE_URL
 - **No audit logs**: Check `logs/llm/` directory exists
 - **Game crashes**: Check for stack trace, create /issue
-- **No cache hits**: Check `anticipation_enabled` in `src/config.py`, verify player has moved locations
-- **Anticipation not triggering**: Ensure CLI triggers anticipation after narrative display (check `src/cli/commands/game.py`)
+- **Slow responses**: Check if anticipation is enabled (`quantum_anticipation_enabled` in config)
+- **No cache hits**: Anticipation pre-generates after first turn; try multiple turns
+- **Branch mismatch**: Player input didn't match predicted actions; falls back to LLM generation
+- **Grounding errors in branches**: Check `GroundingManifest` includes all scene entities
+- **AI identity in cached content**: Branch generator prompt needs stricter character rules
+- **Excessive StaleStateErrors**: Anticipation cycle too slow, state changing before collapse
+- **Delta conflicts**: Bug in branch generator - creating contradictory state changes
+
+## Config Reference
+
+Key settings in `src/config.py`:
+```python
+# Task-specific models
+narrator: str = "ollama:magmell:32b"   # Prose narration
+reasoning: str = "ollama:qwen3:32b"    # Tools, extraction, intent
+
+# Quantum pipeline settings
+quantum_anticipation_enabled: bool = False  # Enable background pre-generation
+quantum_max_actions_per_cycle: int = 5      # Actions to pre-generate
+quantum_min_match_confidence: float = 0.7   # Minimum match score
+```
