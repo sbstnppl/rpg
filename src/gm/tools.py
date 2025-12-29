@@ -1028,6 +1028,8 @@ class GMTools:
             return self._get_story_context()
         elif tool_name == "get_time":
             return self._get_time()
+        elif tool_name == "move_to":
+            return self.move_to(**filtered)
         else:
             return {"error": f"Unknown tool: {tool_name}"}
 

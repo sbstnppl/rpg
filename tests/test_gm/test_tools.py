@@ -1089,6 +1089,50 @@ class TestMoveTo:
         # Instance should be updated for subsequent tool calls
         assert tools.location_key == "village_square"
 
+    def test_execute_tool_dispatches_move_to(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """execute_tool correctly dispatches to move_to method."""
+        from src.managers.location_manager import LocationManager
+
+        entity_manager = EntityManager(db_session, game_session)
+        player = entity_manager.create_entity(
+            entity_key="player",
+            display_name="Test Player",
+            entity_type=EntityType.PLAYER,
+        )
+        player_ext = NPCExtension(entity_id=player.id, current_location="tavern")
+        db_session.add(player_ext)
+
+        loc_manager = LocationManager(db_session, game_session)
+        loc_manager.create_location(
+            location_key="tavern",
+            display_name="The Tavern",
+            description="A cozy tavern.",
+        )
+        loc_manager.create_location(
+            location_key="village_square",
+            display_name="Village Square",
+            description="The central square.",
+        )
+        db_session.flush()
+
+        tools = GMTools(db_session, game_session, player.id, location_key="tavern")
+
+        # Use execute_tool (the LLM-facing dispatcher) instead of direct method call
+        result = tools.execute_tool("move_to", {
+            "destination": "village_square",
+            "travel_method": "walk"
+        })
+
+        assert result["success"] is True
+        assert result["to_location"] == "village_square"
+        assert "travel_time_minutes" in result
+
+        # Verify DB updated
+        db_session.refresh(player_ext)
+        assert player_ext.current_location == "village_square"
+
 
 class TestKeyResolver:
     """Tests for KeyResolver fuzzy entity key matching."""

@@ -55,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `scripts/gameplay_monitor.py`
 
 ### Fixed
+- **move_to Tool Not Registered** - Player movement now works correctly
+  - Added missing `move_to` case in `execute_tool()` dispatcher (`src/gm/tools.py:1031-1032`)
+  - Added `test_execute_tool_dispatches_move_to` test (`tests/test_gm/test_tools.py`)
+  - Issue tracking: `docs/issues/move-to-tool-not-registered/`
+
 - **Auto-Start Creates Blank Location** - `game start --auto` now creates proper starter world
   - Added `_create_auto_world()` function to create Village Tavern, Square, and Market
   - Creates 2 NPCs: Old Tom (innkeeper) and Anna (merchant)

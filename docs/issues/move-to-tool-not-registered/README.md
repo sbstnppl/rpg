@@ -1,6 +1,6 @@
 # move_to Tool Not Registered in execute_tool
 
-**Status:** Investigating
+**Status:** Done
 **Priority:** High
 **Detected:** 2025-12-29
 **Related Sessions:** Session 302, Turn 6

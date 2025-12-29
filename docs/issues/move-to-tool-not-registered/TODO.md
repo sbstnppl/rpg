@@ -9,19 +9,19 @@
 ## Design Phase
 - [x] Propose solution
 - [x] Identify files to modify
-- [ ] Define test cases
-- [ ] Review with user (if needed)
+- [x] Define test cases
+- [x] Review with user (if needed)
 
 ## Implementation Phase
-- [ ] Add `move_to` case to `execute_tool()`
-- [ ] Add/update tests
+- [x] Add `move_to` case to `execute_tool()`
+- [x] Add/update tests
 
 ## Verification Phase
-- [ ] Test manually with travel commands
-- [ ] Verify player location updates
-- [ ] Verify time advances correctly
-- [ ] Run test suite
+- [x] Test manually with travel commands
+- [x] Verify player location updates
+- [x] Verify time advances correctly
+- [x] Run test suite
 
 ## Completion
-- [ ] Update README.md status to "Done"
-- [ ] Create commit with `/commit`
+- [x] Update README.md status to "Done"
+- [x] Create commit with `/commit`
