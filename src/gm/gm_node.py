@@ -99,6 +99,11 @@ class GMNode:
         r"\byou'?re welcome\b",
         r"\bhow can i help\b",
         r"\bhappy to (?:help|assist)\b",
+        # Chatbot question endings (breaks immersion)
+        r"\bwould you like to\b",
+        r"\bdo you (?:want|need) to\b",
+        r"\bis there anything (?:else|specific)\b",
+        r"\bwhat do you want to\b",
         # Third-person narration (should be second-person "you")
         r"\bthe player\b",  # Should be "you", not "the player"
         r"\bplayer has\b",

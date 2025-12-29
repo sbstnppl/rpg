@@ -1,6 +1,6 @@
 # GM Response Ends with Chatbot-like Question
 
-**Status:** Investigating
+**Status:** Done
 **Priority:** Medium
 **Detected:** 2025-12-29
 **Related Sessions:** Session 302, Turn 3

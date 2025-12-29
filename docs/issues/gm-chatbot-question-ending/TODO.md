@@ -13,15 +13,15 @@
 - [ ] Review with user (if needed)
 
 ## Implementation Phase
-- [ ] Add patterns to `_CHARACTER_BREAK_PATTERNS`
-- [ ] Update system prompt ABSOLUTE RULES
-- [ ] Add/update tests
+- [x] Add patterns to `_CHARACTER_BREAK_PATTERNS`
+- [x] Update system prompt ABSOLUTE RULES
+- [x] Add/update tests
 
 ## Verification Phase
+- [x] Run test suite (267 passed)
 - [ ] Test manually with gameplay
-- [ ] Run test suite
 - [ ] Verify fix in multiple scenarios
 
 ## Completion
-- [ ] Update README.md status to "Done"
+- [x] Update README.md status to "Done"
 - [ ] Create commit with `/commit`

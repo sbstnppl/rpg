@@ -197,6 +197,47 @@ class TestCharacterBreakDetection:
         # We accept this false positive - better safe than leaking tool output
         assert is_broken
 
+    # ===========================================================================
+    # Chatbot Question Ending Tests
+    # ===========================================================================
+
+    def test_detects_would_you_like_to(self):
+        """Detect 'would you like to' question ending."""
+        text = "Would you like to do anything specific in the tavern?"
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+        assert "would you like to" in pattern
+
+    def test_detects_do_you_want_to(self):
+        """Detect 'do you want to' question ending."""
+        text = "Do you want to explore the area?"
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
+    def test_detects_do_you_need_to(self):
+        """Detect 'do you need to' question ending."""
+        text = "Do you need to rest before continuing?"
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
+    def test_detects_is_there_anything_else(self):
+        """Detect 'is there anything else' pattern."""
+        text = "Is there anything else you'd like to examine?"
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
+    def test_detects_is_there_anything_specific(self):
+        """Detect 'is there anything specific' pattern."""
+        text = "Is there anything specific you want to do?"
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
+    def test_detects_what_do_you_want_to(self):
+        """Detect 'what do you want to' question ending."""
+        text = "What do you want to do next?"
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
     def test_empty_string_passes(self):
         """Empty string should pass (no content to break character)."""
         is_broken, pattern = GMNode._detect_character_break("")

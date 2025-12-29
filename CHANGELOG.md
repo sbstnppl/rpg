@@ -55,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `scripts/gameplay_monitor.py`
 
 ### Fixed
+- **GM Chatbot Question Endings** - Detect and prevent chatbot-like questions that break immersion
+  - Added patterns: "would you like to", "do you want to", "is there anything else/specific", "what do you want to" (`src/gm/gm_node.py`)
+  - Updated ABSOLUTE RULES in system prompt to explicitly forbid these endings (`src/gm/prompts.py`)
+  - Added 6 new test cases for chatbot question detection (`tests/test_gm/test_character_validation.py`)
+
 - **GM Hallucinates Item Keys** - GM now uses exact keys from context instead of inventing them
   - Changed key format to `KEY=x | Name` for visual distinction (`src/gm/grounding.py`)
   - Added key validation in `execute_tool()` for take_item/drop_item/give_item (`src/gm/tools.py`)
