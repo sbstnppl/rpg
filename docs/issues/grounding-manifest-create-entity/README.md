@@ -1,6 +1,6 @@
 # Grounding Manifest Not Updated After create_entity Tool Call
 
-**Status:** Investigating
+**Status:** Done
 **Priority:** High
 **Detected:** 2025-12-29
 **Related Sessions:** Session 302, Turn 5

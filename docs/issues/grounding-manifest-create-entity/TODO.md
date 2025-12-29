@@ -9,20 +9,20 @@
 ## Design Phase
 - [x] Propose solution
 - [x] Identify files to modify
-- [ ] Define test cases
-- [ ] Review with user (if needed)
+- [x] Define test cases
+- [x] Review with user (if needed)
 
 ## Implementation Phase
-- [ ] Track created entity keys in GMNode
-- [ ] Pass created keys to grounding validator
-- [ ] Update GroundingValidator to accept additional keys
-- [ ] Add/update tests
+- [x] Track created entity keys in GMNode
+- [x] Pass created keys to grounding validator
+- [x] Update GroundingManifest to accept additional keys
+- [x] Add/update tests
 
 ## Verification Phase
-- [ ] Test manually with create_entity scenario
-- [ ] Run test suite
+- [x] Test manually with create_entity scenario
+- [x] Run test suite
 - [ ] Verify fix in gameplay
 
 ## Completion
-- [ ] Update README.md status to "Done"
+- [x] Update README.md status to "Done"
 - [ ] Create commit with `/commit`

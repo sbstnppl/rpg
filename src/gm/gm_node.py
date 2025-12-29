@@ -1055,6 +1055,13 @@ class GMNode:
             "result": result,
         })
 
+        # Track created entity keys for grounding validation
+        # This allows newly created entities to be immediately referenced in narrative
+        if tool_call.name == "create_entity" and result.get("success"):
+            entity_key = result.get("entity_key")
+            if entity_key and self._current_manifest:
+                self._current_manifest.additional_valid_keys.add(entity_key)
+
         # Check for pending rolls (manual mode)
         if result.get("pending"):
             self.pending_rolls.append({

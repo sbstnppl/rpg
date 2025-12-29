@@ -186,6 +186,41 @@ class TestGroundingManifest:
         assert "TOOL KEY REMINDER" in output
         assert "get_npc_attitude" in output
 
+    def test_additional_valid_keys_contains_key(self, sample_manifest: GroundingManifest):
+        """Test contains_key returns True for additional valid keys."""
+        # Key should not exist initially
+        assert sample_manifest.contains_key("new_item_123") is False
+
+        # Add to additional_valid_keys
+        sample_manifest.additional_valid_keys.add("new_item_123")
+
+        # Now it should be valid
+        assert sample_manifest.contains_key("new_item_123") is True
+
+    def test_additional_valid_keys_multiple(self, sample_manifest: GroundingManifest):
+        """Test multiple additional valid keys all accepted."""
+        keys_to_add = {"ale_794", "bread_001", "npc_bartender_99"}
+        sample_manifest.additional_valid_keys.update(keys_to_add)
+
+        for key in keys_to_add:
+            assert sample_manifest.contains_key(key) is True
+
+    def test_additional_valid_keys_in_all_keys(self, sample_manifest: GroundingManifest):
+        """Test all_keys includes additional valid keys."""
+        sample_manifest.additional_valid_keys.add("created_mid_turn_001")
+
+        all_keys = sample_manifest.all_keys()
+        assert "created_mid_turn_001" in all_keys
+
+    def test_additional_valid_keys_empty_by_default(self):
+        """Test additional_valid_keys defaults to empty set."""
+        manifest = GroundingManifest(
+            location_key="loc_001",
+            location_display="Test Location",
+            player_key="player_001",
+        )
+        assert manifest.additional_valid_keys == set()
+
 
 # =============================================================================
 # GroundingValidator Tests
@@ -278,6 +313,34 @@ class TestGroundingValidator:
         feedback = result.error_feedback()
         assert "Invalid keys" in feedback or "Unkeyed" in feedback
         assert "Please fix" in feedback
+
+    def test_validate_additional_valid_keys(self):
+        """Test validator accepts keys in additional_valid_keys.
+
+        This simulates keys created mid-turn by create_entity tool.
+        """
+        manifest = GroundingManifest(
+            location_key="tavern_001",
+            location_display="Tavern",
+            player_key="player_001",
+            player_display="You",
+            npcs={},
+            items_at_location={},
+            inventory={},
+            equipped={},
+            storages={},
+            exits={},
+        )
+
+        # Add a key that simulates a mid-turn creation
+        manifest.additional_valid_keys.add("tankard_ale_794")
+
+        validator = GroundingValidator(manifest)
+        text = "[tankard_ale_794:The ale] was placed before you."
+        result = validator.validate(text)
+
+        assert result.valid is True
+        assert len(result.invalid_keys) == 0
 
 
 # =============================================================================

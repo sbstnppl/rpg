@@ -65,6 +65,10 @@ class GroundingManifest(BaseModel):
     exits: dict[str, GroundedEntity] = Field(
         default_factory=dict, description="Accessible locations/exits"
     )
+    additional_valid_keys: set[str] = Field(
+        default_factory=set,
+        description="Keys created mid-turn (e.g., via create_entity) that should be valid",
+    )
 
     def contains_key(self, key: str) -> bool:
         """Check if a key exists in the manifest.
@@ -77,6 +81,10 @@ class GroundingManifest(BaseModel):
         """
         # Check special keys
         if key in (self.location_key, self.player_key):
+            return True
+
+        # Check keys created mid-turn (e.g., via create_entity tool)
+        if key in self.additional_valid_keys:
             return True
 
         # Check all entity categories
@@ -93,7 +101,7 @@ class GroundingManifest(BaseModel):
         """Get all valid entity keys.
 
         Returns:
-            Set of all valid keys including location and player.
+            Set of all valid keys including location, player, and mid-turn created keys.
         """
         keys = {self.location_key, self.player_key}
         keys.update(self.npcs.keys())
@@ -102,6 +110,7 @@ class GroundingManifest(BaseModel):
         keys.update(self.equipped.keys())
         keys.update(self.storages.keys())
         keys.update(self.exits.keys())
+        keys.update(self.additional_valid_keys)
         return keys
 
     def all_entities(self) -> dict[str, GroundedEntity]:

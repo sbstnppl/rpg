@@ -55,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Key file: `scripts/gameplay_monitor.py`
 
 ### Fixed
+- **Grounding Manifest Not Updated After create_entity** - Entities created mid-turn now valid for narrative
+  - Added `additional_valid_keys` field to `GroundingManifest` (`src/gm/grounding.py`)
+  - Track created entity keys in `_execute_tool_call()` (`src/gm/gm_node.py:1058-1063`)
+  - 5 new tests for additional_valid_keys behavior (`tests/test_gm/test_grounding.py`)
+
 - **move_to Tool Not Registered** - Player movement now works correctly
   - Added missing `move_to` case in `execute_tool()` dispatcher (`src/gm/tools.py:1031-1032`)
   - Added `test_execute_tool_dispatches_move_to` test (`tests/test_gm/test_tools.py`)
