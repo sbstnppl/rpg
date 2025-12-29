@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **vLLM Multi-Port Support** - Task-specific base URLs for vLLM deployments with different models on different ports
+  - Added `narrator_base_url`, `reasoning_base_url`, `cheap_base_url` settings (`src/config.py`)
+  - Factory functions now use task-specific URLs for OpenAI-compatible providers (`src/llm/factory.py`)
+  - Enables running different models (e.g., qwen3, magmell) on separate vLLM instances
+
 - **Quantum Branching Pipeline** - Unified pipeline that pre-generates action outcome branches for instant responses
   - **ActionPredictor** - Predicts likely player actions from scene context (NPCs, items, exits) (`src/world_server/quantum/action_predictor.py`)
   - **ActionMatcher** - Fuzzy matches player input to cached predictions with configurable confidence threshold (`src/world_server/quantum/action_matcher.py`)

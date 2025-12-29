@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     # Ollama Settings
     ollama_base_url: str = "http://localhost:11434"
 
+    # Task-specific base URLs (for vLLM with different ports per model)
+    narrator_base_url: str | None = None
+    reasoning_base_url: str | None = None
+    cheap_base_url: str | None = None
+
     # ==========================================================================
     # Task-Specific LLM Configuration (provider:model format)
     # ==========================================================================

@@ -16,11 +16,12 @@ if TYPE_CHECKING:
     from src.llm.logging_provider import LoggingProvider
 
 
-def _create_provider(config: ProviderConfig) -> LLMProvider:
+def _create_provider(config: ProviderConfig, base_url_override: str | None = None) -> LLMProvider:
     """Create an LLM provider from a ProviderConfig.
 
     Args:
         config: Parsed provider configuration with provider type and model.
+        base_url_override: Optional base URL override for OpenAI-compatible providers.
 
     Returns:
         Configured LLMProvider instance.
@@ -37,7 +38,7 @@ def _create_provider(config: ProviderConfig) -> LLMProvider:
         provider = OpenAIProvider(
             api_key=settings.openai_api_key,
             default_model=config.model,
-            base_url=settings.openai_base_url,
+            base_url=base_url_override or settings.openai_base_url,
         )
     elif config.provider == "ollama":
         from src.llm.ollama_provider import OllamaProvider
@@ -88,7 +89,7 @@ def get_narrator_provider() -> LLMProvider:
     Returns:
         LLMProvider configured for narration.
     """
-    return _create_provider(settings.narrator_config)
+    return _create_provider(settings.narrator_config, settings.narrator_base_url)
 
 
 def get_reasoning_provider() -> LLMProvider:
@@ -106,7 +107,7 @@ def get_reasoning_provider() -> LLMProvider:
     Returns:
         LLMProvider configured for reasoning.
     """
-    return _create_provider(settings.reasoning_config)
+    return _create_provider(settings.reasoning_config, settings.reasoning_base_url)
 
 
 def get_creative_provider() -> LLMProvider:
@@ -140,7 +141,7 @@ def get_cheap_provider() -> LLMProvider:
     Returns:
         LLMProvider configured for cheap operations.
     """
-    return _create_provider(settings.cheap_config)
+    return _create_provider(settings.cheap_config, settings.cheap_base_url)
 
 
 # =============================================================================
