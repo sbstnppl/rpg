@@ -9,19 +9,19 @@
 ## Design Phase
 - [x] Propose solution
 - [x] Identify files to modify
-- [ ] Define test cases
-- [ ] Review with user (if needed)
+- [x] Define test cases
+- [x] Review with user (if needed)
 
 ## Implementation Phase
-- [ ] Add detection patterns or strip logic
-- [ ] Update system prompt
-- [ ] Add/update tests
+- [x] Add detection patterns or strip logic
+- [x] Update system prompt
+- [x] Add/update tests
 
 ## Verification Phase
-- [ ] Test manually with gameplay
-- [ ] Run test suite
-- [ ] Verify fix in multiple scenarios
+- [x] Test manually with gameplay
+- [x] Run test suite
+- [x] Verify fix in multiple scenarios
 
 ## Completion
-- [ ] Update README.md status to "Done"
+- [x] Update README.md status to "Done"
 - [ ] Create commit with `/commit`

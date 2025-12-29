@@ -99,6 +99,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Layer 3 (Graceful Degradation)**: Added `KeyResolver` class for auto-correcting close key matches in tool calls
   - Key files: `src/gm/grounding.py`, `src/gm/tools.py`, `src/gm/gm_node.py`
   - Issue tracking: `docs/issues/gm-hallucinates-entity-keys/`
+- **GM Meta-Commentary Before Tool Calls** - GM no longer announces tool usage
+  - Detected immersion-breaking text like "Let me get the scene details for you." before tool calls
+  - Added 3 detection patterns to `_CHARACTER_BREAK_PATTERNS`: "let me get/check/look", "I'll get/check/look", "I need to get/check/look"
+  - Added rule 8 to GM prompt: "NEVER announce tool usage"
+  - Added 6 unit tests for pre-tool announcement detection
+  - Key files: `src/gm/gm_node.py`, `src/gm/prompts.py`
+  - Issue tracking: `docs/issues/gm-meta-commentary-tool-calls/`
+
 - **Character Break on Tool Errors** - LLM now handles tool failures gracefully in-story
   - Added HANDLING TOOL FAILURES section to GM_SYSTEM_PROMPT and MINIMAL_GM_CORE_PROMPT
   - LLM instructed to narrate success or give in-story reason instead of exposing technical errors

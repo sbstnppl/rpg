@@ -141,6 +141,10 @@ class GMNode:
         r"\bpresence unaccounted\b",
         r"\bleft .+ unaccounted\b",
         r"\bcouldn'?t (?:find|locate) (?:the|this|that) item\b",
+        # Pre-tool-call announcements (GM thinking aloud - breaks immersion)
+        r"\blet me (?:get|check|look|see|find|retrieve|fetch)\b",
+        r"\bi'?ll (?:get|check|look|see|find|retrieve|fetch)\b",
+        r"\bi (?:need|should|will|have) to (?:get|check|look|see|find)\b",
     )
 
     @staticmethod

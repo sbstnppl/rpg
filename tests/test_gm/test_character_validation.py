@@ -316,3 +316,51 @@ class TestCharacterBreakDetection:
         text = "You raise the mug to your lips, savoring the cool ale."
         is_broken, pattern = GMNode._detect_character_break(text)
         assert not is_broken
+
+    # ===========================================================================
+    # Pre-Tool-Call Announcement Tests (Meta-Commentary)
+    # ===========================================================================
+
+    def test_detects_let_me_get(self):
+        """Detect 'Let me get' pre-tool announcement."""
+        text = "Let me get the scene details for you."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+        assert "let me" in pattern
+
+    def test_detects_ill_check(self):
+        """Detect 'I'll check' pre-tool announcement."""
+        text = "I'll check your inventory and status."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+        assert "i'll" in pattern or "i'?ll" in pattern
+
+    def test_detects_i_need_to_look(self):
+        """Detect 'I need to look' pre-tool announcement."""
+        text = "I need to look at your attributes first."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+        assert "i need to" in pattern or "i (?:need" in pattern
+
+    def test_detects_ill_fetch(self):
+        """Detect 'I'll fetch' pre-tool announcement."""
+        text = "I'll fetch the NPC data now."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert is_broken
+
+    def test_valid_npc_let_me_dialogue_passes(self):
+        """NPC saying 'let me' in dialogue should pass.
+
+        The pattern uses word boundaries to avoid matching 'let me'
+        when it's part of NPC dialogue like 'let me think'.
+        """
+        text = "\"Let me think about that,\" Marcus says thoughtfully."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        # This should NOT be caught because 'think' is not in the action verb list
+        assert not is_broken
+
+    def test_valid_you_let_narrative_passes(self):
+        """'You let' in narrative should pass (different usage)."""
+        text = "You let the guard pass without incident."
+        is_broken, pattern = GMNode._detect_character_break(text)
+        assert not is_broken

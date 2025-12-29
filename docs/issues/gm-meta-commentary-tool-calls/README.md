@@ -1,6 +1,6 @@
 # GM Shows Meta-Commentary Before Tool Calls
 
-**Status:** Investigating
+**Status:** Done
 **Priority:** Medium
 **Detected:** 2025-12-29
 **Related Sessions:** Session 302, Turn 3
