@@ -13,9 +13,61 @@ The RPG uses a LangGraph-based multi-agent architecture where specialized agents
 
 ## Game Pipelines
 
-The RPG supports four game pipelines, selectable via `--pipeline` flag on CLI commands.
+The RPG supports multiple game pipelines, selectable via `--pipeline` flag on CLI commands.
 
-### GM Pipeline (Default, Recommended)
+### Quantum Branching Pipeline (Default, Recommended)
+
+```
+Background Anticipation:
+Scene Manifest → ActionPredictor → GMOracle → BranchGenerator → Cache
+
+Runtime (Cache Hit):
+Player Input → ActionMatcher → Cache Lookup → Dice Roll → Collapse → Display (<100ms)
+
+Runtime (Cache Miss):
+Player Input → ActionMatcher → Sync Generation → Dice Roll → Collapse → Display (3-8s)
+```
+
+**Philosophy**: "Pre-generate all possible outcomes, roll dice at runtime to select"
+
+**Key Insight**: Like a tabletop GM who thinks ahead - "If they talk to the merchant, here's what happens. If they try to steal..."
+
+**Benefits**:
+- **Instant responses**: Cache hits return in <100ms vs 50-80s for generation
+- **Live dice rolls**: Dice are rolled at runtime, making each moment feel meaningful
+- **Grounded narratives**: All entity references are validated against scene manifest
+- **Atomic state changes**: StateDelta objects applied atomically with rollback on failure
+
+**Components**:
+1. **ActionPredictor** - Predicts likely player actions from scene context
+2. **ActionMatcher** - Fuzzy matches player input to cached predictions
+3. **GMDecisionOracle** - Predicts whether GM would add a twist
+4. **BranchGenerator** - Generates narrative variants with state deltas
+5. **QuantumBranchCache** - LRU cache with TTL for pre-generated branches
+6. **BranchCollapseManager** - Rolls dice and applies selected variant
+7. **NarrativeConsistencyValidator** - Ensures generated content is grounded
+
+**Key files**: `src/world_server/quantum/`
+
+**CLI**: `rpg game play --pipeline quantum` (default)
+
+**Options**:
+- `--anticipation` - Enable background pre-generation
+- `--no-anticipation` - Disable anticipation (sync generation only)
+
+**Configuration** (in `.env`):
+```bash
+QUANTUM_ANTICIPATION_ENABLED=true
+QUANTUM_MAX_ACTIONS_PER_CYCLE=5
+QUANTUM_MAX_GM_DECISIONS=2
+QUANTUM_MIN_MATCH_CONFIDENCE=0.7
+```
+
+**Documentation**: See `docs/quantum-branching/` for detailed design.
+
+---
+
+### GM Pipeline (Deprecated)
 
 ```
 START → GMNode (with Tools) → Validator → Applier → END
@@ -686,7 +738,9 @@ tail -f logs/gm_e2e/live.log
 
 ---
 
-## World Server Anticipation
+## World Server Anticipation (Superseded by Quantum Branching)
+
+> **Note**: This original anticipation system has been superseded by **Quantum Branching** (`docs/quantum-branching/`), which provides a more comprehensive approach including action prediction, multiple outcome variants, and runtime dice rolling. The section below describes the legacy implementation.
 
 The World Server pre-generates scenes while the player reads narrative, hiding LLM latency.
 

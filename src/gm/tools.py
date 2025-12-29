@@ -932,7 +932,29 @@ class GMTools:
                 "container_type", "capacity"
             }
             tool_input = {k: v for k, v in tool_input.items() if k in allowed_create}
-            return self.create_entity(**tool_input).model_dump()
+
+            # Validate required parameters
+            if "entity_type" not in tool_input:
+                return {
+                    "success": False,
+                    "error": "Missing required parameter: entity_type",
+                    "hint": "create_entity requires entity_type (npc, item, furniture, location)",
+                }
+            if "name" not in tool_input:
+                return {
+                    "success": False,
+                    "error": "Missing required parameter: name",
+                    "hint": "create_entity requires a name for the entity",
+                }
+
+            try:
+                return self.create_entity(**tool_input).model_dump()
+            except Exception as e:
+                logger.error(f"create_entity failed with input {tool_input}: {e}")
+                return {
+                    "success": False,
+                    "error": f"Failed to create entity: {str(e)}",
+                }
         elif tool_name == "record_fact":
             # Normalize parameter aliases
             if "fact" in tool_input and "value" not in tool_input:
@@ -942,7 +964,25 @@ class GMTools:
             # Filter to valid parameters
             allowed_fact = {"subject_type", "subject_key", "predicate", "value", "is_secret"}
             tool_input = {k: v for k, v in tool_input.items() if k in allowed_fact}
-            return self.record_fact(**tool_input)
+
+            # Validate required parameters before calling
+            required_fact = {"subject_type", "subject_key", "predicate", "value"}
+            missing = required_fact - set(tool_input.keys())
+            if missing:
+                return {
+                    "success": False,
+                    "error": f"Missing required parameters for record_fact: {', '.join(sorted(missing))}",
+                    "hint": "record_fact requires: subject_type, subject_key, predicate, value",
+                }
+
+            try:
+                return self.record_fact(**tool_input)
+            except Exception as e:
+                logger.error(f"record_fact failed with input {tool_input}: {e}")
+                return {
+                    "success": False,
+                    "error": f"Failed to record fact: {str(e)}",
+                }
         # Relationship tools
         elif tool_name == "get_npc_attitude":
             return self.get_npc_attitude(**filtered)

@@ -72,6 +72,11 @@ NODE_PROGRESS_MESSAGES: dict[str, str] = {
     "gm": "The GM considers your action...",
     "validator": "Checking consistency...",
     "applier": "Updating world state...",
+    # Quantum pipeline phases
+    "quantum_match": "Checking prepared outcomes...",
+    "quantum_generate": "Generating narrative...",
+    "quantum_collapse": "Rolling dice...",
+    "quantum_anticipate": "Preparing for next actions...",
 }
 
 # Valid pipeline options and their aliases
@@ -83,8 +88,10 @@ PIPELINE_ALIASES = {
     "scene-first": "scene-first",
     "scene": "scene-first",
     "gm": "gm",
-    "new": "gm",  # "new" now points to gm pipeline
     "simplified": "gm",
+    "quantum": "quantum",
+    "q": "quantum",
+    "new": "quantum",  # "new" now points to quantum pipeline
 }
 
 
@@ -92,11 +99,16 @@ def get_pipeline_graph(pipeline: str):
     """Get the appropriate graph builder for the pipeline.
 
     Args:
-        pipeline: Normalized pipeline name (legacy, system-authority, scene-first, gm)
+        pipeline: Normalized pipeline name (legacy, system-authority, scene-first, gm, quantum)
 
     Returns:
         Tuple of (compiled_graph, pipeline_display_name)
+        For quantum pipeline, returns (None, "Quantum") since it uses QuantumPipeline directly.
     """
+    if pipeline == "quantum":
+        # Quantum pipeline doesn't use LangGraph - handled separately in _game_loop
+        return None, "Quantum"
+
     if pipeline == "gm":
         from src.gm.graph import build_gm_graph
         graph = build_gm_graph()
@@ -1099,10 +1111,10 @@ def delete(
 def play(
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
     pipeline: str = typer.Option(
-        "gm",
+        "quantum",
         "--pipeline",
         "-p",
-        help="Pipeline: 'gm' (default), 'system-authority', 'scene-first', or 'legacy'",
+        help="Pipeline: 'quantum' (default), 'gm', 'system-authority', 'scene-first', or 'legacy'",
     ),
     roll_mode: str = typer.Option(
         "auto",
@@ -1113,10 +1125,10 @@ def play(
     anticipation: Optional[bool] = typer.Option(
         None,
         "--anticipation/--no-anticipation",
-        help="Enable/disable anticipatory scene generation (default: from config)",
+        help="Enable/disable anticipatory pre-generation (default: from config)",
     ),
 ) -> None:
-    """Start the interactive game loop."""
+    """Start the interactive game loop using the quantum branching pipeline."""
     # Validate pipeline option
     normalized_pipeline = validate_pipeline(pipeline)
 
@@ -1316,20 +1328,47 @@ async def _game_loop(
         db: Database session.
         game_session: Current game session.
         player: Player entity.
-        pipeline: Pipeline to use (gm, legacy, system-authority, scene-first).
+        pipeline: Pipeline to use (quantum, gm, legacy, system-authority, scene-first).
         initial_location: Optional starting location key from character creation.
         roll_mode: "auto" or "manual" for dice rolls (GM pipeline only).
         anticipation_enabled: Whether to enable anticipatory scene generation.
     """
     display_welcome(game_session.session_name)
 
-    # Build and compile the appropriate graph
-    compiled, pipeline_name = get_pipeline_graph(pipeline)
+    # Check if using quantum pipeline
+    is_quantum = pipeline == "quantum"
+    quantum_pipeline = None
+    compiled = None
 
-    # Initialize World Server for anticipation (if enabled)
+    if is_quantum:
+        # Initialize Quantum Pipeline
+        from src.world_server.quantum import QuantumPipeline, AnticipationConfig
+        from src.config import get_settings
+        settings = get_settings()
+
+        use_anticipation = anticipation_enabled if anticipation_enabled is not None else settings.quantum_anticipation_enabled
+        anticipation_config = AnticipationConfig(
+            enabled=use_anticipation,
+            max_actions_per_cycle=settings.quantum_max_actions_per_cycle,
+            max_gm_decisions_per_action=settings.quantum_max_gm_decisions,
+            cycle_delay_seconds=settings.quantum_cycle_delay,
+        )
+        quantum_pipeline = QuantumPipeline(
+            db=db,
+            game_session=game_session,
+            anticipation_config=anticipation_config,
+        )
+        pipeline_name = "Quantum"
+        if anticipation_config.enabled:
+            display_info("Quantum anticipation enabled")
+    else:
+        # Build and compile the appropriate graph
+        compiled, pipeline_name = get_pipeline_graph(pipeline)
+
+    # Initialize World Server for anticipation (if enabled and not quantum)
     world_server = None
     scene_generator = None
-    if anticipation_enabled:
+    if anticipation_enabled and not is_quantum:
         from src.world_server import get_world_server_manager, create_scene_generator_callback
         world_server = get_world_server_manager(db, game_session, enabled=True)
         scene_generator = create_scene_generator_callback(db, game_session)
@@ -1391,25 +1430,46 @@ async def _game_loop(
         # NEW GAME: Generate initial scene
         game_session.total_turns += 1  # Increment for first turn
 
-        initial_state = _create_turn_state(
-            pipeline=pipeline,
-            db=db,
-            game_session=game_session,
-            player_id=player.id,
-            player_location=player_location,
-            player_input="[FIRST TURN: Introduce the player character - describe who they are, what they look like, what they're wearing, and how they feel. Then describe the scene they find themselves in.]",
-            turn_number=game_session.total_turns,
-            roll_mode=roll_mode,
-        )
+        first_turn_input = "[FIRST TURN: Introduce the player character - describe who they are, what they look like, what they're wearing, and how they feel. Then describe the scene they find themselves in.]"
 
-        with progress_spinner("Setting the scene...") as (progress, task):
-            try:
-                result = await _run_graph_with_progress(compiled, initial_state, progress, task)
-                if result.get("gm_response"):
-                    display_narrative(result["gm_response"])
-                    player_location = result.get("player_location", player_location)
-            except Exception as e:
-                display_error(f"Error generating scene: {e}")
+        if is_quantum and quantum_pipeline:
+            # Quantum pipeline: use process_turn
+            with progress_spinner("Setting the scene...") as (progress, task):
+                try:
+                    progress.update(task, description="Generating narrative...")
+                    turn_result = await quantum_pipeline.process_turn(
+                        player_input=first_turn_input,
+                        location_key=player_location,
+                        turn_number=game_session.total_turns,
+                    )
+                    if turn_result.narrative:
+                        display_narrative(turn_result.narrative)
+                except Exception as e:
+                    display_error(f"Error generating scene: {e}")
+            # Start anticipation after first turn
+            if quantum_pipeline.anticipation_config.enabled:
+                await quantum_pipeline.start_anticipation()
+        else:
+            # Legacy pipelines: use graph
+            initial_state = _create_turn_state(
+                pipeline=pipeline,
+                db=db,
+                game_session=game_session,
+                player_id=player.id,
+                player_location=player_location,
+                player_input=first_turn_input,
+                turn_number=game_session.total_turns,
+                roll_mode=roll_mode,
+            )
+
+            with progress_spinner("Setting the scene...") as (progress, task):
+                try:
+                    result = await _run_graph_with_progress(compiled, initial_state, progress, task)
+                    if result.get("gm_response"):
+                        display_narrative(result["gm_response"])
+                        player_location = result.get("player_location", player_location)
+                except Exception as e:
+                    display_error(f"Error generating scene: {e}")
 
     # Main loop
     while True:
@@ -1426,7 +1486,9 @@ async def _game_loop(
                 display_info("Saving and exiting...")
                 game_session.status = "paused"
                 db.commit()
-                # Shutdown world server if enabled
+                # Shutdown pipelines
+                if quantum_pipeline:
+                    await quantum_pipeline.stop_anticipation()
                 if world_server:
                     await world_server.shutdown()
                 break
@@ -1505,71 +1567,127 @@ async def _game_loop(
         snapshot_mgr.capture_snapshot(game_session.total_turns + 1)
         snapshot_mgr.prune_snapshots()
 
-        # Process player input through the agent graph
+        # Process player input
         game_session.total_turns += 1
 
-        state = _create_turn_state(
-            pipeline=pipeline,
-            db=db,
-            game_session=game_session,
-            player_id=player.id,
-            player_location=player_location,
-            player_input=enhanced_input,  # Use validated/enhanced input
-            turn_number=game_session.total_turns,
-            roll_mode=roll_mode,
-        )
+        if is_quantum and quantum_pipeline:
+            # Quantum pipeline: use process_turn
+            with progress_spinner("Processing...") as (progress, task):
+                try:
+                    # Show cache check phase
+                    progress.update(task, description="Checking prepared outcomes...")
 
-        with progress_spinner("Starting...") as (progress, task):
-            try:
-                result = await _run_graph_with_progress(compiled, state, progress, task)
-            except Exception as e:
-                display_error(f"Error: {e}")
-                game_session.total_turns -= 1
-                continue
+                    turn_result = await quantum_pipeline.process_turn(
+                        player_input=enhanced_input,
+                        location_key=player_location,
+                        turn_number=game_session.total_turns,
+                    )
 
-        # Display skill checks interactively (before the narrative)
-        skill_checks = result.get("skill_checks", [])
-        if skill_checks:
-            _display_skill_checks_interactive(skill_checks)
+                    # Update progress based on cache hit
+                    if turn_result.was_cache_hit:
+                        progress.update(task, description="Cache hit! Rolling dice...")
+                    else:
+                        progress.update(task, description="Generating narrative...")
 
-        # Display the response
-        if result.get("gm_response"):
-            if result.get("is_ooc"):
-                display_ooc_response(result["gm_response"])
+                except Exception as e:
+                    display_error(f"Error: {e}")
+                    game_session.total_turns -= 1
+                    continue
+
+            # Display skill check if present
+            if turn_result.skill_check_result:
+                _display_quantum_skill_check(turn_result.skill_check_result)
+
+            # Display the response
+            if turn_result.narrative:
+                display_narrative(turn_result.narrative)
+
+                # Immediately persist the turn
+                _save_turn_immediately(
+                    db=db,
+                    game_session=game_session,
+                    turn_number=game_session.total_turns,
+                    player_input=player_input,
+                    gm_response=turn_result.narrative,
+                    player_location=player_location,
+                    is_ooc=False,
+                )
+
+                # Show cache/latency info
+                if turn_result.was_cache_hit:
+                    display_info(f"[dim](cache hit, {turn_result.latency_ms:.0f}ms)[/dim]")
             else:
-                display_narrative(result["gm_response"])
+                display_error("No response from quantum pipeline. Try rephrasing your action.")
 
-            # Immediately persist the turn so it's not lost on quit
-            _save_turn_immediately(
+            # Handle errors from quantum pipeline
+            if turn_result.errors:
+                for error in turn_result.errors:
+                    display_error(error)
+
+        else:
+            # Legacy pipelines: use graph
+            state = _create_turn_state(
+                pipeline=pipeline,
                 db=db,
                 game_session=game_session,
-                turn_number=game_session.total_turns,  # Already incremented above
-                player_input=player_input,
-                gm_response=result["gm_response"],
-                player_location=result.get("player_location", player_location),
-                is_ooc=result.get("is_ooc", False),
+                player_id=player.id,
+                player_location=player_location,
+                player_input=enhanced_input,  # Use validated/enhanced input
+                turn_number=game_session.total_turns,
+                roll_mode=roll_mode,
             )
 
-            # Trigger anticipation for likely next locations (runs in background)
-            if world_server and not result.get("is_ooc"):
-                current_loc = result.get("player_location", player_location)
-                await world_server.trigger_anticipation(
-                    current_location=current_loc,
-                    recent_actions=[player_input],
-                    scene_generator=scene_generator,
+            with progress_spinner("Starting...") as (progress, task):
+                try:
+                    result = await _run_graph_with_progress(compiled, state, progress, task)
+                except Exception as e:
+                    display_error(f"Error: {e}")
+                    game_session.total_turns -= 1
+                    continue
+
+            # Display skill checks interactively (before the narrative)
+            skill_checks = result.get("skill_checks", [])
+            if skill_checks:
+                _display_skill_checks_interactive(skill_checks)
+
+            # Display the response
+            if result.get("gm_response"):
+                if result.get("is_ooc"):
+                    display_ooc_response(result["gm_response"])
+                else:
+                    display_narrative(result["gm_response"])
+
+                # Immediately persist the turn so it's not lost on quit
+                _save_turn_immediately(
+                    db=db,
+                    game_session=game_session,
+                    turn_number=game_session.total_turns,  # Already incremented above
+                    player_input=player_input,
+                    gm_response=result["gm_response"],
+                    player_location=result.get("player_location", player_location),
+                    is_ooc=result.get("is_ooc", False),
                 )
-        else:
-            display_error("No response from GM (empty narrative). Try rephrasing your action.")
 
-        # Update player location if changed
-        if result.get("location_changed"):
-            player_location = result.get("player_location", player_location)
-            display_info(f"[You are now at: {player_location}]")
+                # Trigger anticipation for likely next locations (runs in background)
+                if world_server and not result.get("is_ooc"):
+                    current_loc = result.get("player_location", player_location)
+                    await world_server.trigger_anticipation(
+                        current_location=current_loc,
+                        recent_actions=[player_input],
+                        scene_generator=scene_generator,
+                    )
+            else:
+                display_error("No response from GM (empty narrative). Try rephrasing your action.")
 
-        # Handle errors
-        if result.get("errors"):
-            for error in result["errors"]:
-                display_error(error)
+            # Update player location if changed
+            if result.get("location_changed"):
+                player_location = result.get("player_location", player_location)
+                display_info(f"[You are now at: {player_location}]")
+
+            # Handle errors
+            if result.get("errors"):
+                for error in result["errors"]:
+                    display_error(error)
 
         # Commit after each turn
         db.commit()
@@ -1648,6 +1766,51 @@ def _display_skill_checks_interactive(skill_checks: list[dict]) -> None:
             is_critical_success=check.get("is_critical_success") or check.get("critical_success", False),
             is_critical_failure=check.get("is_critical_failure") or check.get("critical_failure", False),
         )
+
+
+def _display_quantum_skill_check(skill_check_result) -> None:
+    """Display skill check result from quantum pipeline.
+
+    Args:
+        skill_check_result: SkillCheckResult from dice/checks.py
+    """
+    from src.cli.display import (
+        display_skill_check_prompt,
+        display_skill_check_result,
+        wait_for_roll,
+        display_rolling_animation,
+    )
+
+    # Show pre-roll prompt
+    display_skill_check_prompt(
+        description=f"{skill_check_result.skill_name} check",
+        skill_name=skill_check_result.skill_name,
+        skill_tier="Practiced",  # Default tier for quantum
+        skill_modifier=skill_check_result.skill_modifier,
+        attribute_key=skill_check_result.attribute_key,
+        attribute_modifier=skill_check_result.attribute_modifier,
+        total_modifier=skill_check_result.total_modifier,
+        difficulty_assessment="",
+    )
+
+    # Wait for player to press ENTER (dice already rolled, but for suspense)
+    wait_for_roll()
+
+    # Show rolling animation
+    display_rolling_animation()
+
+    # Show the result
+    display_skill_check_result(
+        success=skill_check_result.success,
+        dice_rolls=skill_check_result.dice_results,
+        total_modifier=skill_check_result.total_modifier,
+        total_roll=skill_check_result.total,
+        dc=skill_check_result.dc,
+        margin=skill_check_result.margin,
+        outcome_tier=skill_check_result.outcome_tier.value if hasattr(skill_check_result.outcome_tier, 'value') else str(skill_check_result.outcome_tier),
+        is_critical_success=skill_check_result.is_critical_success,
+        is_critical_failure=skill_check_result.is_critical_failure,
+    )
 
 
 def _save_turn_immediately(

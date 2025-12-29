@@ -307,6 +307,8 @@ class GMNode:
         # Dynamic system prompt and grounding manifest (set in run())
         self._current_system_prompt: str = ""
         self._current_manifest: GroundingManifest | None = None
+        self._current_player_input: str = ""  # For retry context
+        self._current_turn_number: int = 0  # For retry context
 
         # Grounding validation settings
         self.grounding_enabled: bool = True
@@ -545,6 +547,10 @@ class GMNode:
         # Detect explicit OOC prefix
         is_explicit_ooc, cleaned_input = self._detect_explicit_ooc(player_input)
 
+        # Store for retry context (used in grounding retry)
+        self._current_player_input = cleaned_input
+        self._current_turn_number = turn_number
+
         # Check for pre-generated scene FIRST (before expensive context building)
         # Only check if not explicit OOC (OOC responses don't need scene data)
         if not is_explicit_ooc:
@@ -723,9 +729,15 @@ class GMNode:
                         if isinstance(tool_result, dict) and tool_result.get("success"):
                             tool_context += f"- {tool_name}: {tool_result.get('message', 'success')}\n"
 
+                # Include player input explicitly to prevent responding to wrong turn
+                player_context = f"\n\nIMPORTANT: This is Turn {self._current_turn_number}.\n"
+                player_context += f"The player said: \"{self._current_player_input}\"\n"
+                player_context += "Your response MUST address THIS input, not any previous turn.\n"
+
                 messages.append(Message.user(
                     f"GROUNDING ERROR - Please fix your narrative and respond again.\n\n"
                     f"{error_feedback}\n\n"
+                    f"{player_context}"
                     f"{tool_context}"
                     "Write ONLY the corrected narrative text - do NOT call any tools. "
                     "Narrate the RESULTS of the player's action, not just the scene."
@@ -796,7 +808,7 @@ class GMNode:
             f"{response.content[:100]}..."
         )
 
-        # Retry with explicit correction
+        # Retry with explicit correction, including player input to prevent wrong-turn response
         messages.append(Message.user(
             "CHARACTER ERROR - You broke character and responded as an AI assistant.\n\n"
             "CRITICAL RULES:\n"
@@ -808,7 +820,9 @@ class GMNode:
             "- NEVER explain errors, debug tools, or provide technical commentary\n"
             "- If a tool fails, handle it gracefully IN THE STORY\n"
             "- Write immersive second-person narrative prose: 'You see...', 'You notice...'\n\n"
-            "Now write the proper GM narrative response to the player's input. "
+            f"REMINDER: This is Turn {self._current_turn_number}.\n"
+            f"The player said: \"{self._current_player_input}\"\n\n"
+            "Now write the proper GM narrative response to THIS input. "
             "Stay in character as the invisible narrator describing the game world."
         ))
 

@@ -125,6 +125,24 @@ class Settings(BaseSettings):
     use_minimal_context: bool | None = None
 
     # ==========================================================================
+    # Quantum Branching Pipeline Settings
+    # ==========================================================================
+    # Enable quantum anticipation (pre-generates action outcome branches)
+    quantum_anticipation_enabled: bool = False  # Disabled by default until stable
+
+    # Number of top actions to pre-generate per cycle
+    quantum_max_actions_per_cycle: int = 5
+
+    # Number of GM decisions to pre-generate per action
+    quantum_max_gm_decisions: int = 2
+
+    # Delay between anticipation cycles (seconds)
+    quantum_cycle_delay: float = 0.5
+
+    # Minimum confidence score to use a cached branch (0.0 - 1.0)
+    quantum_min_match_confidence: float = 0.7
+
+    # ==========================================================================
     # Parsed Configuration Properties
     # ==========================================================================
 

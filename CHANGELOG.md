@@ -8,7 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **World Server Anticipation System** - Pre-generate scenes while player reads to hide LLM latency
+- **Quantum Branching Pipeline** - Unified pipeline that pre-generates action outcome branches for instant responses
+  - **ActionPredictor** - Predicts likely player actions from scene context (NPCs, items, exits) (`src/world_server/quantum/action_predictor.py`)
+  - **ActionMatcher** - Fuzzy matches player input to cached predictions with configurable confidence threshold (`src/world_server/quantum/action_matcher.py`)
+  - **GMDecisionOracle** - Predicts GM twist decisions with grounding facts (`src/world_server/quantum/gm_oracle.py`)
+  - **BranchGenerator** - Generates narrative variants (success/failure/critical) with state deltas (`src/world_server/quantum/branch_generator.py`)
+  - **QuantumBranchCache** - LRU cache with TTL for pre-generated branches (`src/world_server/quantum/cache.py`)
+  - **BranchCollapseManager** - Rolls dice at runtime and applies selected variant atomically (`src/world_server/quantum/collapse.py`)
+  - **QuantumPipeline** - Main entry point replacing LangGraph streaming (`src/world_server/quantum/pipeline.py`)
+  - **Validation Layer** - NarrativeConsistencyValidator, DeltaValidator, BranchValidator (`src/world_server/quantum/validation.py`)
+  - **CLI Integration** - Quantum is now default pipeline with `--anticipation` flag for background pre-generation
+  - **Configuration** - `quantum_anticipation_enabled`, `quantum_max_actions_per_cycle`, `quantum_min_match_confidence` in `src/config.py`
+  - **Documentation** - Full documentation in `docs/quantum-branching/` (README, architecture, action-prediction, branch-generation, collapse-mechanism, caching-strategy, migration-guide)
+  - 259 tests covering all quantum components
+
+- **World Server Anticipation System** - Pre-generate scenes while player reads to hide LLM latency (superseded by Quantum Branching)
   - `WorldServerManager` integration layer for CLI (`src/world_server/integration.py`)
   - `LocationPredictor` predicts likely next locations (adjacent, quest targets, mentioned) (`src/world_server/predictor.py`)
   - `PreGenerationCache` async LRU cache for pre-generated scenes (`src/world_server/cache.py`)
