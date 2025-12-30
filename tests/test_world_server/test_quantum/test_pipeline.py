@@ -161,10 +161,14 @@ class TestAnticipationConfig:
     """Tests for AnticipationConfig dataclass."""
 
     def test_default_config(self):
-        """Test default configuration."""
+        """Test default configuration.
+
+        Note: Anticipation is disabled by default due to the topic-awareness problem.
+        See docs/quantum-branching/anticipation-caching-issue.md
+        """
         config = AnticipationConfig()
 
-        assert config.enabled is True
+        assert config.enabled is False  # Disabled pending topic-aware caching solution
         assert config.max_actions_per_cycle == 5
         assert config.max_gm_decisions_per_action == 2
         assert config.cycle_delay_seconds == 0.5
@@ -476,12 +480,15 @@ class TestBackgroundAnticipation:
     async def test_start_anticipation(
         self, mock_db, mock_game_session, mock_llm_provider
     ):
-        """Test starting anticipation."""
+        """Test starting anticipation when explicitly enabled."""
         with patch("src.world_server.quantum.pipeline.GMContextBuilder"):
+            # Must explicitly enable anticipation (disabled by default)
+            config = AnticipationConfig(enabled=True)
             pipeline = QuantumPipeline(
                 db=mock_db,
                 game_session=mock_game_session,
                 llm_provider=mock_llm_provider,
+                anticipation_config=config,
             )
 
             await pipeline.start_anticipation()
@@ -499,10 +506,13 @@ class TestBackgroundAnticipation:
     ):
         """Test stopping anticipation."""
         with patch("src.world_server.quantum.pipeline.GMContextBuilder"):
+            # Must explicitly enable anticipation (disabled by default)
+            config = AnticipationConfig(enabled=True)
             pipeline = QuantumPipeline(
                 db=mock_db,
                 game_session=mock_game_session,
                 llm_provider=mock_llm_provider,
+                anticipation_config=config,
             )
 
             await pipeline.start_anticipation()

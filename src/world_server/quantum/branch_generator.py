@@ -78,6 +78,7 @@ class BranchContext:
     game_time: str  # e.g., "14:30"
     game_day: int
     recent_events: list[str]  # Recent narrative summaries
+    player_input: str | None = None  # Actual player input for topic-awareness
 
 
 class BranchGenerator:
@@ -224,14 +225,17 @@ Your task is to generate multiple outcome variants for a player action. Each var
 For skill checks, generate both success and failure variants. The dice roll happens at runtime.
 
 State deltas should capture meaningful changes. Each delta type has required fields:
-- create_entity: {entity_key, display_name, entity_type, location_key?, description?}
-- update_entity: {location_key?, activity?, mood?, description?}
+- create_entity: {entity_key, display_name, entity_type, description?}
+- update_entity: {activity?, mood?, description?}
 - transfer_item: {item_key, from?, to?} - at least one of from/to required
 - record_fact: {subject_key, predicate, value, category?, is_secret?} - predicate and value are REQUIRED
+  Valid categories: personal, secret, preference, skill, history, relationship, location, world
 - advance_time: {minutes}
 
 Example record_fact for learning NPC information:
-{"delta_type": "record_fact", "target_key": "innkeeper_tom", "changes": {"subject_key": "innkeeper_tom", "predicate": "occupation", "value": "runs the tavern for 20 years"}}
+{"delta_type": "record_fact", "target_key": "innkeeper_tom", "changes": {"subject_key": "innkeeper_tom", "predicate": "occupation", "value": "runs the tavern for 20 years", "category": "personal"}}
+
+IMPORTANT: Use actual entity keys from the scene manifest, NOT generic terms like "player" or "npc".
 
 CRITICAL: All entity references MUST use [key:text] format. Never mention an entity without this format."""
 
@@ -269,13 +273,18 @@ Grounding Facts: {', '.join(gm_decision.grounding_facts) if gm_decision.groundin
 
 The twist should naturally emerge from the grounding facts. Do not force it - let it flow from the narrative."""
 
+        # Include player input for topic-awareness in NPC interactions
+        player_input_context = ""
+        if context.player_input:
+            player_input_context = f'\nPLAYER INPUT: "{context.player_input}"'
+
         prompt = f"""Generate narrative variants for this player action.
 
 SCENE: {context.location_display}
 TIME: Day {context.game_day}, {context.game_time}
 {entities_list}
 
-PLAYER ACTION: {action_desc}
+PLAYER ACTION: {action_desc}{player_input_context}
 {twist_context}
 
 Generate outcome variants as JSON. Include:

@@ -249,8 +249,8 @@ class ActionMatcher:
         # Remove punctuation except apostrophes
         text = re.sub(r"[^\w\s']", " ", text)
 
-        # Collapse whitespace
-        text = re.sub(r"\s+", " ", text)
+        # Collapse whitespace and strip trailing
+        text = re.sub(r"\s+", " ", text).strip()
 
         return text
 

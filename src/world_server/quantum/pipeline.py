@@ -103,9 +103,14 @@ class TurnResult:
 
 @dataclass
 class AnticipationConfig:
-    """Configuration for background anticipation."""
+    """Configuration for background anticipation.
 
-    enabled: bool = True
+    Note: Anticipation is disabled by default due to the topic-awareness problem.
+    Pre-generated branches can't know what the player wants to discuss with NPCs.
+    See docs/quantum-branching/anticipation-caching-issue.md for details.
+    """
+
+    enabled: bool = False
     max_actions_per_cycle: int = 5  # Top N actions to pre-generate
     max_gm_decisions_per_action: int = 2  # Top N GM decisions per action
     cycle_delay_seconds: float = 0.5  # Delay between anticipation cycles
@@ -339,12 +344,12 @@ class QuantumPipeline:
             location_key=location_key,
         )
 
-    def _get_player_id(self) -> int:
-        """Get player entity ID from session."""
+    def _get_player_entity(self):
+        """Get player entity from session."""
         from src.database.models.entities import Entity
         from src.database.models.enums import EntityType
 
-        player = (
+        return (
             self.db.query(Entity)
             .filter(
                 Entity.session_id == self.game_session.id,
@@ -352,6 +357,10 @@ class QuantumPipeline:
             )
             .first()
         )
+
+    def _get_player_id(self) -> int:
+        """Get player entity ID from session."""
+        player = self._get_player_entity()
         return player.id if player else 0
 
     def _select_gm_decision(self, decisions: list[GMDecision]) -> GMDecision:
@@ -444,8 +453,8 @@ class QuantumPipeline:
         gm_decisions = self.gm_oracle.predict_decisions(action, manifest)
         selected_decision = self._select_gm_decision(gm_decisions)
 
-        # Build generation context
-        context = self._build_branch_context(location_key)
+        # Build generation context with player input for topic-awareness
+        context = self._build_branch_context(location_key, player_input=player_input)
 
         # Generate branch
         try:
@@ -498,11 +507,14 @@ class QuantumPipeline:
                 used_fallback=True,
             )
 
-    def _build_branch_context(self, location_key: str) -> BranchContext:
+    def _build_branch_context(
+        self, location_key: str, player_input: str | None = None
+    ) -> BranchContext:
         """Build context for branch generation.
 
         Args:
             location_key: Current location
+            player_input: Optional player input for topic-awareness
 
         Returns:
             BranchContext with scene info
@@ -540,13 +552,18 @@ class QuantumPipeline:
         )
         recent_events = [t.gm_response[:100] for t in recent_turns if t.gm_response]
 
+        # Get actual player entity key (not hardcoded "player")
+        player = self._get_player_entity()
+        player_key = player.entity_key if player else "player"
+
         return BranchContext(
             location_key=location_key,
             location_display=location_display,
-            player_key="player",
+            player_key=player_key,
             game_time=game_time,
             game_day=game_day,
             recent_events=recent_events,
+            player_input=player_input,
         )
 
     # =========================================================================

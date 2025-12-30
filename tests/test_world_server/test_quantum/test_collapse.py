@@ -777,12 +777,13 @@ class TestEdgeCases:
                 apply_deltas=False,
             )
 
-            mock_check.assert_called_once_with(
-                dc=15,
-                attribute_modifier=3,
-                skill_modifier=5,
-                advantage_type=AdvantageType.ADVANTAGE,
-            )
+            # Verify core parameters; skill_name/attribute_key may vary
+            mock_check.assert_called_once()
+            call_kwargs = mock_check.call_args.kwargs
+            assert call_kwargs["dc"] == 15
+            assert call_kwargs["attribute_modifier"] == 3
+            assert call_kwargs["skill_modifier"] == 5
+            assert call_kwargs["advantage_type"] == AdvantageType.ADVANTAGE
 
 
 class TestGetEntityId:

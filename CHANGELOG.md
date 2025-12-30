@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Quantum Pipeline Delta Validation** - Fix LLM-generated deltas with invalid values
+  - Fixed hardcoded `player_key="player"` → now uses actual entity key (`src/world_server/quantum/pipeline.py`)
+  - Removed invalid `location_key` field from CREATE_ENTITY (not in Entity model) (`src/world_server/quantum/collapse.py`)
+  - Added FactCategory validation for RECORD_FACT - invalid categories fall back to "personal" with warning
+  - Updated system prompt with valid enum values and entity key guidance (`src/world_server/quantum/branch_generator.py`)
+  - Documented anticipation/caching topic-awareness problem (`docs/quantum-branching/anticipation-caching-issue.md`)
+
+- **GM Ignores Player Input Specifics** - Fix NPC conversations ignoring conversation topics
+  - Added `player_input` field to `BranchContext` for topic-awareness (`src/world_server/quantum/branch_generator.py`)
+  - Pass `player_input` to branch generation so LLM knows what player asked about
+  - Disabled anticipation by default (pre-generation conflicts with topic-awareness)
+
+- **Test Fixes** - Fixed 2 pre-existing quantum test failures
+  - Fixed `_normalize()` trailing space from punctuation replacement (`src/world_server/quantum/action_matcher.py`)
+  - Fixed `test_modifiers_passed_to_skill_check` mock to handle new optional parameters
+
+
 - **RECORD_FACT Delta Validation** - Fix null predicate/value causing database constraint violations
   - Updated branch generator prompt to specify required fields with example (`src/world_server/quantum/branch_generator.py`)
   - Added defensive validation in collapse to skip invalid deltas gracefully (`src/world_server/quantum/collapse.py`)

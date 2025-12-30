@@ -509,7 +509,7 @@ class BranchCollapseManager:
                 entity_key=changes.get("entity_key", delta.target_key),
                 display_name=changes.get("display_name", delta.target_key),
                 entity_type=changes.get("entity_type"),
-                location_key=changes.get("location_key"),
+                # Note: location_key is not a valid Entity field - removed
                 description=changes.get("description"),
             )
 
@@ -575,13 +575,26 @@ class BranchCollapseManager:
                 )
                 return
 
+            # Validate category - LLM sometimes invents invalid values like "quest"
+            valid_categories = {
+                "personal", "secret", "preference", "skill",
+                "history", "relationship", "location", "world"
+            }
+            raw_category = changes.get("category") or "personal"
+            if raw_category not in valid_categories:
+                logger.warning(
+                    f"Invalid fact category '{raw_category}' for {delta.target_key}, "
+                    f"using 'personal'"
+                )
+                raw_category = "personal"
+
             fact_manager = FactManager(self.db, self.game_session)
             fact_manager.record_fact(
                 subject_type=changes.get("subject_type", "entity"),
                 subject_key=changes.get("subject_key", delta.target_key),
                 predicate=predicate,
                 value=value,
-                category=changes.get("category") or "personal",  # Default to personal if None
+                category=raw_category,
                 is_secret=changes.get("is_secret", False),
             )
 
