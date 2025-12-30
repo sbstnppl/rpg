@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+- **Documentation Cleanup** - Aligned docs with codebase after quantum pipeline consolidation
+  - Updated `CLAUDE.md` project statistics: tests ~3,700 (was ~2,200), models 29, commands 6
+  - Fixed `docs/user-guide.md` to remove deprecated `--pipeline` flag and legacy pipeline descriptions
+  - Created `docs/issues/RESOLVED.md` summary index for 5 closed issues
+  - Archived deprecated proposals to `docs/archive/`: scene-first, world-server, structured-gm
+  - Removed 5 resolved issue directories (consolidated into RESOLVED.md)
+
 ### Changed
 - **Consolidated to Quantum-Only Pipeline** - Removed all legacy pipelines, unified on quantum branching
   - **Dual-Model Separation** - qwen3 for reasoning/logic, magmell for narrative prose

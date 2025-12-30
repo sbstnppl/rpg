@@ -69,45 +69,13 @@ LLM_PROVIDER=anthropic
 rpg game start
 ```
 
-### Pipeline Options
+### How It Works
 
-The game supports four pipelines, selectable via `--pipeline`:
-
-```bash
-# GM pipeline (default, recommended)
-rpg game start --pipeline gm
-rpg game play --pipeline gm
-
-# Scene-First pipeline (new architecture)
-rpg game start --pipeline scene-first
-rpg game play --pipeline scene-first
-
-# System-Authority pipeline
-rpg game start --pipeline system-authority
-rpg game play --pipeline system-authority
-
-# Legacy pipeline (LLM decides everything)
-rpg game start --pipeline legacy
-rpg game play --pipeline legacy
-```
-
-**GM Pipeline** (default):
-- Single LLM call with native tool use for mechanics
-- Rich context: full player state, location, NPCs, items in prompt
-- Tools: skill_check, attack_roll, damage_entity, create_entity
-
-**Scene-First Pipeline**:
-- Builds the world BEFORE narrating it
-- All entities exist in a scene manifest before narrator runs
-- Prevents orphaned entities and state/narrative drift
-
-**System-Authority Pipeline**:
-- System decides what happens mechanically, LLM describes it
-- Guaranteed consistency between narrative and game state
-
-**Legacy Pipeline**:
-- LLM decides what happens AND narrates it
-- More creative freedom, but may have state/narrative drift
+The game uses a **Quantum Branching Pipeline**:
+- Pre-generates outcome branches for likely player actions
+- Uses dual-model separation (reasoning + narration)
+- Rolls dice at runtime to determine which branch to use
+- Ensures narrative and game state stay synchronized
 
 The unified game wizard guides you through:
 1. **Setting Selection** - Choose fantasy, contemporary, or sci-fi

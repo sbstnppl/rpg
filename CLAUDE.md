@@ -94,11 +94,11 @@ An agentic console-based RPG using a quantum branching pipeline for turn process
 
 | Category | Count |
 |----------|-------|
-| **Test Functions** | ~2,200 across ~100 test files |
+| **Test Functions** | ~3,700 across ~140 test files |
 | **Manager Classes** | 53 specialized managers in `src/managers/` |
 | **Quantum Pipeline** | Single pipeline in `src/world_server/quantum/` |
-| **Database Models** | 28 model files in `src/database/models/` |
-| **CLI Commands** | 5 command modules in `src/cli/commands/` |
+| **Database Models** | 29 model files in `src/database/models/` |
+| **CLI Commands** | 6 command modules in `src/cli/commands/` |
 
 *Update these counts when adding significant new components.*
 
@@ -241,7 +241,7 @@ tests/
 
 ### Commands
 ```bash
-# Run all tests (3372 tests, ~2.5 minutes)
+# Run all tests (~3700 tests, ~2.5 minutes)
 pytest
 
 # Run specific test file
