@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from src.database.models.session import GameSession
 from src.dice.checks import make_skill_check
+from src.dice.skills import get_attribute_for_skill
 from src.managers.entity_manager import EntityManager
 from src.managers.fact_manager import FactManager
 from src.managers.item_manager import ItemManager
@@ -276,11 +277,16 @@ class BranchCollapseManager:
             return check_variant, None
 
         # ROLL DICE AT RUNTIME - this is the meaningful moment!
+        skill_name = check_variant.skill or "Skill"
+        attribute_key = get_attribute_for_skill(skill_name) if skill_name else ""
+
         skill_result = make_skill_check(
             dc=check_variant.dc,
             attribute_modifier=attribute_modifier,
             skill_modifier=skill_modifier,
             advantage_type=advantage_type,
+            skill_name=skill_name,
+            attribute_key=attribute_key,
         )
 
         # Select variant based on roll result

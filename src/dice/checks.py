@@ -246,6 +246,8 @@ def make_skill_check(
     attribute_modifier: int = 0,
     skill_modifier: int = 0,
     advantage_type: AdvantageType = AdvantageType.NORMAL,
+    skill_name: str = "",
+    attribute_key: str = "",
 ) -> SkillCheckResult:
     """Make a skill check against a Difficulty Class.
 
@@ -262,6 +264,8 @@ def make_skill_check(
         attribute_modifier: Modifier from relevant ability score.
         skill_modifier: Modifier from skill proficiency/expertise.
         advantage_type: Whether to roll with advantage/disadvantage.
+        skill_name: Name of the skill (e.g., "Persuasion") for display.
+        attribute_key: The attribute key (e.g., "charisma") for display.
 
     Returns:
         SkillCheckResult with roll details and success/failure.
@@ -289,6 +293,10 @@ def make_skill_check(
             advantage_type=advantage_type,
             outcome_tier=get_outcome_tier(margin, success=True),
             is_auto_success=True,
+            skill_name=skill_name,
+            skill_modifier=skill_modifier,
+            attribute_key=attribute_key,
+            attribute_modifier=attribute_modifier,
         )
 
     # Roll 2d10 (or 3d10 keep 2 with advantage/disadvantage)
@@ -317,6 +325,10 @@ def make_skill_check(
         advantage_type=advantage_type,
         outcome_tier=outcome_tier,
         is_auto_success=False,
+        skill_name=skill_name,
+        skill_modifier=skill_modifier,
+        attribute_key=attribute_key,
+        attribute_modifier=attribute_modifier,
     )
 
 

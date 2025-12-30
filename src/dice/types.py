@@ -144,6 +144,10 @@ class SkillCheckResult:
         advantage_type: Whether advantage/disadvantage was used.
         outcome_tier: Degree of success/failure based on margin.
         is_auto_success: True if DC <= 10 + modifier (no roll needed).
+        skill_name: Name of the skill being checked (e.g., "Persuasion").
+        skill_modifier: Player's modifier from skill proficiency.
+        attribute_key: The attribute used (e.g., "charisma").
+        attribute_modifier: Player's modifier from attribute.
     """
 
     roll_result: RollResult | None  # None if auto-success
@@ -155,6 +159,16 @@ class SkillCheckResult:
     advantage_type: AdvantageType
     outcome_tier: OutcomeTier = OutcomeTier.BARE_SUCCESS
     is_auto_success: bool = False
+    # Skill metadata (for display)
+    skill_name: str = ""
+    skill_modifier: int = 0
+    attribute_key: str = ""
+    attribute_modifier: int = 0
+
+    @property
+    def total_modifier(self) -> int:
+        """Total modifier (skill + attribute)."""
+        return self.skill_modifier + self.attribute_modifier
 
 
 @dataclass(frozen=True)

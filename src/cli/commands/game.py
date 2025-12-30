@@ -1370,7 +1370,7 @@ def _display_quantum_skill_check(skill_check_result) -> None:
     """Display skill check result from quantum pipeline.
 
     Args:
-        skill_check_result: SkillCheckResult from dice/checks.py
+        skill_check_result: SkillCheckResult from dice/types.py
     """
     from src.cli.display import (
         display_skill_check_prompt,
@@ -1379,15 +1379,22 @@ def _display_quantum_skill_check(skill_check_result) -> None:
         display_rolling_animation,
     )
 
+    # Extract values from SkillCheckResult (now includes skill metadata)
+    skill_name = skill_check_result.skill_name or "Skill"
+    skill_modifier = skill_check_result.skill_modifier
+    attribute_key = skill_check_result.attribute_key
+    attribute_modifier = skill_check_result.attribute_modifier
+    total_modifier = skill_check_result.total_modifier
+
     # Show pre-roll prompt
     display_skill_check_prompt(
-        description=f"{skill_check_result.skill_name} check",
-        skill_name=skill_check_result.skill_name,
+        description=f"{skill_name} check",
+        skill_name=skill_name,
         skill_tier="Practiced",  # Default tier for quantum
-        skill_modifier=skill_check_result.skill_modifier,
-        attribute_key=skill_check_result.attribute_key,
-        attribute_modifier=skill_check_result.attribute_modifier,
-        total_modifier=skill_check_result.total_modifier,
+        skill_modifier=skill_modifier,
+        attribute_key=attribute_key,
+        attribute_modifier=attribute_modifier,
+        total_modifier=total_modifier,
         difficulty_assessment="",
     )
 
@@ -1397,12 +1404,21 @@ def _display_quantum_skill_check(skill_check_result) -> None:
     # Show rolling animation
     display_rolling_animation()
 
+    # Extract dice results from RollResult
+    if skill_check_result.roll_result:
+        dice_rolls = list(skill_check_result.roll_result.individual_rolls)
+        total_roll = skill_check_result.roll_result.total
+    else:
+        # Auto-success case - no dice rolled
+        dice_rolls = []
+        total_roll = total_modifier + 11  # Average 2d10 roll
+
     # Show the result
     display_skill_check_result(
         success=skill_check_result.success,
-        dice_rolls=skill_check_result.dice_results,
-        total_modifier=skill_check_result.total_modifier,
-        total_roll=skill_check_result.total,
+        dice_rolls=dice_rolls,
+        total_modifier=total_modifier,
+        total_roll=total_roll,
         dc=skill_check_result.dc,
         margin=skill_check_result.margin,
         outcome_tier=skill_check_result.outcome_tier.value if hasattr(skill_check_result.outcome_tier, 'value') else str(skill_check_result.outcome_tier),

@@ -86,6 +86,20 @@ class TurnResult:
     error: str | None = None
     used_fallback: bool = False
 
+    @property
+    def skill_check_result(self):
+        """Convenience accessor for skill check result from collapse."""
+        if self.collapse_result:
+            return self.collapse_result.skill_check_result
+        return None
+
+    @property
+    def errors(self) -> list[str]:
+        """Convenience accessor for errors as a list (CLI compatibility)."""
+        if self.error:
+            return [self.error]
+        return []
+
 
 @dataclass
 class AnticipationConfig:
@@ -149,7 +163,8 @@ class QuantumPipeline:
         self.action_predictor = ActionPredictor(db, game_session)
         self.action_matcher = ActionMatcher()
         self.gm_oracle = GMDecisionOracle(db, game_session)
-        self.branch_generator = BranchGenerator(db, game_session, self._narrator_llm)
+        # BranchGenerator needs structured JSON output → use reasoning model
+        self.branch_generator = BranchGenerator(db, game_session, self._reasoning_llm)
         self.branch_cache = QuantumBranchCache(metrics=self._metrics)
         self.collapse_manager = BranchCollapseManager(db, game_session, self._metrics)
 
@@ -500,7 +515,7 @@ class QuantumPipeline:
         )
 
         game_time = time_state.current_time if time_state else "12:00"
-        game_day = time_state.day_number if time_state else 1
+        game_day = time_state.current_day if time_state else 1
 
         # Get location display name
         from src.database.models.world import Location

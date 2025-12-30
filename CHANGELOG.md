@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Quantum Pipeline Runtime Fixes** - Multiple bugs discovered during play-testing
+  - Fixed `TimeState.day_number` → `current_day` attribute error (`src/world_server/quantum/pipeline.py:515`)
+  - Fixed BranchGenerator using wrong LLM - now uses reasoning model for structured JSON, narrator only for prose (`pipeline.py:166`)
+  - Fixed dict-to-Pydantic parsing for OpenAI provider responses (`src/world_server/quantum/branch_generator.py:143`)
+  - Added missing `skill_check_result` and `errors` properties to `TurnResult` (`pipeline.py:89-101`)
+
+- **Skill Check Metadata Propagation** - Skill checks now display correct info in CLI
+  - Added `skill_name`, `attribute_key`, `skill_modifier`, `attribute_modifier` fields to `SkillCheckResult` (`src/dice/types.py`)
+  - Updated `make_skill_check()` to accept and store skill metadata (`src/dice/checks.py`)
+  - Integrated `get_attribute_for_skill()` mapping in collapse manager (`src/world_server/quantum/collapse.py`)
+  - Fixed CLI to use actual SkillCheckResult fields instead of workarounds (`src/cli/commands/game.py`)
+
 ### Documentation
 - **Documentation Cleanup** - Aligned docs with codebase after quantum pipeline consolidation
   - Updated `CLAUDE.md` project statistics: tests ~3,700 (was ~2,200), models 29, commands 6

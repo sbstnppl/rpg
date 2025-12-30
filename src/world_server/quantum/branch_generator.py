@@ -138,7 +138,11 @@ class BranchGenerator:
             )
 
             if response.parsed_content:
-                variants = self._parse_variants(response.parsed_content)
+                # parsed_content may be a dict or Pydantic model depending on provider
+                parsed = response.parsed_content
+                if isinstance(parsed, dict):
+                    parsed = BranchGenerationResponse.model_validate(parsed)
+                variants = self._parse_variants(parsed)
             else:
                 # Fallback: try to parse from raw content
                 variants = self._generate_fallback_variants(action, gm_decision)
