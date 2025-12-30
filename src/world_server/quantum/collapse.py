@@ -505,12 +505,13 @@ class BranchCollapseManager:
 
         if delta.delta_type == DeltaType.CREATE_ENTITY:
             entity_manager = EntityManager(self.db, self.game_session)
+            # Note: Entity model doesn't have 'description' field directly
+            # Use 'background' for NPC backstory or store in extension
             entity_manager.create_entity(
                 entity_key=changes.get("entity_key", delta.target_key),
                 display_name=changes.get("display_name", delta.target_key),
                 entity_type=changes.get("entity_type"),
-                # Note: location_key is not a valid Entity field - removed
-                description=changes.get("description"),
+                background=changes.get("description"),  # Map description to background
             )
 
         elif delta.delta_type == DeltaType.DELETE_ENTITY:

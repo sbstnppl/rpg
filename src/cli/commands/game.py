@@ -1761,7 +1761,12 @@ async def _single_turn(
     if turn_result.skill_check_result:
         check = turn_result.skill_check_result
         result_str = "✓ Success" if check.success else "✗ Failure"
-        display_info(f"[{check.skill_name} Check] DC {check.dc}: {check.total} → {result_str}")
+        if check.is_auto_success:
+            display_info(f"[{check.skill_name} Check] DC {check.dc}: Auto-success → {result_str}")
+        elif check.roll_result:
+            display_info(f"[{check.skill_name} Check] DC {check.dc}: {check.roll_result.total} → {result_str}")
+        else:
+            display_info(f"[{check.skill_name} Check] DC {check.dc}: → {result_str}")
 
     if turn_result.narrative:
         display_narrative(turn_result.narrative)
