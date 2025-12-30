@@ -470,23 +470,27 @@ Stakes: {arc.stakes or 'Unknown'}"""
         self.db.add(history)
 
         # Record new facts
+        from src.database.models.enums import FactCategory
+
         for fact_text in complication.new_facts:
             # Parse simple "Subject predicate value" format
             parts = fact_text.split(" ", 2)
             if len(parts) >= 3:
                 self.fact_manager.record_fact(
-                    subject=parts[0],
+                    subject_type="complication",
+                    subject_key=parts[0],
                     predicate=parts[1],
                     value=parts[2],
-                    category="complication",
+                    category=FactCategory.WORLD,
                 )
             else:
                 # Record as a simple observation
                 self.fact_manager.record_fact(
-                    subject="world",
+                    subject_type="complication",
+                    subject_key="world",
                     predicate="observed",
                     value=fact_text,
-                    category="complication",
+                    category=FactCategory.WORLD,
                 )
 
         self.db.flush()

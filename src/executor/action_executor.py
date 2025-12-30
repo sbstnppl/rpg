@@ -796,15 +796,15 @@ class ActionExecutor:
 
         # Get actor's attack bonus from STR attribute
         attack_bonus = 0
-        str_attr = self.entity_manager.get_attribute(actor.id, "strength")
-        if str_attr:
-            attack_bonus = (str_attr.value - 10) // 2
+        str_value = self.entity_manager.get_attribute(actor.id, "strength")
+        if str_value:
+            attack_bonus = (str_value - 10) // 2
 
         # Get target AC (base 10 + DEX modifier)
         target_ac = 10
-        dex_attr = self.entity_manager.get_attribute(target.id, "dexterity")
-        if dex_attr:
-            target_ac = 10 + (dex_attr.value - 10) // 2
+        dex_value = self.entity_manager.get_attribute(target.id, "dexterity")
+        if dex_value:
+            target_ac = 10 + (dex_value - 10) // 2
 
         attack_result = make_attack_roll(
             target_ac=target_ac,

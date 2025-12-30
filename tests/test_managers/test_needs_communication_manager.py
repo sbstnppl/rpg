@@ -45,11 +45,11 @@ class TestGetStateLabel:
         assert label == "normal"
         assert is_negative is False
 
-    def test_energy_exhausted_state(self, db_session, game_session):
-        """Test energy value below threshold returns exhausted."""
+    def test_stamina_exhausted_state(self, db_session, game_session):
+        """Test stamina value below threshold returns physically exhausted."""
         manager = NeedsCommunicationManager(db_session, game_session)
-        label, is_negative = manager.get_state_label("energy", 15)
-        assert label == "exhausted"
+        label, is_negative = manager.get_state_label("stamina", 15)
+        assert label == "physically exhausted"
         assert is_negative is True
 
     def test_unknown_need_returns_normal(self, db_session, game_session):
@@ -314,7 +314,7 @@ class TestGetNeedsAlerts:
         # Should have state_change alerts for both negative needs
         alert_types = {a.need_name: a.alert_type for a in alerts if a.alert_type == "state_change"}
         assert "hunger" in alert_types
-        assert "energy" in alert_types
+        assert "stamina" in alert_types
 
 
 class TestFormatAlertsForGm:

@@ -265,7 +265,7 @@ class TestSubturnProcessor:
 
         validator = MagicMock()
 
-        def mock_validate(action, actor):
+        def mock_validate(action, actor, actor_location=None):
             # Default to valid
             return ValidationResult(action=action, valid=True, risk_tags=[])
 
@@ -354,7 +354,7 @@ class TestSubturnProcessor:
         # First action fails, second succeeds
         call_count = [0]
 
-        def mixed_validate(action, actor):
+        def mixed_validate(action, actor, actor_location=None):
             call_count[0] += 1
             if call_count[0] == 1:
                 return ValidationResult(action=action, valid=False, reason="No target")

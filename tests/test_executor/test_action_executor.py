@@ -91,12 +91,15 @@ class TestDropExecution:
         self, db_session: Session, game_session: GameSession
     ):
         """Verify DROP removes item from actor's inventory."""
+        from tests.factories import create_npc_extension
+
         location = create_location(db_session, game_session, location_key="tavern")
         entity = create_entity(
             db_session, game_session,
             entity_key="player",
-            current_location="tavern"
         )
+        # Set entity's location via NPCExtension
+        create_npc_extension(db_session, entity, current_location="tavern")
         item = create_item(
             db_session, game_session,
             item_key="sword",
@@ -285,7 +288,7 @@ class TestSleepExecution:
     async def test_sleep_restores_energy(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify SLEEP restores energy via NeedsManager."""
+        """Verify SLEEP restores stamina via NeedsManager."""
         entity = create_entity(db_session, game_session)
         time_state = create_time_state(
             db_session, game_session,
@@ -293,7 +296,8 @@ class TestSleepExecution:
         )
         needs = create_character_needs(
             db_session, game_session, entity,
-            stamina=30  # Low energy
+            stamina=30,  # Low stamina
+            sleep_pressure=50,  # High enough to sleep (requires >= 30)
         )
 
         executor = ActionExecutor(db_session, game_session)
@@ -303,11 +307,11 @@ class TestSleepExecution:
         result = await executor._execute_sleep(validation, entity)
 
         assert result.success is True
-        assert "refreshed" in result.outcome.lower()
+        assert "refreshed" in result.outcome.lower() or "rested" in result.outcome.lower()
 
-        # Verify energy was restored
+        # Verify stamina was restored (sleep sets to 100)
         db_session.refresh(needs)
-        assert needs.energy > 30  # Energy should have increased
+        assert needs.stamina == 100
 
 
 class TestConsumeExecution:

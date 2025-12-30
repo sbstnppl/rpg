@@ -27,7 +27,9 @@ def play(
 
     This is a shortcut for 'rpg game play'.
     """
-    game.play(session_id=session_id)
+    # Pass explicit defaults since Typer Option objects aren't resolved
+    # when calling function directly (not via CLI)
+    game.play(session_id=session_id, roll_mode="auto", anticipation=None)
 
 
 @app.callback()

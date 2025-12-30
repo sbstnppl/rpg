@@ -605,7 +605,7 @@ class TestNarratorManifest:
         )
         guide = manifest.get_reference_guide()
         assert "Entities You May Reference" in guide
-        assert "[key]" in guide
+        assert "[key:displayed_text]" in guide  # New format with display text
 
     def test_get_reference_guide_with_entities(self) -> None:
         """Test reference guide with entities."""
@@ -640,12 +640,12 @@ class TestNarratorManifest:
         )
         guide = manifest.get_reference_guide()
         assert "**NPCs:**" in guide
-        assert "[marcus_001]" in guide
+        assert "[marcus_001:Marcus]" in guide  # Format: [key:display_name]
         assert "(he/him)" in guide
         assert "**Furniture:**" in guide
-        assert "[bed_001]" in guide
+        assert "[bed_001:a wooden bed]" in guide
         assert "**Items:**" in guide
-        assert "[book_001]" in guide
+        assert "[book_001:a journal]" in guide
 
 
 class TestNarrationContext:

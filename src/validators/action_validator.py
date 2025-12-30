@@ -297,6 +297,14 @@ class ActionValidator:
             # Check for deferred items (mentioned in narrative but not spawned)
             deferred = self._find_deferred_item(target_lower, location_key)
             if deferred:
+                # For TAKE, verify the deferred item is at the current location
+                item_location = deferred.get("location")
+                if item_location and item_location != location_key:
+                    return ValidationResult(
+                        action=action,
+                        valid=False,
+                        reason=f"There's no '{action.target}' here to take.",
+                    )
                 # Valid - will be spawned on-demand during execution
                 return ValidationResult(
                     action=action,

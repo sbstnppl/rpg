@@ -793,7 +793,7 @@ class TestBuildNarratorManifest:
         guide = manifest.get_reference_guide()
 
         assert "## Entities You May Reference" in guide
-        assert "[bartender_001]" in guide
+        assert "[bartender_001:Tom]" in guide  # Format: [key:display_name]
         assert "NPCs:" in guide or "**NPCs:**" in guide
         assert "Furniture:" in guide or "**Furniture:**" in guide
 

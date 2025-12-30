@@ -842,13 +842,18 @@ class TestNeedsDescription:
         assert "well-fed" in result
 
     def test_includes_positive_state_well_rested(self, db_session, game_session, player_entity):
-        """When energy is high, should report 'well-rested'."""
+        """When sleep_pressure is low, should report 'well-rested'.
+
+        Note: 'well-rested' comes from low sleep_pressure, not high stamina.
+        stamina = physical energy, sleep_pressure = how sleepy you are.
+        """
         from tests.factories import create_character_needs
 
         create_character_needs(
             db_session, game_session, player_entity,
             hunger=50,
-            stamina=85,  # High energy = well-rested
+            stamina=50,
+            sleep_pressure=10,  # Low sleep pressure = well-rested
             hygiene=50,
             morale=50,
         )
@@ -943,6 +948,7 @@ class TestNeedsDescription:
             db_session, game_session, player_entity,
             hunger=90,
             stamina=85,
+            sleep_pressure=10,  # Low sleep pressure = well-rested
             hygiene=85,
             morale=85,
             comfort=85,

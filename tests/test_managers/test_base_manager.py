@@ -79,9 +79,14 @@ class TestBaseManager:
     def test_clamp_float_conversion(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify _clamp converts float to int."""
+        """Verify _clamp converts float to int using rounding.
+
+        Uses round() not int() to avoid truncation errors from
+        floating-point arithmetic (e.g., 99.9 → 100 instead of 99).
+        """
         manager = BaseManager(db_session, game_session)
 
-        assert manager._clamp(50.7) == 50
-        assert manager._clamp(50.2) == 50
+        assert manager._clamp(50.7) == 51  # Rounds up
+        assert manager._clamp(50.2) == 50  # Rounds down
+        assert manager._clamp(50.5) == 50  # Banker's rounding (even)
         assert isinstance(manager._clamp(50.5), int)

@@ -7,7 +7,7 @@ from src.database.models.enums import EntityType, ItemType
 from src.database.models.session import GameSession
 from src.parser.action_types import Action, ActionType
 from src.validators.action_validator import ActionValidator, ValidationResult
-from tests.factories import create_entity, create_item, create_location
+from tests.factories import create_entity, create_item, create_location, create_npc_extension
 
 
 class TestActionValidatorBasics:
@@ -51,22 +51,32 @@ class TestTakeValidation:
         self, db_session: Session, game_session: GameSession
     ):
         """Verify TAKE succeeds when item is in same location as actor."""
+        from src.database.models.enums import StorageLocationType
+        from tests.factories import create_storage_location
+
         location = create_location(db_session, game_session, location_key="tavern")
         entity = create_entity(
             db_session, game_session,
             entity_key="player",
-            current_location="tavern"
+        )
+        # Create storage at the location
+        storage = create_storage_location(
+            db_session, game_session,
+            location_key="tavern_floor",
+            location_type=StorageLocationType.PLACE,
+            world_location_id=location.id,
         )
         item = create_item(
             db_session, game_session,
             item_key="gold_coin",
-            display_name="Gold Coin"
+            display_name="Gold Coin",
+            storage_location_id=storage.id,  # Item is at the tavern storage
         )
 
         validator = ActionValidator(db_session, game_session)
         action = Action(type=ActionType.TAKE, target="gold_coin")
 
-        result = validator.validate(action, entity)
+        result = validator.validate(action, entity, actor_location="tavern")
 
         assert result.valid is True
         assert result.resolved_target == "gold_coin"
@@ -221,6 +231,7 @@ class TestAskTellValidation:
             entity_key="bartender",
             entity_type=EntityType.NPC
         )
+        create_npc_extension(db_session, npc, current_location="tavern")
 
         validator = ActionValidator(db_session, game_session)
         action = Action(
@@ -229,7 +240,7 @@ class TestAskTellValidation:
             indirect_target="rumors"
         )
 
-        result = validator.validate(action, entity)
+        result = validator.validate(action, entity, actor_location="tavern")
 
         assert result.valid is True
 
@@ -262,6 +273,7 @@ class TestAskTellValidation:
             entity_key="guard",
             entity_type=EntityType.NPC
         )
+        create_npc_extension(db_session, npc, current_location="tavern")
 
         validator = ActionValidator(db_session, game_session)
         action = Action(
@@ -270,7 +282,7 @@ class TestAskTellValidation:
             indirect_target="about the dragon"
         )
 
-        result = validator.validate(action, entity)
+        result = validator.validate(action, entity, actor_location="tavern")
 
         assert result.valid is True
 
@@ -288,21 +300,24 @@ class TestCombatValidation:
             entity_key="goblin",
             entity_type=EntityType.MONSTER
         )
+        # Monsters need NPCExtension for location tracking
+        create_npc_extension(db_session, enemy, current_location="dungeon")
 
         validator = ActionValidator(db_session, game_session)
         action = Action(type=ActionType.ATTACK, target="goblin")
 
-        result = validator.validate(action, entity)
+        result = validator.validate(action, entity, actor_location="dungeon")
 
         assert result.valid is True
 
     def test_defend_always_valid(
         self, db_session: Session, game_session: GameSession
     ):
-        """Verify DEFEND is always valid."""
+        """Verify DEFEND is valid during combat."""
         entity = create_entity(db_session, game_session)
 
-        validator = ActionValidator(db_session, game_session)
+        # DEFEND requires combat_active=True
+        validator = ActionValidator(db_session, game_session, combat_active=True)
         action = Action(type=ActionType.DEFEND, target=None)
 
         result = validator.validate(action, entity)

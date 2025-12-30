@@ -43,10 +43,10 @@ class TestGetProvider:
         with patch("src.llm.factory.settings") as mock_settings:
             mock_settings.llm_provider = "ollama"
             mock_settings.ollama_base_url = "http://localhost:11434"
-            mock_settings.ollama_model = "llama3"
+            mock_settings.reasoning_config.model = "llama3"
             mock_settings.log_llm_calls = False
 
-            provider = get_provider("ollama")
+            provider = get_provider("ollama", model="llama3")
             assert isinstance(provider, OllamaProvider)
             assert provider.provider_name == "ollama"
             assert provider.default_model == "llama3"
@@ -115,11 +115,15 @@ class TestConvenienceFunctions:
     """Tests for convenience factory functions."""
 
     def test_get_gm_provider(self):
-        """Test getting GM provider."""
+        """Test getting GM provider (uses reasoning provider)."""
         with patch("src.llm.factory.settings") as mock_settings:
-            mock_settings.llm_provider = "anthropic"
+            from src.config import ProviderConfig
+
+            mock_settings.reasoning_config = ProviderConfig(
+                provider="anthropic", model="claude-sonnet-4-20250514"
+            )
+            mock_settings.reasoning_base_url = None
             mock_settings.anthropic_api_key = "test-key"
-            mock_settings.gm_model = "claude-sonnet-4-20250514"
             mock_settings.log_llm_calls = False
 
             provider = get_gm_provider()
@@ -128,9 +132,13 @@ class TestConvenienceFunctions:
     def test_get_cheap_provider(self):
         """Test getting cheap provider."""
         with patch("src.llm.factory.settings") as mock_settings:
-            mock_settings.llm_provider = "anthropic"
+            from src.config import ProviderConfig
+
+            mock_settings.cheap_config = ProviderConfig(
+                provider="anthropic", model="claude-haiku-3"
+            )
+            mock_settings.cheap_base_url = None
             mock_settings.anthropic_api_key = "test-key"
-            mock_settings.cheap_model = "claude-haiku-3"
             mock_settings.log_llm_calls = False
 
             provider = get_cheap_provider()

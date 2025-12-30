@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **CLI Play Shortcut** - Fix `rpg play` shortcut not passing required parameters
+  - Pass explicit defaults for `roll_mode` and `anticipation` (`src/cli/main.py`)
+
+- **Action Executor Attribute Access** - Fix combat using attribute object instead of value
+  - `get_attribute()` returns int value, not Attribute model (`src/executor/action_executor.py`)
+
+- **Complication Oracle Fact Recording** - Fix `record_fact()` API mismatch
+  - Updated to use `subject_type`, `subject_key`, `category=FactCategory` parameters (`src/oracle/complication_oracle.py`)
+
+- **Action Validator Deferred Item Location** - Prevent taking items from other locations
+  - Added location check for deferred items in TAKE validation (`src/validators/action_validator.py`)
+
+- **Test Suite Updates** - Fixed tests for recent API changes
+  - Sleep test: verify stamina restoration + require sleep_pressure threshold
+  - Validator mocks: added `actor_location` parameter
+  - Context compiler: `well-rested` comes from low `sleep_pressure`, not high stamina
+  - Base manager: verify `_clamp()` uses rounding not truncation
+  - LLM factory: updated to use `ProviderConfig` pattern
+  - NarratorManifest: updated expected format `[key:display_name]`
+
+
 - **Quantum Pipeline Delta Validation** - Fix LLM-generated deltas with invalid values
   - Fixed hardcoded `player_key="player"` → now uses actual entity key (`src/world_server/quantum/pipeline.py`)
   - Removed invalid `location_key` field from CREATE_ENTITY (not in Entity model) (`src/world_server/quantum/collapse.py`)
