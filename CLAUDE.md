@@ -354,12 +354,14 @@ The user is a native German speaker learning American English (SoCal dialect, in
 
 **After every response**, review the user's input text for naturalness:
 
-1. **Assess as real conversation**: Compare to how people actually talk in professional settings - coworkers in an office, freelancers collaborating, etc. NOT adjusted for CLI/chat brevity.
-2. **Always give feedback**: If natural, add "✓ English sounds natural". If issues found, list them.
-3. **Be specific**: Quote the exact phrase that sounds off
-4. **Provide the natural alternative**: How a SoCal native would actually say it
-5. **Include slang when appropriate**: Casual speech, contractions, common expressions
-6. **Placement**: Always at the END of your response, after completing the main task
+1. **Be strict, not lenient**: Don't say "sounds natural" just because it's grammatically passable. If a native wouldn't phrase it that way, flag it.
+2. **Catch "formal but correct"**: German speakers often write grammatically correct but overly formal English. This still needs feedback.
+3. **Assess as real conversation**: Compare to how LA tech workers actually talk - casual, direct, lots of contractions.
+4. **Always give feedback**: If natural, add "✓ English sounds natural". If issues found, list them.
+5. **Be specific**: Quote the exact phrase that sounds off
+6. **Provide the natural alternative**: How a SoCal native would actually say it
+7. **Include slang when appropriate**: Casual speech, contractions, common expressions
+8. **Placement**: Always at the END of your response, after completing the main task
 
 **Format**:
 ```
@@ -376,9 +378,24 @@ Or if everything is natural:
 ✓ English sounds natural
 ```
 
+### Common German→English Patterns to Catch
+
+| Pattern | Example | Issue |
+|---------|---------|-------|
+| **Formal question openers** | "What would you suggest regarding X" | Too formal → "What do you think about X" / "So should we X" |
+| **Parallel structure errors** | "Should we do X or waiting" | Must match: "do X or wait" |
+| **Wordy infinitive clauses** | "for the model to be running" | Simplify → "till the model's up" / "till it's running" |
+| **"Regarding/concerning"** | "regarding testing" | Formal → "about testing" or drop it |
+| **Missing contractions** | "do not", "it is", "we will" | Natives contract almost always in casual speech |
+| **Overly complete sentences** | Full subject-verb when context is clear | Natives drop words: "Wanna test now?" vs "Do you want to test now?" |
+
 ### Examples
 | You wrote | Native would say | Why |
 |-----------|------------------|-----|
+| "What would you suggest regarding testing" | "So what do you think - should we test" | Formal opener + "regarding" |
+| "Should we do a play-test session now or waiting" | "Should we play-test now or wait" | Parallel structure + simpler noun |
+| "for the new model to be running" | "till the new model's up" | Wordy infinitive clause |
 | "proceed implementing" | "go ahead and implement" | Need "with" after "proceed", or rephrase |
 | "Does this diminish the quality" | "Does this hurt the quality" | "diminish" is formal; "hurt" is everyday |
 | "Provide me feedback" | "Give me feedback" | "Provide" sounds formal; "give" is casual |
+| "I have a question" | "Quick question:" / just ask directly | Natives often skip the preamble |
