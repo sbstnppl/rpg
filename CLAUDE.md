@@ -154,6 +154,7 @@ rpg/
 
 - `docs/architecture.md` - System architecture (quantum pipeline)
 - `docs/implementation-plan.md` - Implementation checklist
+- `docs/llm-deployment.md` - **Model selection, vLLM config, optimization** (READ for LLM changes)
 - `.claude/docs/coding-standards.md` - Code style guide
 - `.claude/docs/agent-prompts.md` - LLM prompt templates
 - `.claude/docs/database-conventions.md` - DB patterns
