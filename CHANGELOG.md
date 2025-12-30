@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **RECORD_FACT Delta Validation** - Fix null predicate/value causing database constraint violations
+  - Updated branch generator prompt to specify required fields with example (`src/world_server/quantum/branch_generator.py`)
+  - Added defensive validation in collapse to skip invalid deltas gracefully (`src/world_server/quantum/collapse.py`)
+  - Added default category "personal" when LLM omits it
+  - Strengthened validation to check for None values, not just missing keys (`src/world_server/quantum/validation.py`)
+  - Added 3 tests for null field handling (`tests/test_world_server/test_quantum/test_collapse.py`)
+
+- **Turn History Persistence** - `game turn` command now saves turns to database
+  - Added `_save_turn_immediately()` call to persist turn history (`src/cli/commands/game.py:1773`)
+  - Fixes missing conversation context for action matching
+
 - **Quantum Pipeline Runtime Fixes** - Multiple bugs discovered during play-testing
   - Fixed `TimeState.day_number` → `current_day` attribute error (`src/world_server/quantum/pipeline.py:515`)
   - Fixed BranchGenerator using wrong LLM - now uses reasoning model for structured JSON, narrator only for prose (`pipeline.py:166`)

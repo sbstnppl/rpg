@@ -555,17 +555,19 @@ class DeltaValidator:
         issues = []
         changes = delta.changes
 
-        if "predicate" not in changes:
+        predicate = changes.get("predicate")
+        if not predicate:  # Catches both missing key and None/empty value
             issues.append(ValidationIssue(
                 category="delta",
-                message=f"{prefix}: RECORD_FACT missing predicate",
+                message=f"{prefix}: RECORD_FACT missing or empty predicate",
                 severity=IssueSeverity.ERROR,
             ))
 
-        if "value" not in changes:
+        value = changes.get("value")
+        if not value:  # Catches both missing key and None/empty value
             issues.append(ValidationIssue(
                 category="delta",
-                message=f"{prefix}: RECORD_FACT missing value",
+                message=f"{prefix}: RECORD_FACT missing or empty value",
                 severity=IssueSeverity.ERROR,
             ))
 

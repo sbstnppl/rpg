@@ -1037,6 +1037,74 @@ class TestApplySingleDelta:
             assert call_kwargs["value"] == "the treasure location"
 
     @pytest.mark.asyncio
+    async def test_apply_record_fact_skips_null_predicate(self, mock_db, mock_game_session):
+        """Test that RECORD_FACT with null predicate is skipped gracefully."""
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.RECORD_FACT,
+            target_key="npc_001",
+            changes={
+                "subject_type": "entity",
+                "subject_key": "npc_001",
+                "predicate": None,  # Invalid - null predicate
+                "value": "some value",
+            },
+        )
+
+        with patch("src.world_server.quantum.collapse.FactManager") as mock_fm:
+            # Should not raise, just skip
+            await manager._apply_single_delta(delta, turn_number=5)
+
+            # FactManager should not have been called
+            mock_fm.return_value.record_fact.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_apply_record_fact_skips_null_value(self, mock_db, mock_game_session):
+        """Test that RECORD_FACT with null value is skipped gracefully."""
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.RECORD_FACT,
+            target_key="npc_001",
+            changes={
+                "subject_type": "entity",
+                "subject_key": "npc_001",
+                "predicate": "knows_secret",
+                "value": None,  # Invalid - null value
+            },
+        )
+
+        with patch("src.world_server.quantum.collapse.FactManager") as mock_fm:
+            # Should not raise, just skip
+            await manager._apply_single_delta(delta, turn_number=5)
+
+            # FactManager should not have been called
+            mock_fm.return_value.record_fact.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_apply_record_fact_skips_missing_fields(self, mock_db, mock_game_session):
+        """Test that RECORD_FACT with missing predicate/value is skipped gracefully."""
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.RECORD_FACT,
+            target_key="npc_001",
+            changes={
+                "subject_type": "entity",
+                "subject_key": "npc_001",
+                # Both predicate and value are missing
+            },
+        )
+
+        with patch("src.world_server.quantum.collapse.FactManager") as mock_fm:
+            # Should not raise, just skip
+            await manager._apply_single_delta(delta, turn_number=5)
+
+            # FactManager should not have been called
+            mock_fm.return_value.record_fact.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_apply_advance_time(self, mock_db, mock_game_session):
         """Test applying ADVANCE_TIME delta."""
         manager = BranchCollapseManager(mock_db, mock_game_session)

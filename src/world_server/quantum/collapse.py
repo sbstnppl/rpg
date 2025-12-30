@@ -564,13 +564,24 @@ class BranchCollapseManager:
                 )
 
         elif delta.delta_type == DeltaType.RECORD_FACT:
+            predicate = changes.get("predicate")
+            value = changes.get("value")
+
+            # Skip invalid facts - LLM sometimes generates incomplete deltas
+            if not predicate or not value:
+                logger.warning(
+                    f"Skipping RECORD_FACT for {delta.target_key}: "
+                    f"missing predicate={predicate!r} or value={value!r}"
+                )
+                return
+
             fact_manager = FactManager(self.db, self.game_session)
             fact_manager.record_fact(
                 subject_type=changes.get("subject_type", "entity"),
                 subject_key=changes.get("subject_key", delta.target_key),
-                predicate=changes.get("predicate"),
-                value=changes.get("value"),
-                category=changes.get("category"),
+                predicate=predicate,
+                value=value,
+                category=changes.get("category") or "personal",  # Default to personal if None
                 is_secret=changes.get("is_secret", False),
             )
 

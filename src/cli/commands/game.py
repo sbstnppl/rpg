@@ -1770,4 +1770,16 @@ async def _single_turn(
         for error in turn_result.errors:
             display_error(error)
 
+    # Persist turn to database (same as play command)
+    if turn_result.narrative:
+        _save_turn_immediately(
+            db=db,
+            game_session=game_session,
+            turn_number=game_session.total_turns,
+            player_input=player_input,
+            gm_response=turn_result.narrative,
+            player_location=player_location,
+            is_ooc=False,
+        )
+
     db.commit()

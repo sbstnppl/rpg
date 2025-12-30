@@ -223,12 +223,15 @@ Your task is to generate multiple outcome variants for a player action. Each var
 
 For skill checks, generate both success and failure variants. The dice roll happens at runtime.
 
-State deltas should capture meaningful changes:
-- create_entity: New items or NPCs introduced
-- update_entity: Changes to existing entities (health, state)
-- transfer_item: Items changing hands
-- record_fact: New information learned
-- advance_time: How much time passed
+State deltas should capture meaningful changes. Each delta type has required fields:
+- create_entity: {entity_key, display_name, entity_type, location_key?, description?}
+- update_entity: {location_key?, activity?, mood?, description?}
+- transfer_item: {item_key, from?, to?} - at least one of from/to required
+- record_fact: {subject_key, predicate, value, category?, is_secret?} - predicate and value are REQUIRED
+- advance_time: {minutes}
+
+Example record_fact for learning NPC information:
+{"delta_type": "record_fact", "target_key": "innkeeper_tom", "changes": {"subject_key": "innkeeper_tom", "predicate": "occupation", "value": "runs the tavern for 20 years"}}
 
 CRITICAL: All entity references MUST use [key:text] format. Never mention an entity without this format."""
 
