@@ -71,7 +71,9 @@ Read `.claude/docs/realism-principles.md` for the principles that guide realisti
 
 ## Project Overview
 
-An agentic console-based RPG using LangGraph for multi-agent orchestration. The game features:
+An agentic console-based RPG using a quantum branching pipeline for turn processing. The game features:
+- **Quantum Pipeline**: Pre-generates outcome branches, rolls dice at runtime
+- **Dual-Model Separation**: qwen3 for reasoning, magmell for narration
 - Persistent world state with SQL database
 - Flexible character attributes (setting-dependent)
 - Dice-based combat and skill checks
@@ -92,9 +94,9 @@ An agentic console-based RPG using LangGraph for multi-agent orchestration. The 
 
 | Category | Count |
 |----------|-------|
-| **Test Functions** | 3,372 across 156 test files |
+| **Test Functions** | ~2,200 across ~100 test files |
 | **Manager Classes** | 53 specialized managers in `src/managers/` |
-| **Agent Nodes** | 24 LangGraph nodes in `src/agents/nodes/` |
+| **Quantum Pipeline** | Single pipeline in `src/world_server/quantum/` |
 | **Database Models** | 28 model files in `src/database/models/` |
 | **CLI Commands** | 5 command modules in `src/cli/commands/` |
 
@@ -150,8 +152,7 @@ rpg/
 
 ## Key Documentation
 
-- `docs/architecture.md` - System architecture (includes all three pipelines)
-- `docs/scene-first-architecture/` - **Scene-first pipeline design docs** (new architecture)
+- `docs/architecture.md` - System architecture (quantum pipeline)
 - `docs/implementation-plan.md` - Implementation checklist
 - `.claude/docs/coding-standards.md` - Code style guide
 - `.claude/docs/agent-prompts.md` - LLM prompt templates
@@ -170,36 +171,33 @@ class EntityManager(BaseManager):
     def create_entity(self, **data) -> Entity
 ```
 
-### LangGraph State
+### Quantum Pipeline
+The unified turn processing pipeline with dual-model separation:
 ```python
-class GameState(TypedDict):
-    session_id: int
-    player_input: str
-    gm_response: str | None
-    scene_context: str
-    next_agent: str
-    # Scene-first fields:
-    scene_manifest: dict | None      # Full scene state
-    narrator_manifest: dict | None   # What narrator can reference
-    resolved_actions: list[dict]     # Actions with resolved entity keys
-    needs_clarification: bool        # Ambiguous reference detected
+# Turn processing flow
+pipeline = QuantumPipeline(db, game_session)
+
+# Process turn - predicts actions, generates branches, rolls dice
+result = await pipeline.process_turn(
+    player_input="pick up the sword",
+    location_key="village_tavern",
+    turn_number=5,
+)
+
+# Dual-model separation:
+# - Reasoning (qwen3): Logic, predictions, tool decisions
+# - Narrator (magmell): Prose generation, narrative output
 ```
 
-### Scene-First Pattern
-In scene-first architecture, entities are created BEFORE narration:
+### Grounding Pattern
+Entities are validated against the scene manifest before narration:
 ```python
-# WorldMechanics determines what exists
-world_update = await world_mechanics.advance_world(location, time)
+# GMContextBuilder creates scene context
+context = GMContextBuilder(db, game_session).build_context(location_key)
 
-# SceneBuilder generates scene contents
-manifest = await scene_builder.build_scene(location, world_update)
-
-# PersistScene saves to DB and builds NarratorManifest
-narrator_manifest = scene_persister.persist_scene(manifest)
-
-# Narrator uses [key] format for entity references
-narrator_output = "[marcus_001] waves at you from [bed_001]."
-# Display strips keys: "Marcus waves at you from the bed."
+# GroundingManifest validates entity references
+manifest = GroundingManifest(entities, items, locations)
+validated = manifest.validate_references(narrative)
 ```
 
 ### Database Session Scoping

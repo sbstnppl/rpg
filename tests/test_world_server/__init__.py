@@ -1,1 +1,2 @@
-"""Tests for the World Server anticipation system."""
+# World server tests - quantum pipeline only
+# Legacy top-level tests removed

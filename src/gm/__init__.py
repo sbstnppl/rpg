@@ -1,8 +1,7 @@
-"""Simplified GM Pipeline.
+"""GM utilities shared by the quantum pipeline.
 
-This module implements a single-call GM approach where:
-1. ContextBuilder gathers rich context
-2. GM LLM generates narrative + structured output with tools
-3. Validator checks grounding
-4. Applier persists state changes
+This module provides:
+- GMContextBuilder: Builds rich context for scene generation
+- GroundingManifest: Entity reference validation
+- Tool definitions for game actions
 """

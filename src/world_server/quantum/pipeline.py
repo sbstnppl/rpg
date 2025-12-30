@@ -32,7 +32,7 @@ from src.dice.types import AdvantageType
 from src.gm.context_builder import GMContextBuilder
 from src.gm.grounding import GroundingManifest
 from src.llm.base import LLMProvider
-from src.llm.factory import get_narrator_provider
+from src.llm.factory import get_narrator_provider, get_reasoning_provider
 from src.world_server.quantum.action_matcher import ActionMatcher, MatchResult
 from src.world_server.quantum.action_predictor import ActionPredictor
 from src.world_server.quantum.branch_generator import BranchContext, BranchGenerator
@@ -139,14 +139,17 @@ class QuantumPipeline:
         self.game_session = game_session
         self._metrics = metrics or QuantumMetrics()
 
-        # Get LLM provider
-        self._llm = llm_provider or get_narrator_provider()
+        # Dual-model separation:
+        # - Reasoning (qwen3): Logic, predictions, tool decisions
+        # - Narrator (magmell): Prose generation, narrative output
+        self._reasoning_llm = get_reasoning_provider()
+        self._narrator_llm = llm_provider or get_narrator_provider()
 
         # Initialize components
         self.action_predictor = ActionPredictor(db, game_session)
         self.action_matcher = ActionMatcher()
         self.gm_oracle = GMDecisionOracle(db, game_session)
-        self.branch_generator = BranchGenerator(db, game_session, self._llm)
+        self.branch_generator = BranchGenerator(db, game_session, self._narrator_llm)
         self.branch_cache = QuantumBranchCache(metrics=self._metrics)
         self.collapse_manager = BranchCollapseManager(db, game_session, self._metrics)
 

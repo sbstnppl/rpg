@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Consolidated to Quantum-Only Pipeline** - Removed all legacy pipelines, unified on quantum branching
+  - **Dual-Model Separation** - qwen3 for reasoning/logic, magmell for narrative prose
+  - Removed LangGraph-based pipelines (GM, Legacy, System-Authority, Scene-First)
+  - Deleted `src/agents/graph.py`, `src/agents/nodes/`, `src/agents/tools/`, `src/agents/schemas/`
+  - Deleted `src/gm/graph.py`, `gm_node.py`, `validator.py`, `applier.py`, `action_classifier.py`
+  - Deleted `src/world_server/` top-level files (kept `quantum/` subdirectory)
+  - Simplified CLI: removed `--pipeline` option from `start`, `play`, `turn` commands
+  - Updated `QuantumPipeline` to use both `get_reasoning_provider()` and `get_narrator_provider()`
+  - Reduced test count from ~3,372 to ~2,200 by removing obsolete pipeline tests
+
 ### Added
 - **Gold Stack Splitting** - Quantity-based operations for stackable items (gold, potions, etc.)
   - `ItemManager.split_stack()` - Split quantity from stackable item (`src/managers/item_manager.py`)

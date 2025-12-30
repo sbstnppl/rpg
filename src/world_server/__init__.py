@@ -1,52 +1,21 @@
-"""World Server - Background world simulation with anticipatory generation.
+"""World Server - Quantum Pipeline for turn processing.
 
-This module provides:
-- AnticipationEngine: Pre-generates scenes for predicted player destinations
-- PreGenerationCache: LRU cache for pre-generated scenes
-- LocationPredictor: Predicts likely next player locations
-- StateCollapseManager: Commits pre-generated state when player observes
-- SceneGenerator: Generates scene data for anticipated locations
-
-The key insight is that player reading time (48-120 seconds) approximately
-matches LLM generation time (50-80 seconds), allowing us to hide latency
-by pre-generating likely destinations in the background.
+The quantum pipeline is the unified approach for processing player turns:
+1. Predicts likely player actions from scene context
+2. Pre-generates multiple outcome branches (success/failure/critical)
+3. Matches player input to predicted actions
+4. Rolls dice at runtime to select the appropriate branch
+5. Collapses the branch and applies state changes
 """
 
-from src.world_server.schemas import (
-    AnticipationTask,
-    GenerationStatus,
-    LocationPrediction,
-    PreGeneratedScene,
-)
-from src.world_server.cache import PreGenerationCache
-from src.world_server.predictor import LocationPredictor
-from src.world_server.anticipation import AnticipationEngine
-from src.world_server.collapse import StateCollapseManager
-from src.world_server.integration import (
-    WorldServerManager,
-    get_world_server_manager,
-    shutdown_world_server,
-)
-from src.world_server.scene_generator import (
-    SceneGenerator,
-    create_scene_generator_callback,
+from src.world_server.quantum import (
+    QuantumPipeline,
+    TurnResult,
+    AnticipationConfig,
 )
 
 __all__ = [
-    # Schemas
-    "AnticipationTask",
-    "GenerationStatus",
-    "LocationPrediction",
-    "PreGeneratedScene",
-    # Components
-    "PreGenerationCache",
-    "LocationPredictor",
-    "AnticipationEngine",
-    "StateCollapseManager",
-    "SceneGenerator",
-    # Integration
-    "WorldServerManager",
-    "get_world_server_manager",
-    "shutdown_world_server",
-    "create_scene_generator_callback",
+    "QuantumPipeline",
+    "TurnResult",
+    "AnticipationConfig",
 ]
