@@ -172,6 +172,7 @@ Alternative: Use the interactive `play` command (quantum is default):
    - Time > 5 min → "Time Passage"
    - Quantum branch cache hit → "Branch Cache Hit" (if anticipation enabled)
    - Zero validation errors in branches → "Clean Branch Validation" (if anticipation enabled)
+   - Ref-based entity resolution works → "Ref-Based Resolution" (if --ref-based enabled)
 
 10. **Create issue** if problem found:
    - Run `/issue <brief description of problem>`
@@ -209,6 +210,7 @@ MILESTONES:
 [ ] Time Passage
 [ ] Branch Cache Hit (if anticipation enabled)
 [ ] Clean Branch Validation (if anticipation enabled)
+[ ] Ref-Based Resolution (if --ref-based enabled)
 
 ISSUES CREATED:
 1. {issue-folder-1} - {brief description}
@@ -229,6 +231,39 @@ Log location: logs/llm/session_{id}/
 - **Be thorough**: Check audit logs and database, don't just trust the output
 - **Create issues promptly**: Use /issue for each problem, don't batch them
 - **Keep playing**: Don't stop for minor issues, document and continue
+
+## Architecture Modes
+
+The quantum pipeline supports different internal architectures for entity resolution:
+
+| Mode | Flag | Description |
+|------|------|-------------|
+| Default | (none) | Original branch generator with fuzzy entity matching |
+| Split | `--split` | Separates reasoning (Phase 2) from narration (Phase 4) |
+| **Ref-Based** | `--ref-based` | Uses A/B/C refs for deterministic entity resolution |
+
+### Ref-Based Architecture (Recommended for Testing)
+
+The ref-based architecture eliminates fuzzy matching by assigning single-letter refs to entities:
+
+```bash
+# Single turn with ref-based
+python -m src.main game turn --ref-based -s <session_id> "pick up the sword"
+
+# Interactive play with ref-based
+python -m src.main play --ref-based -s <session_id>
+```
+
+**How it works:**
+1. Entities get refs: `[A] rusty sword - on the table`, `[B] rusty sword - on the wall`
+2. LLM outputs: `{"entity": "A"}` instead of display names
+3. Code does direct lookup: `A → rusty_sword_01` (no fuzzy matching)
+4. Invalid refs produce clear errors (not guessed)
+
+**Benefits:**
+- Deterministic entity resolution
+- No ambiguity with duplicate display names
+- Clear error messages for invalid refs
 
 ## Pipeline Options
 
@@ -252,6 +287,8 @@ Log location: logs/llm/session_{id}/
 - **AI identity in cached content**: Branch generator prompt needs stricter character rules
 - **Excessive StaleStateErrors**: Anticipation cycle too slow, state changing before collapse
 - **Delta conflicts**: Bug in branch generator - creating contradictory state changes
+- **Invalid ref error**: LLM output a ref (like "X") that doesn't exist in manifest
+- **Ref-based fallback**: Check if `reason_with_refs()` prompt includes entity list correctly
 
 ## Config Reference
 

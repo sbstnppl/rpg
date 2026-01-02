@@ -79,6 +79,7 @@ class BranchContext:
     game_day: int
     recent_events: list[str]  # Recent narrative summaries
     player_input: str | None = None  # Actual player input for topic-awareness
+    game_period: str = ""  # e.g., "morning", "afternoon", "evening", "night"
 
 
 class BranchGenerator:
@@ -221,23 +222,58 @@ Your task is to generate multiple outcome variants for a player action. Each var
 4. Include sensory details (sight, sound, smell)
 5. Avoid meta-commentary or questions to the player
 6. Be 2-4 sentences for most outcomes
+7. CRITICAL: Match all narrative to the TIME period shown in the prompt:
+   - morning/dawn: sunrise, morning light, dew, breakfast smells, early risers
+   - afternoon: midday sun, warm, lunch crowds, busy activity
+   - evening: sunset, lanterns lighting, dinner time, winding down
+   - night: darkness, moonlight, stars, quiet, late hours, candlelight
+   Do NOT mention morning sunlight, dawn, or early hours when it's evening/night.
 
 For skill checks, generate both success and failure variants. The dice roll happens at runtime.
 
 State deltas should capture meaningful changes. Each delta type has required fields:
 - create_entity: {entity_key, display_name, entity_type, description?}
-- update_entity: {activity?, mood?, description?}
-- transfer_item: {item_key, from?, to?} - at least one of from/to required
+- delete_entity: {} (just set target_key to entity to delete)
+- update_entity: {activity?, mood?, description?, location_key?}
+- update_location: {location_key} - REQUIRED for movement actions. Target_key is the entity moving.
+- transfer_item: target_key is the ITEM KEY. Changes: {to_entity_key?, to_storage_key?, from_entity_key?}
+- update_need: {entity_key, need_name, amount} - for hunger, thirst, stamina changes
+- update_relationship: {from_key, to_key, dimension, delta, reason?} - dimension: trust/liking/respect
 - record_fact: {subject_key, predicate, value, category?, is_secret?} - predicate and value are REQUIRED
   Valid categories: personal, secret, preference, skill, history, relationship, location, world
 - advance_time: {minutes}
 
+IMPORTANT: When the player moves to a new location, you MUST include an update_location delta with the player's entity key as target_key and the destination as location_key.
+
 Example record_fact for learning NPC information:
 {"delta_type": "record_fact", "target_key": "innkeeper_tom", "changes": {"subject_key": "innkeeper_tom", "predicate": "occupation", "value": "runs the tavern for 20 years", "category": "personal"}}
 
-IMPORTANT: Use actual entity keys from the scene manifest, NOT generic terms like "player" or "npc".
+Example update_location for player movement (use the player's actual entity_key from the manifest):
+{"delta_type": "update_location", "target_key": "<PLAYER_ENTITY_KEY>", "changes": {"location_key": "village_square"}}
 
-CRITICAL: All entity references MUST use [key:text] format. Never mention an entity without this format."""
+CRITICAL: For update_location deltas, you MUST use the EXACT location_key from the Exits section.
+Example: If exits show "[village_tavern:The Rusty Tankard]", use location_key: "village_tavern"
+NEVER derive or invent keys from display names (don't use "rusty_tankard" or "the_rusty_tankard").
+
+Example update_need for satisfying thirst (use the player's actual entity_key from the manifest):
+{"delta_type": "update_need", "target_key": "<PLAYER_ENTITY_KEY>", "changes": {"entity_key": "<PLAYER_ENTITY_KEY>", "need_name": "thirst", "amount": 20}}
+
+Example transfer_item for giving an item to the player (target_key MUST be an actual item key from the ITEMS section below):
+{"delta_type": "transfer_item", "target_key": "<ITEM_KEY_FROM_ITEMS_SECTION>", "changes": {"to_entity_key": "<PLAYER_ENTITY_KEY>"}}
+
+CRITICAL: For transfer_item deltas:
+- target_key MUST be an actual item key from the ITEMS section in the prompt
+- Do NOT use example keys like "ale_mug_001" or "sword_001" - only use keys that appear in ITEMS
+- If no suitable item exists in ITEMS, do NOT generate a transfer_item delta
+
+CRITICAL: Use ACTUAL entity keys from the scene manifest, NOT placeholders or generic terms. The player's key varies (e.g., "test_hero", "brave_knight") - always check the manifest for the correct key.
+
+CRITICAL: All entity references MUST use [key:text] format. Never mention an entity without this format.
+
+CRITICAL: You may ONLY reference entities that appear in the AVAILABLE ENTITIES list in the prompt.
+- Do NOT invent, hallucinate, or reference NPCs, items, or locations not in the list.
+- If no NPCs are listed, the scene has NO NPCs present - do not create dialog with non-existent characters.
+- If the player tries to interact with a non-existent entity, narrate that they cannot find such a person/thing."""
 
     def _build_generation_prompt(
         self,
@@ -281,7 +317,8 @@ The twist should naturally emerge from the grounding facts. Do not force it - le
         prompt = f"""Generate narrative variants for this player action.
 
 SCENE: {context.location_display}
-TIME: Day {context.game_day}, {context.game_time}
+TIME: Day {context.game_day}, {context.game_time} ({context.game_period})
+PLAYER ENTITY KEY: {context.player_key}
 {entities_list}
 
 PLAYER ACTION: {action_desc}{player_input_context}
@@ -301,8 +338,16 @@ For each variant provide:
 5. skill: Which skill (if check required)
 6. dc: Difficulty class (if check required)
 
-Example narrative format:
-"You approach [innkeeper_tom:Old Tom] and ask about rooms. He sets down [ale_mug_001:the mug] and smiles warmly."
+Example narrative format (using entities from THIS scene's manifest):
+"You approach [entity_key:Display Name] and greet them. They look up from their work and nod in acknowledgment."
+
+REMEMBER: Replace entity_key and Display Name with ACTUAL keys/names from the AVAILABLE ENTITIES list above.
+
+IMPORTANT TIME CONSTRAINT: The scene is set during {context.game_period}. Your narrative MUST reflect this:
+- If night: describe darkness, moonlight, candlelight, quiet, late hour. NO sunrise, morning light, or daytime bustle.
+- If evening: describe sunset, lanterns, dinner time. NO morning or bright sunlight.
+- If morning: describe sunrise, dawn light, early activity.
+- If afternoon: describe midday sun, warm light, busy activity.
 
 Generate the JSON response now."""
 
@@ -317,12 +362,14 @@ Generate the JSON response now."""
         Returns:
             Formatted entity string
         """
-        lines = ["AVAILABLE ENTITIES (use [key:name] format):"]
+        lines = ["AVAILABLE ENTITIES (use [key:name] format - ONLY these entities exist in this scene):"]
 
         if manifest.npcs:
-            lines.append("NPCs:")
+            lines.append("NPCs PRESENT AT THIS LOCATION (ONLY these NPCs are here):")
             for key, entity in manifest.npcs.items():
                 lines.append(f"  - [{key}:{entity.display_name}] - {entity.short_description}")
+        else:
+            lines.append("NPCs PRESENT AT THIS LOCATION: NONE (no NPCs are at this location)")
 
         if manifest.items_at_location:
             lines.append("Items at location:")

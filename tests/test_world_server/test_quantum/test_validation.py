@@ -285,6 +285,43 @@ class TestNarrativeConsistencyValidator:
             placeholder_issues = [i for i in result.issues if i.category == "placeholder"]
             assert len(placeholder_issues) > 0, f"Placeholder not detected in: {narrative}"
 
+    def test_npc_hallucination_detected_when_no_npcs(self, sample_manifest):
+        """NPC dialogue is flagged when no NPCs are in manifest."""
+        from src.gm.grounding import GroundingManifest
+
+        # Create manifest with NO NPCs
+        empty_npc_manifest = GroundingManifest(
+            location_key="village_square",
+            location_display="Village Square",
+            player_key="test_hero",
+            npcs={},  # No NPCs!
+            items_at_location={},
+            inventory={},
+            storages={},
+            exits={},
+        )
+
+        validator = NarrativeConsistencyValidator(empty_npc_manifest)
+
+        # Narrative with NPC dialogue - should fail
+        narrative = "Old Tom looks up and says, 'Welcome to my tavern, traveler.'"
+        result = validator.validate(narrative)
+
+        hallucination_issues = [i for i in result.issues if "npc_hallucination" in i.category]
+        assert len(hallucination_issues) > 0, "NPC hallucination not detected"
+        assert hallucination_issues[0].severity == IssueSeverity.ERROR
+
+    def test_no_npc_hallucination_when_npcs_present(
+        self, narrative_validator: NarrativeConsistencyValidator
+    ):
+        """NPC dialogue is OK when NPCs are in manifest."""
+        # The default narrative_validator has NPCs, so dialogue should be fine
+        narrative = "[innkeeper_tom:Old Tom] says, 'Welcome to my tavern, traveler.'"
+        result = narrative_validator.validate(narrative)
+
+        hallucination_issues = [i for i in result.issues if "npc_hallucination" in i.category]
+        assert len(hallucination_issues) == 0, "NPC hallucination wrongly detected"
+
     def test_quality_capitalization(self, narrative_validator: NarrativeConsistencyValidator):
         """Lowercase start gets info-level issue."""
         narrative = "the blacksmith looks up from his work and greets you warmly."
@@ -832,3 +869,85 @@ class TestValidationEdgeCases:
         # Should detect: grounding (unknown_npc), perspective (the player),
         # meta (what would you like), quality (double space)
         assert "grounding" in categories or len(result.issues) > 0
+
+
+class TestBlockingGroundingErrors:
+    """Tests for _has_blocking_grounding_errors helper in pipeline."""
+
+    def test_no_errors_returns_false(self):
+        """Should return False when no errors."""
+        from src.world_server.quantum.pipeline import _has_blocking_grounding_errors
+
+        result = ValidationResult(valid=True, issues=[])
+        should_block, _ = _has_blocking_grounding_errors(result)
+        assert not should_block
+
+    def test_npc_hallucination_blocks(self):
+        """Should block on NPC hallucination."""
+        from src.world_server.quantum.pipeline import _has_blocking_grounding_errors
+
+        result = ValidationResult(
+            valid=False,
+            issues=[
+                ValidationIssue(
+                    category="npc_hallucination",
+                    message="NPC dialogue detected but no NPCs present",
+                    severity=IssueSeverity.ERROR,
+                )
+            ],
+        )
+        should_block, narrative = _has_blocking_grounding_errors(result)
+        assert should_block
+        assert "don't see anyone" in narrative
+
+    def test_grounding_error_blocks(self):
+        """Should block on grounding errors (invalid entity keys)."""
+        from src.world_server.quantum.pipeline import _has_blocking_grounding_errors
+
+        result = ValidationResult(
+            valid=False,
+            issues=[
+                ValidationIssue(
+                    category="grounding",
+                    message="Invalid entity key: [ale_mug_001:a mug of ale]",
+                    severity=IssueSeverity.ERROR,
+                )
+            ],
+        )
+        should_block, narrative = _has_blocking_grounding_errors(result)
+        assert should_block
+        assert "doesn't seem quite right" in narrative
+
+    def test_warning_does_not_block(self):
+        """Should not block on warnings."""
+        from src.world_server.quantum.pipeline import _has_blocking_grounding_errors
+
+        result = ValidationResult(
+            valid=True,
+            issues=[
+                ValidationIssue(
+                    category="quality",
+                    message="Narrative too short",
+                    severity=IssueSeverity.WARNING,
+                )
+            ],
+        )
+        should_block, _ = _has_blocking_grounding_errors(result)
+        assert not should_block
+
+    def test_info_does_not_block(self):
+        """Should not block on info issues."""
+        from src.world_server.quantum.pipeline import _has_blocking_grounding_errors
+
+        result = ValidationResult(
+            valid=True,
+            issues=[
+                ValidationIssue(
+                    category="style",
+                    message="Could use better word choice",
+                    severity=IssueSeverity.INFO,
+                )
+            ],
+        )
+        should_block, _ = _has_blocking_grounding_errors(result)
+        assert not should_block

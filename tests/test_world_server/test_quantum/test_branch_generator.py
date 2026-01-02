@@ -349,7 +349,7 @@ class TestPromptBuilding:
 
         formatted = generator._format_entities(sample_manifest)
 
-        assert "NPCs:" in formatted
+        assert "NPCs PRESENT AT THIS LOCATION" in formatted
         assert "innkeeper_tom" in formatted
         assert "Old Tom" in formatted
 
@@ -374,6 +374,30 @@ class TestPromptBuilding:
 
         assert "Exits:" in formatted
         assert "village_square" in formatted
+
+    def test_format_entities_empty_npcs_shows_none(
+        self, mock_db, mock_game_session, mock_llm
+    ):
+        """Test that entity formatting shows NONE when no NPCs present."""
+        from src.gm.grounding import GroundingManifest
+
+        generator = BranchGenerator(mock_db, mock_game_session, mock_llm)
+
+        # Create manifest with no NPCs
+        empty_manifest = GroundingManifest(
+            location_key="empty_room",
+            location_display="Empty Room",
+            player_key="test_hero",
+            npcs={},  # No NPCs
+            items_at_location={},
+            inventory={},
+            storages={},
+            exits={},
+        )
+
+        formatted = generator._format_entities(empty_manifest)
+
+        assert "NPCs PRESENT AT THIS LOCATION: NONE" in formatted
 
     def test_describe_action_npc_interaction(
         self, mock_db, mock_game_session, mock_llm, sample_manifest

@@ -236,6 +236,30 @@ def _get_last_turn(db, session_id: int) -> Turn | None:
     )
 
 
+def _get_player_current_location(
+    player: Entity,
+    fallback: str | None = None,
+) -> str:
+    """Get player's current location from database.
+
+    Reads from npc_extension.current_location (set by UPDATE_LOCATION delta),
+    falling back to provided fallback or "starting_location".
+
+    Args:
+        player: Player entity with npc_extension loaded.
+        fallback: Optional fallback location key.
+
+    Returns:
+        Current location key.
+    """
+    # First try npc_extension.current_location (updated by deltas)
+    if player.npc_extension and player.npc_extension.current_location:
+        return player.npc_extension.current_location
+
+    # Fallback to provided value or default
+    return fallback or "starting_location"
+
+
 def _get_available_settings() -> list[dict]:
     """Get list of available settings with descriptions.
 
@@ -916,6 +940,11 @@ def play(
         "--anticipation/--no-anticipation",
         help="Enable/disable anticipatory pre-generation (default: from config)",
     ),
+    ref_based: bool = typer.Option(
+        False,
+        "--ref-based",
+        help="Use ref-based architecture (A/B/C refs for entity disambiguation)",
+    ),
 ) -> None:
     """Start the interactive game loop using the quantum branching pipeline."""
     # Determine anticipation setting
@@ -976,6 +1005,7 @@ def play(
                 db, game_session, player,
                 roll_mode=roll_mode,
                 anticipation_enabled=use_anticipation,
+                ref_based_enabled=ref_based,
             ))
 
     except KeyboardInterrupt:
@@ -1105,6 +1135,7 @@ async def _game_loop(
     initial_location: str | None = None,
     roll_mode: str = "auto",
     anticipation_enabled: bool = False,
+    ref_based_enabled: bool = False,
 ) -> None:
     """Main game loop using the quantum pipeline.
 
@@ -1115,6 +1146,7 @@ async def _game_loop(
         initial_location: Optional starting location key from character creation.
         roll_mode: "auto" or "manual" for dice rolls.
         anticipation_enabled: Whether to enable anticipatory scene generation.
+        ref_based_enabled: Whether to use ref-based architecture (A/B/C refs).
     """
     display_welcome(game_session.session_name)
 
@@ -1135,9 +1167,16 @@ async def _game_loop(
         game_session=game_session,
         anticipation_config=anticipation_config,
     )
+
+    # Enable ref-based architecture if requested
+    if ref_based_enabled:
+        quantum_pipeline.enable_ref_based(True)
+        display_info("Using ref-based architecture (A/B/C refs)")
+    else:
+        display_info("Using Quantum pipeline")
+
     if anticipation_config.enabled:
         display_info("Quantum anticipation enabled")
-    display_info("Using Quantum pipeline")
 
     # Get player location - use initial_location if provided, otherwise find suitable location
     from src.database.models.world import Location
@@ -1184,7 +1223,10 @@ async def _game_loop(
     if is_resume:
         # RESUME: Show context and last response, skip scene generation
         _display_resume_context(db, player, last_turn, game_session)
-        player_location = last_turn.location_at_turn or "starting_location"
+        # Get current location from DB (may have changed via MOVE delta)
+        player_location = _get_player_current_location(
+            player, fallback=last_turn.location_at_turn
+        )
 
         # Sync total_turns with actual turn count (guards against crashes/inconsistencies)
         if last_turn.turn_number != game_session.total_turns:
@@ -1364,6 +1406,10 @@ async def _game_loop(
 
         # Commit after each turn
         db.commit()
+
+        # Refresh player location after turn (may have moved via delta)
+        db.refresh(player)
+        player_location = _get_player_current_location(player, fallback=player_location)
 
 
 def _display_quantum_skill_check(skill_check_result) -> None:
@@ -1684,6 +1730,8 @@ async def _handle_portrait_command(
 def turn(
     player_input: str = typer.Argument(..., help="Player input to process"),
     session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
+    split: bool = typer.Option(False, "--split", help="Use split architecture (Phases 2-5)"),
+    ref_based: bool = typer.Option(False, "--ref-based", help="Use ref-based architecture (A/B/C refs)"),
 ) -> None:
     """Execute a single turn using the quantum pipeline (for testing)."""
     try:
@@ -1703,7 +1751,7 @@ def turn(
                 raise typer.Exit(1)
 
             # Run single turn
-            asyncio.run(_single_turn(db, game_session, player, player_input))
+            asyncio.run(_single_turn(db, game_session, player, player_input, use_split=split, use_ref_based=ref_based))
 
     except Exception as e:
         display_error(f"Error: {e}")
@@ -1715,6 +1763,8 @@ async def _single_turn(
     game_session: GameSession,
     player: Entity,
     player_input: str,
+    use_split: bool = False,
+    use_ref_based: bool = False,
 ) -> None:
     """Execute a single turn using the quantum pipeline.
 
@@ -1723,6 +1773,8 @@ async def _single_turn(
         game_session: Current game session.
         player: Player entity.
         player_input: Player's input.
+        use_split: Whether to use split architecture (Phases 2-5).
+        use_ref_based: Whether to use ref-based architecture (A/B/C refs).
     """
     from src.world_server.quantum import QuantumPipeline, AnticipationConfig
     from src.database.models.world import Location
@@ -1734,18 +1786,28 @@ async def _single_turn(
         anticipation_config=AnticipationConfig(enabled=False),
     )
 
-    # Find player location - try last turn, then any location
-    player_location = "starting_location"
+    # Enable ref-based architecture if requested (takes priority over split)
+    if use_ref_based:
+        display_info("Using ref-based architecture (A/B/C refs)")
+        quantum_pipeline.enable_ref_based(True)
+    elif use_split:
+        display_info("Using split architecture (Phases 2-5)")
+        quantum_pipeline.enable_split_architecture(True)
+
+    # Find player location - prefer DB (current), fallback to last turn
     last_turn = _get_last_turn(db, game_session.id)
-    if last_turn and last_turn.location_at_turn:
-        player_location = last_turn.location_at_turn
-    else:
-        # Try to find any location in the session
+    fallback_location = last_turn.location_at_turn if last_turn else None
+
+    # If no last turn, try to find any location in the session
+    if not fallback_location:
         any_location = db.query(Location).filter(
             Location.session_id == game_session.id
         ).first()
         if any_location:
-            player_location = any_location.location_key
+            fallback_location = any_location.location_key
+
+    # Get current location from player's npc_extension (updated by MOVE deltas)
+    player_location = _get_player_current_location(player, fallback=fallback_location)
 
     game_session.total_turns += 1
 

@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Ref-Based Quantum Pipeline Architecture** - Deterministic entity resolution using single-letter refs
+  - New `RefManifest` class assigns A/B/C refs to entities, eliminates fuzzy matching (`src/world_server/quantum/ref_manifest.py`)
+  - New `RefDeltaTranslator` with direct ref→key lookup, invalid refs produce errors (`src/world_server/quantum/delta_translator.py`)
+  - New `RefReasoningContext` and `reason_with_refs()` for ref-based reasoning (`src/world_server/quantum/reasoning.py`)
+  - New `NarratorEngine` with grounding-aware prose generation (`src/world_server/quantum/narrator.py`)
+  - New `cleanup_narrative()` for post-processing narrative output (`src/world_server/quantum/cleanup.py`)
+  - New `IntentClassifier` for Phase 1 action classification (`src/world_server/quantum/intent_classifier.py`)
+  - CLI `--ref-based` flag for `game turn` and `play` commands (`src/cli/commands/game.py`)
+  - Audit logging for ref-based pipeline path (`src/world_server/quantum/pipeline.py`)
+
+- **Split Architecture for Quantum Pipeline** - Separates reasoning from narration
+  - Phase 1: Intent classification (LLM determines action type)
+  - Phase 2: Semantic reasoning (LLM outputs what happens)
+  - Phase 3: Delta translation (code resolves refs to keys)
+  - Phase 4: Narration (LLM generates prose)
+  - Phase 5: Cleanup (code normalizes output)
+
+### Fixed
+- **Item Location Query** - Fix items at location not appearing in manifest
+  - `get_items_at_location()` now checks both `storage_location_id` and `owner_location_id` (`src/managers/item_manager.py`)
+
+- **Exit Resolution by Display Name** - Fix movement failing when LLM outputs display name
+  - `RefManifest.resolve_exit()` now supports ref, key, or display name lookup (`src/world_server/quantum/ref_manifest.py`)
+
+- **TRANSFER_ITEM Delta Keys** - Fix item pickup not transferring to player
+  - Changed `to_entity`/`from_entity` to `to_entity_key`/`from_entity_key` to match collapse manager (`src/world_server/quantum/delta_translator.py`)
+
+### Changed
+- **Narrator Prompt** - Added repetition avoidance guideline to prevent location name spam (`src/world_server/quantum/narrator.py`)
+
 ### Fixed
 - **CLI Play Shortcut** - Fix `rpg play` shortcut not passing required parameters
   - Pass explicit defaults for `roll_mode` and `anticipation` (`src/cli/main.py`)

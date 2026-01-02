@@ -23,6 +23,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from src.database.models.session import GameSession
+from src.database.models.world import Location
 from src.dice.checks import make_skill_check
 from src.dice.skills import get_attribute_for_skill
 from src.managers.entity_manager import EntityManager
@@ -504,15 +505,56 @@ class BranchCollapseManager:
         changes = delta.changes
 
         if delta.delta_type == DeltaType.CREATE_ENTITY:
-            entity_manager = EntityManager(self.db, self.game_session)
-            # Note: Entity model doesn't have 'description' field directly
-            # Use 'background' for NPC backstory or store in extension
-            entity_manager.create_entity(
-                entity_key=changes.get("entity_key", delta.target_key),
-                display_name=changes.get("display_name", delta.target_key),
-                entity_type=changes.get("entity_type"),
-                background=changes.get("description"),  # Map description to background
-            )
+            entity_type_str = changes.get("entity_type", "").lower()
+
+            # Route items to ItemManager, entities to EntityManager
+            # Item types: item, key, weapon, tool, food, drink, clothing, armor, etc.
+            item_type_keywords = {
+                "item", "key", "weapon", "tool", "food", "drink", "clothing",
+                "armor", "consumable", "container", "equipment", "accessory",
+                "misc", "potion", "scroll", "book", "coin", "gem", "treasure"
+            }
+
+            if entity_type_str in item_type_keywords:
+                # Create as an item in the items table
+                from src.database.models.enums import ItemType
+
+                item_manager = ItemManager(self.db, self.game_session)
+
+                # Map entity_type to ItemType enum
+                item_type_map = {
+                    "weapon": ItemType.WEAPON,
+                    "armor": ItemType.ARMOR,
+                    "clothing": ItemType.CLOTHING,
+                    "consumable": ItemType.CONSUMABLE,
+                    "food": ItemType.CONSUMABLE,
+                    "drink": ItemType.CONSUMABLE,
+                    "potion": ItemType.CONSUMABLE,
+                    "container": ItemType.CONTAINER,
+                    "tool": ItemType.TOOL,
+                    "equipment": ItemType.EQUIPMENT,
+                    "accessory": ItemType.ACCESSORY,
+                }
+                item_type = item_type_map.get(entity_type_str, ItemType.MISC)
+
+                item_manager.create_item(
+                    item_key=changes.get("entity_key", delta.target_key),
+                    display_name=changes.get("display_name", delta.target_key),
+                    item_type=item_type,
+                    description=changes.get("description"),
+                )
+                logger.debug(f"Created item {delta.target_key} of type {item_type}")
+            else:
+                # Create as an entity (NPC, monster, etc.)
+                entity_manager = EntityManager(self.db, self.game_session)
+                # Note: Entity model doesn't have 'description' field directly
+                # Use 'background' for NPC backstory or store in extension
+                entity_manager.create_entity(
+                    entity_key=changes.get("entity_key", delta.target_key),
+                    display_name=changes.get("display_name", delta.target_key),
+                    entity_type=changes.get("entity_type"),
+                    background=changes.get("description"),  # Map description to background
+                )
 
         elif delta.delta_type == DeltaType.DELETE_ENTITY:
             entity_manager = EntityManager(self.db, self.game_session)
@@ -531,9 +573,25 @@ class BranchCollapseManager:
 
         elif delta.delta_type == DeltaType.TRANSFER_ITEM:
             item_manager = ItemManager(self.db, self.game_session)
+
+            # Check item exists first
+            item = item_manager.get_item(delta.target_key)
+            if item is None:
+                logger.warning(f"TRANSFER_ITEM failed: item '{delta.target_key}' not found")
+                raise ValueError(f"Item not found: {delta.target_key}")
+
             to_entity_id = None
             if "to_entity_key" in changes:
-                to_entity_id = self._get_entity_id(changes["to_entity_key"])
+                to_entity_key = changes["to_entity_key"]
+                # "ground" is a special case meaning drop item (no holder)
+                if to_entity_key != "ground":
+                    to_entity_id = self._get_entity_id(to_entity_key)
+                    if to_entity_id is None:
+                        logger.warning(
+                            f"TRANSFER_ITEM failed: target entity '{to_entity_key}' not found"
+                        )
+                        raise ValueError(f"Target entity not found: {to_entity_key}")
+
             item_manager.transfer_item(
                 item_key=delta.target_key,
                 to_entity_id=to_entity_id,
@@ -600,10 +658,23 @@ class BranchCollapseManager:
             )
 
         elif delta.delta_type == DeltaType.UPDATE_LOCATION:
+            location_key = changes.get("location_key")
+
+            # Validate location exists before applying
+            location = self.db.query(Location).filter(
+                Location.session_id == self.game_session.id,
+                Location.location_key == location_key
+            ).first()
+            if not location:
+                logger.warning(
+                    f"UPDATE_LOCATION skipped: location '{location_key}' not found in session"
+                )
+                return
+
             entity_manager = EntityManager(self.db, self.game_session)
             entity_manager.update_location(
                 entity_key=delta.target_key,
-                location_key=changes.get("location_key"),
+                location_key=location_key,
             )
 
         elif delta.delta_type == DeltaType.ADVANCE_TIME:

@@ -147,11 +147,19 @@ PLACEHOLDER_PATTERNS = [
     r"\$\{.*\}",  # ${variable}
 ]
 
+# Patterns indicating NPC dialogue (quotes with speech verbs)
+NPC_DIALOGUE_PATTERNS = [
+    r"'[^']{5,}'",  # Single-quoted speech (min 5 chars)
+    r'"[^"]{5,}"',  # Double-quoted speech (min 5 chars)
+    r"\b(?:says?|said|replies?|replied|asks?|asked|tells?|told|whispers?|shouts?|grunts?|mutters?|exclaims?)\b",
+]
+
 # Compile patterns for efficiency
 META_QUESTION_RE = [re.compile(p, re.IGNORECASE) for p in META_QUESTION_PATTERNS]
 AI_IDENTITY_RE = [re.compile(p, re.IGNORECASE) for p in AI_IDENTITY_PATTERNS]
 THIRD_PERSON_RE = [re.compile(p, re.IGNORECASE) for p in THIRD_PERSON_PATTERNS]
 PLACEHOLDER_RE = [re.compile(p, re.IGNORECASE) for p in PLACEHOLDER_PATTERNS]
+NPC_DIALOGUE_RE = [re.compile(p, re.IGNORECASE) for p in NPC_DIALOGUE_PATTERNS]
 
 
 class NarrativeConsistencyValidator:
@@ -216,19 +224,22 @@ class NarrativeConsistencyValidator:
         # 3. Grounding validation (entity references)
         issues.extend(self._check_grounding(narrative))
 
-        # 4. Meta-question detection
+        # 4. NPC hallucination detection (dialogue when no NPCs present)
+        issues.extend(self._check_npc_hallucination(narrative))
+
+        # 5. Meta-question detection
         issues.extend(self._check_meta_questions(narrative))
 
-        # 5. AI identity detection
+        # 6. AI identity detection
         issues.extend(self._check_ai_identity(narrative))
 
-        # 6. Third-person detection
+        # 7. Third-person detection
         issues.extend(self._check_third_person(narrative))
 
-        # 7. Placeholder detection
+        # 8. Placeholder detection
         issues.extend(self._check_placeholders(narrative))
 
-        # 8. Narrative quality checks
+        # 9. Narrative quality checks
         issues.extend(self._check_quality(narrative))
 
         # Valid if no errors
@@ -284,6 +295,34 @@ class NarrativeConsistencyValidator:
                 location=unkeyed.context,
                 suggestion=f"Use [{unkeyed.expected_key}:{unkeyed.display_name}]",
             ))
+
+        return issues
+
+    def _check_npc_hallucination(self, narrative: str) -> list[ValidationIssue]:
+        """Check for NPC dialogue when no NPCs are present.
+
+        If the manifest has no NPCs at the location, but the narrative contains
+        dialogue patterns (quotes, speech verbs), this indicates the LLM hallucinated
+        an NPC interaction.
+        """
+        issues = []
+
+        # Only check if there are NO NPCs in the manifest
+        if self.manifest.npcs:
+            return issues  # NPCs present, dialogue is OK
+
+        # Check for dialogue patterns
+        for pattern in NPC_DIALOGUE_RE:
+            match = pattern.search(narrative)
+            if match:
+                issues.append(ValidationIssue(
+                    category="npc_hallucination",
+                    message="NPC dialogue detected but no NPCs are at this location",
+                    severity=IssueSeverity.ERROR,
+                    location=match.group(0)[:50],
+                    suggestion="Remove NPC dialogue or only describe the environment",
+                ))
+                break  # One error is enough
 
         return issues
 
@@ -475,6 +514,8 @@ class DeltaValidator:
             issues.extend(self._validate_update_relationship(delta, prefix))
         elif delta.delta_type == DeltaType.ADVANCE_TIME:
             issues.extend(self._validate_advance_time(delta, prefix))
+        elif delta.delta_type == DeltaType.UPDATE_LOCATION:
+            issues.extend(self._validate_update_location(delta, prefix))
 
         return issues
 
@@ -539,12 +580,40 @@ class DeltaValidator:
         issues = []
         changes = delta.changes
 
-        if "from" not in changes and "to" not in changes:
+        # Accept BOTH naming conventions:
+        # - Legacy: "from" / "to"
+        # - Current: "from_entity_key" / "to_entity_key"
+        has_from = "from" in changes or "from_entity_key" in changes
+        has_to = "to" in changes or "to_entity_key" in changes
+
+        if not has_from and not has_to:
             issues.append(ValidationIssue(
                 category="delta",
-                message=f"{prefix}: TRANSFER_ITEM needs 'from' or 'to'",
+                message=f"{prefix}: TRANSFER_ITEM needs 'from'/'to' or 'from_entity_key'/'to_entity_key'",
                 severity=IssueSeverity.ERROR,
             ))
+
+        # Check item exists in manifest (WARNING - item may be created mid-turn)
+        if self.manifest:
+            item_key = delta.target_key
+            # Check all possible item locations in manifest
+            items_at_location = getattr(self.manifest, 'items_at_location', None) or {}
+            inventory = getattr(self.manifest, 'inventory', None) or {}
+            equipped = getattr(self.manifest, 'equipped', None) or {}
+            additional_keys = getattr(self.manifest, 'additional_valid_keys', None) or set()
+
+            item_in_manifest = (
+                item_key in items_at_location or
+                item_key in inventory or
+                item_key in equipped or
+                item_key in additional_keys
+            )
+            if not item_in_manifest:
+                issues.append(ValidationIssue(
+                    category="delta",
+                    message=f"{prefix}: Item '{item_key}' not found in manifest",
+                    severity=IssueSeverity.WARNING,
+                ))
 
         return issues
 
@@ -651,6 +720,38 @@ class DeltaValidator:
                 message=f"{prefix}: ADVANCE_TIME very large ({minutes} minutes = {minutes/60:.1f} hours)",
                 severity=IssueSeverity.WARNING,
             ))
+
+        return issues
+
+    def _validate_update_location(
+        self, delta: StateDelta, prefix: str
+    ) -> list[ValidationIssue]:
+        """Validate UPDATE_LOCATION delta."""
+        issues = []
+        changes = delta.changes
+
+        # Must have location_key
+        if not changes.get("location_key"):
+            issues.append(ValidationIssue(
+                category="delta",
+                message=f"{prefix}: UPDATE_LOCATION missing 'location_key'",
+                severity=IssueSeverity.ERROR,
+            ))
+
+        # Soft check: destination should be a known exit
+        # Note: This uses the manifest passed to validator which may be the destination
+        # manifest for MOVE actions. The real validation happens in collapse.py which
+        # checks if the location exists in the database before applying the delta.
+        destination = changes.get("location_key")
+        if destination and self.manifest:
+            exits = getattr(self.manifest, 'exits', None) or {}
+            if exits and destination not in exits:
+                issues.append(ValidationIssue(
+                    category="delta",
+                    message=f"{prefix}: Destination '{destination}' not in manifest exits (will validate at collapse)",
+                    severity=IssueSeverity.WARNING,
+                    suggestion=f"Available exits: {list(exits.keys())}",
+                ))
 
         return issues
 

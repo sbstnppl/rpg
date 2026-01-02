@@ -904,6 +904,60 @@ class TestApplySingleDelta:
             assert call_kwargs["display_name"] == "A Mysterious Stranger"
 
     @pytest.mark.asyncio
+    async def test_apply_create_entity_item_routes_to_item_manager(
+        self, mock_db, mock_game_session
+    ):
+        """Test CREATE_ENTITY with entity_type='item' routes to ItemManager."""
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.CREATE_ENTITY,
+            target_key="tankard_001",
+            changes={
+                "entity_key": "tankard_001",
+                "display_name": "Wooden Tankard",
+                "entity_type": "item",
+                "description": "A simple wooden drinking vessel",
+            },
+        )
+
+        with patch("src.world_server.quantum.collapse.ItemManager") as mock_im:
+            await manager._apply_single_delta(delta, turn_number=5)
+
+            mock_im.return_value.create_item.assert_called_once()
+            call_kwargs = mock_im.return_value.create_item.call_args.kwargs
+            assert call_kwargs["item_key"] == "tankard_001"
+            assert call_kwargs["display_name"] == "Wooden Tankard"
+            assert call_kwargs["description"] == "A simple wooden drinking vessel"
+
+    @pytest.mark.asyncio
+    async def test_apply_create_entity_weapon_routes_to_item_manager(
+        self, mock_db, mock_game_session
+    ):
+        """Test CREATE_ENTITY with entity_type='weapon' uses ItemType.WEAPON."""
+        from src.database.models.enums import ItemType
+
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.CREATE_ENTITY,
+            target_key="sword_001",
+            changes={
+                "entity_key": "sword_001",
+                "display_name": "Iron Sword",
+                "entity_type": "weapon",
+            },
+        )
+
+        with patch("src.world_server.quantum.collapse.ItemManager") as mock_im:
+            await manager._apply_single_delta(delta, turn_number=5)
+
+            mock_im.return_value.create_item.assert_called_once()
+            call_kwargs = mock_im.return_value.create_item.call_args.kwargs
+            assert call_kwargs["item_key"] == "sword_001"
+            assert call_kwargs["item_type"] == ItemType.WEAPON
+
+    @pytest.mark.asyncio
     async def test_apply_delete_entity(self, mock_db, mock_game_session):
         """Test applying DELETE_ENTITY delta."""
         manager = BranchCollapseManager(mock_db, mock_game_session)
@@ -1139,3 +1193,96 @@ class TestApplySingleDelta:
                 entity_key="npc_001",
                 location_key="castle_entrance",
             )
+
+
+class TestTransferItemErrorHandling:
+    """Tests for TRANSFER_ITEM error handling."""
+
+    @pytest.mark.asyncio
+    async def test_transfer_item_raises_on_missing_item(self, mock_db, mock_game_session):
+        """Should raise ValueError when item doesn't exist."""
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.TRANSFER_ITEM,
+            target_key="nonexistent_item_001",
+            changes={"to_entity_key": "player"},
+        )
+
+        with patch("src.world_server.quantum.collapse.ItemManager") as mock_im:
+            mock_im.return_value.get_item.return_value = None  # Item not found
+
+            with pytest.raises(ValueError, match="Item not found"):
+                await manager._apply_single_delta(delta, turn_number=1)
+
+    @pytest.mark.asyncio
+    async def test_transfer_item_raises_on_missing_target_entity(
+        self, mock_db, mock_game_session
+    ):
+        """Should raise ValueError when target entity doesn't exist."""
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.TRANSFER_ITEM,
+            target_key="sword_001",
+            changes={"to_entity_key": "nonexistent_npc"},
+        )
+
+        with patch("src.world_server.quantum.collapse.ItemManager") as mock_im:
+            mock_item = MagicMock()
+            mock_im.return_value.get_item.return_value = mock_item
+
+            with patch.object(manager, "_get_entity_id", return_value=None):
+                with pytest.raises(ValueError, match="Target entity not found"):
+                    await manager._apply_single_delta(delta, turn_number=1)
+
+    @pytest.mark.asyncio
+    async def test_transfer_item_allows_ground_as_target(
+        self, mock_db, mock_game_session
+    ):
+        """Should allow 'ground' as target (drops item)."""
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.TRANSFER_ITEM,
+            target_key="sword_001",
+            changes={"to_entity_key": "ground"},
+        )
+
+        with patch("src.world_server.quantum.collapse.ItemManager") as mock_im:
+            mock_item = MagicMock()
+            mock_im.return_value.get_item.return_value = mock_item
+
+            # Should not raise - "ground" is a special case
+            await manager._apply_single_delta(delta, turn_number=1)
+
+            # transfer_item should be called with to_entity_id=None
+            mock_im.return_value.transfer_item.assert_called_once()
+            call_kwargs = mock_im.return_value.transfer_item.call_args.kwargs
+            assert call_kwargs["to_entity_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_transfer_item_success_with_valid_target(
+        self, mock_db, mock_game_session
+    ):
+        """Should successfully transfer item when target entity exists."""
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.TRANSFER_ITEM,
+            target_key="sword_001",
+            changes={"to_entity_key": "player_001"},
+        )
+
+        with patch("src.world_server.quantum.collapse.ItemManager") as mock_im:
+            mock_item = MagicMock()
+            mock_im.return_value.get_item.return_value = mock_item
+
+            with patch.object(manager, "_get_entity_id", return_value=42):
+                await manager._apply_single_delta(delta, turn_number=1)
+
+                mock_im.return_value.transfer_item.assert_called_once_with(
+                    item_key="sword_001",
+                    to_entity_id=42,
+                    to_storage_key=None,
+                )

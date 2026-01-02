@@ -580,7 +580,9 @@ class ItemManager(BaseManager):
     def get_items_at_location(self, location_key: str) -> list[Item]:
         """Get items at a world location (not held by anyone).
 
-        Finds items in storage locations linked to the given world location.
+        Finds items either:
+        1. In storage locations linked to the given world location
+        2. With owner_location_id pointing to the world location
 
         Args:
             location_key: World location key.
@@ -588,6 +590,7 @@ class ItemManager(BaseManager):
         Returns:
             List of Items at the location.
         """
+        from sqlalchemy import or_
         from src.database.models.world import Location
 
         # Find the world location
@@ -613,18 +616,25 @@ class ItemManager(BaseManager):
             .all()
         )
 
-        if not storage_ids:
-            return []
-
         storage_id_list = [s.id for s in storage_ids]
 
-        # Return items in those storage locations (no holder)
+        # Build query conditions
+        conditions = [
+            # Items with owner_location_id pointing to this location
+            Item.owner_location_id == location.id,
+        ]
+
+        if storage_id_list:
+            # Items in storage locations at this world location
+            conditions.append(Item.storage_location_id.in_(storage_id_list))
+
+        # Return items matching any condition (no holder)
         return (
             self.db.query(Item)
             .filter(
                 Item.session_id == self.session_id,
-                Item.storage_location_id.in_(storage_id_list),
                 Item.holder_id.is_(None),
+                or_(*conditions),
             )
             .all()
         )
