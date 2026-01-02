@@ -1194,6 +1194,114 @@ class TestApplySingleDelta:
                 location_key="castle_entrance",
             )
 
+    @pytest.mark.asyncio
+    async def test_apply_create_entity_location_routes_to_location_manager(
+        self, mock_db, mock_game_session
+    ):
+        """Test CREATE_ENTITY with entity_type='location' routes to LocationManager."""
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.CREATE_ENTITY,
+            target_key="loc_hidden_room_001",
+            changes={
+                "entity_key": "loc_hidden_room_001",
+                "display_name": "Hidden Storage Room",
+                "entity_type": "location",
+                "description": "A dusty storage room behind the tavern",
+                "location_key": "village_tavern",  # Parent location
+            },
+        )
+
+        with patch(
+            "src.managers.location_manager.LocationManager"
+        ) as mock_lm:
+            await manager._apply_single_delta(delta, turn_number=5)
+
+            mock_lm.return_value.create_location.assert_called_once()
+            call_kwargs = mock_lm.return_value.create_location.call_args.kwargs
+            assert call_kwargs["location_key"] == "loc_hidden_room_001"
+            assert call_kwargs["display_name"] == "Hidden Storage Room"
+            assert call_kwargs["description"] == "A dusty storage room behind the tavern"
+            assert call_kwargs["parent_key"] == "village_tavern"
+
+    @pytest.mark.asyncio
+    async def test_apply_create_entity_room_routes_to_location_manager(
+        self, mock_db, mock_game_session
+    ):
+        """Test CREATE_ENTITY with entity_type='room' routes to LocationManager."""
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.CREATE_ENTITY,
+            target_key="loc_cellar_001",
+            changes={
+                "display_name": "Cellar",
+                "entity_type": "room",
+                "description": "A damp cellar",
+            },
+        )
+
+        with patch(
+            "src.managers.location_manager.LocationManager"
+        ) as mock_lm:
+            await manager._apply_single_delta(delta, turn_number=5)
+
+            mock_lm.return_value.create_location.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_apply_create_entity_object_routes_to_item_manager(
+        self, mock_db, mock_game_session
+    ):
+        """Test CREATE_ENTITY with entity_type='object' routes to ItemManager as misc."""
+        from src.database.models.enums import ItemType
+
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.CREATE_ENTITY,
+            target_key="item_campfire_001",
+            changes={
+                "display_name": "Small Campfire",
+                "entity_type": "object",
+                "description": "A flickering campfire",
+            },
+        )
+
+        with patch("src.world_server.quantum.collapse.ItemManager") as mock_im:
+            await manager._apply_single_delta(delta, turn_number=5)
+
+            mock_im.return_value.create_item.assert_called_once()
+            call_kwargs = mock_im.return_value.create_item.call_args.kwargs
+            assert call_kwargs["display_name"] == "Small Campfire"
+            assert call_kwargs["item_type"] == ItemType.MISC
+
+    @pytest.mark.asyncio
+    async def test_apply_create_entity_unknown_type_defaults_to_item(
+        self, mock_db, mock_game_session
+    ):
+        """Test CREATE_ENTITY with unknown entity_type defaults to misc item."""
+        from src.database.models.enums import ItemType
+
+        manager = BranchCollapseManager(mock_db, mock_game_session)
+
+        delta = StateDelta(
+            delta_type=DeltaType.CREATE_ENTITY,
+            target_key="thing_001",
+            changes={
+                "display_name": "Mysterious Thing",
+                "entity_type": "unknown_type",  # Invalid type
+                "description": "Something strange",
+            },
+        )
+
+        with patch("src.world_server.quantum.collapse.ItemManager") as mock_im:
+            await manager._apply_single_delta(delta, turn_number=5)
+
+            mock_im.return_value.create_item.assert_called_once()
+            call_kwargs = mock_im.return_value.create_item.call_args.kwargs
+            assert call_kwargs["item_type"] == ItemType.MISC
+
 
 class TestTransferItemErrorHandling:
     """Tests for TRANSFER_ITEM error handling."""

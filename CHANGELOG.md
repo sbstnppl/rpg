@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **TRANSFER_ITEM Delta Keys** - Fix item pickup not transferring to player
   - Changed `to_entity`/`from_entity` to `to_entity_key`/`from_entity_key` to match collapse manager (`src/world_server/quantum/delta_translator.py`)
 
+- **CREATE_ENTITY Invalid EntityType** - Fix PostgreSQL error when LLM outputs `entity_type: "location"`
+  - Added `VALID_ENTITY_TYPES` mapping to normalize LLM output in delta translator (`src/world_server/quantum/delta_translator.py`)
+  - Added routing for "location" type to LocationManager in collapse (`src/world_server/quantum/collapse.py`)
+  - Unknown types now default to misc item instead of causing database errors
+
 ### Changed
 - **Narrator Prompt** - Added repetition avoidance guideline to prevent location name spam (`src/world_server/quantum/narrator.py`)
 

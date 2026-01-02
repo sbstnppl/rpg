@@ -746,3 +746,74 @@ class TestRefDeltaTranslator:
 
         assert sword_ref in result.key_mapping
         assert result.key_mapping[sword_ref] == "item_sword_01"
+
+    def test_create_entity_validates_type_location(self, translator, ref_manifest):
+        """Create entity with 'location' type produces location entity_type."""
+        from src.world_server.quantum.reasoning import RefBasedOutcome, RefBasedChange
+
+        outcome = RefBasedOutcome(
+            what_happens="A hidden storage room is discovered",
+            changes=[
+                RefBasedChange(
+                    change_type="create_entity",
+                    description="hidden storage room",
+                    entity_type="location",
+                )
+            ],
+        )
+
+        result = translator.translate(outcome, ref_manifest)
+
+        assert not result.has_errors
+        create_deltas = [d for d in result.deltas if d.delta_type == DeltaType.CREATE_ENTITY]
+        assert len(create_deltas) == 1
+        assert create_deltas[0].changes["entity_type"] == "location"
+        # Key should start with loc_
+        assert create_deltas[0].target_key.startswith("loc_")
+
+    def test_create_entity_validates_type_object_becomes_item(self, translator, ref_manifest):
+        """Create entity with 'object' type becomes 'item'."""
+        from src.world_server.quantum.reasoning import RefBasedOutcome, RefBasedChange
+
+        outcome = RefBasedOutcome(
+            what_happens="A campfire is lit",
+            changes=[
+                RefBasedChange(
+                    change_type="create_entity",
+                    description="small campfire",
+                    entity_type="object",
+                )
+            ],
+        )
+
+        result = translator.translate(outcome, ref_manifest)
+
+        assert not result.has_errors
+        create_deltas = [d for d in result.deltas if d.delta_type == DeltaType.CREATE_ENTITY]
+        assert len(create_deltas) == 1
+        # "object" maps to "item"
+        assert create_deltas[0].changes["entity_type"] == "item"
+        assert create_deltas[0].target_key.startswith("item_")
+
+    def test_create_entity_unknown_type_defaults_to_item(self, translator, ref_manifest):
+        """Create entity with unknown type defaults to 'item' with warning."""
+        from src.world_server.quantum.reasoning import RefBasedOutcome, RefBasedChange
+
+        outcome = RefBasedOutcome(
+            what_happens="A magical portal appears",
+            changes=[
+                RefBasedChange(
+                    change_type="create_entity",
+                    description="magical portal",
+                    entity_type="portal",  # Invalid type
+                )
+            ],
+        )
+
+        result = translator.translate(outcome, ref_manifest)
+
+        # Should not error, just default to item
+        assert not result.has_errors
+        create_deltas = [d for d in result.deltas if d.delta_type == DeltaType.CREATE_ENTITY]
+        assert len(create_deltas) == 1
+        assert create_deltas[0].changes["entity_type"] == "item"

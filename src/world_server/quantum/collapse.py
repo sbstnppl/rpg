@@ -507,13 +507,16 @@ class BranchCollapseManager:
         if delta.delta_type == DeltaType.CREATE_ENTITY:
             entity_type_str = changes.get("entity_type", "").lower()
 
-            # Route items to ItemManager, entities to EntityManager
-            # Item types: item, key, weapon, tool, food, drink, clothing, armor, etc.
+            # Route items to ItemManager, locations to LocationManager,
+            # entities to EntityManager
             item_type_keywords = {
                 "item", "key", "weapon", "tool", "food", "drink", "clothing",
                 "armor", "consumable", "container", "equipment", "accessory",
-                "misc", "potion", "scroll", "book", "coin", "gem", "treasure"
+                "misc", "potion", "scroll", "book", "coin", "gem", "treasure",
+                "object",  # Generic objects are items
             }
+            location_type_keywords = {"location", "room", "place", "area"}
+            entity_type_keywords = {"npc", "monster", "animal", "player"}
 
             if entity_type_str in item_type_keywords:
                 # Create as an item in the items table
@@ -544,16 +547,47 @@ class BranchCollapseManager:
                     description=changes.get("description"),
                 )
                 logger.debug(f"Created item {delta.target_key} of type {item_type}")
-            else:
+
+            elif entity_type_str in location_type_keywords:
+                # Create as a location in the locations table
+                from src.managers.location_manager import LocationManager
+
+                location_manager = LocationManager(self.db, self.game_session)
+                parent_key = changes.get("location_key")  # Parent location
+
+                location_manager.create_location(
+                    location_key=delta.target_key,
+                    display_name=changes.get("display_name", delta.target_key),
+                    description=changes.get("description", ""),
+                    parent_key=parent_key,
+                )
+                logger.debug(f"Created location {delta.target_key}")
+
+            elif entity_type_str in entity_type_keywords:
                 # Create as an entity (NPC, monster, etc.)
                 entity_manager = EntityManager(self.db, self.game_session)
-                # Note: Entity model doesn't have 'description' field directly
-                # Use 'background' for NPC backstory or store in extension
                 entity_manager.create_entity(
                     entity_key=changes.get("entity_key", delta.target_key),
                     display_name=changes.get("display_name", delta.target_key),
-                    entity_type=changes.get("entity_type"),
-                    background=changes.get("description"),  # Map description to background
+                    entity_type=entity_type_str,
+                    background=changes.get("description"),
+                )
+                logger.debug(f"Created entity {delta.target_key} of type {entity_type_str}")
+
+            else:
+                # Unknown type - default to item
+                logger.warning(
+                    f"Unknown entity_type '{entity_type_str}' for CREATE_ENTITY, "
+                    f"creating as misc item"
+                )
+                from src.database.models.enums import ItemType
+
+                item_manager = ItemManager(self.db, self.game_session)
+                item_manager.create_item(
+                    item_key=changes.get("entity_key", delta.target_key),
+                    display_name=changes.get("display_name", delta.target_key),
+                    item_type=ItemType.MISC,
+                    description=changes.get("description"),
                 )
 
         elif delta.delta_type == DeltaType.DELETE_ENTITY:

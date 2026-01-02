@@ -143,6 +143,12 @@ class EntityKeyGenerator:
         self._counter += 1
         return f"npc_{normalized}_{self._base_timestamp}_{self._counter:03d}"
 
+    def generate_location_key(self, display_name: str) -> str:
+        """Generate a unique key for a location."""
+        normalized = self._normalize_name(display_name)
+        self._counter += 1
+        return f"loc_{normalized}_{self._base_timestamp}_{self._counter:03d}"
+
     def _normalize_name(self, name: str) -> str:
         """Normalize display name to valid key component.
 
@@ -973,6 +979,30 @@ class RefDeltaTranslator:
 
         return -10  # Default moderate satisfaction
 
+    # Valid entity types for CREATE_ENTITY
+    # Maps LLM output -> valid type for collapse.py routing
+    VALID_ENTITY_TYPES = {
+        # Entity types (go to EntityManager)
+        "npc": "npc",
+        "monster": "monster",
+        "animal": "animal",
+        # Item types (go to ItemManager)
+        "item": "item",
+        "object": "item",  # "object" is a generic item
+        "weapon": "weapon",
+        "armor": "armor",
+        "tool": "tool",
+        "food": "food",
+        "drink": "drink",
+        "clothing": "clothing",
+        "container": "container",
+        "key": "key",
+        # Location type (go to LocationManager)
+        "location": "location",
+        "room": "location",
+        "place": "location",
+    }
+
     def _translate_create_entity(
         self,
         change: "RefBasedChange",
@@ -986,11 +1016,22 @@ class RefDeltaTranslator:
             errors.append("create_entity requires description")
             return None
 
-        entity_type = change.entity_type or "item"
+        raw_type = (change.entity_type or "item").lower()
 
-        # Generate new key
+        # Validate and normalize entity_type
+        entity_type = self.VALID_ENTITY_TYPES.get(raw_type)
+        if entity_type is None:
+            # Unknown type - default to item with warning
+            logger.warning(
+                f"Unknown entity_type '{raw_type}' for create_entity, defaulting to 'item'"
+            )
+            entity_type = "item"
+
+        # Generate appropriate key based on type
         if entity_type == "npc":
             key = self.key_generator.generate_npc_key(description)
+        elif entity_type == "location":
+            key = self.key_generator.generate_location_key(description)
         else:
             key = self.key_generator.generate_item_key(description)
 
