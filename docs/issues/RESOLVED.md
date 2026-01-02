@@ -158,3 +158,70 @@ This file summarizes issues that have been fixed and are no longer active. Origi
 **Problem:** Branch generator hallucinated NPC references (like `[innkeeper_mary:Mary]`) not in the scene manifest.
 
 **Solution:** Ref-based architecture assigns refs only to NPCs present in the scene. LLM outputs refs (A, B, C) which are validated against the manifest.
+
+---
+
+## drinking-satisfy-thirst-need
+
+**Resolved:** 2026-01-01 | **Priority:** Medium | **Related Sessions:** 317
+
+**Problem:** Drinking actions didn't update the `thirst` need - narrative described satisfying drink but database state unchanged.
+
+**Solution:** Updated `branch_generator.py` system prompt to document the `update_need` delta type. LLM now generates appropriate need satisfaction deltas for eating/drinking actions.
+
+---
+
+## narrative-time-mismatch
+
+**Resolved:** 2026-01-01 | **Priority:** Medium | **Related Sessions:** 323, 326
+
+**Problem:** At 20:18 (evening), narrative described "crisp morning air" and "early risers" - LLM ignored time context.
+
+**Solution:** Added explicit time-of-day instruction to system prompt in `branch_generator.py`:
+- Match all narrative to the TIME period (morning/afternoon/evening/night)
+- Specific imagery guidance for each period
+- Added `game_period` field to BranchContext
+
+---
+
+## npc-grounding-wrong-location
+
+**Resolved:** 2026-01-01 | **Priority:** High | **Related Sessions:** 320, 321, 322
+
+**Problem:** Player at `village_square` asked about "a merchant" but narrative referenced Old Tom (tavern innkeeper at wrong location). LLM hallucinated NPCs not in the manifest.
+
+**Solution:**
+- Strengthened prompt: "NPCs PRESENT AT THIS LOCATION: NONE" when empty
+- Added NPC hallucination detection in `validation.py`
+- Integrated `BranchValidator` into both cache hit and miss paths
+- Fallback: "You look around but don't see anyone to talk to here."
+
+---
+
+## narrative-uses-entity-key-not-you
+
+**Resolved:** 2026-01-02 | **Priority:** High | **Related Sessions:** 330
+
+**Problem:** Narrative used player's entity key "test_hero" directly in prose instead of second-person "you" - e.g., "the shadow of test_hero" instead of "your shadow".
+
+**Solution:** Ref-based architecture narrator prompt explicitly instructs: "The player: [player_key:you] (use 'you' as the display text)". All examples show proper usage.
+
+---
+
+## move-validation-wrong-manifest
+
+**Resolved:** 2026-01-02 | **Priority:** High | **Related Sessions:** 326
+
+**Problem:** MOVE actions were validated against the current location's manifest instead of the destination's manifest, causing false positive "NPC hallucination" errors for NPCs at the destination.
+
+**Solution:** Obsolete in ref-based architecture - uses RefManifest with direct ref lookup, no manifest-based NPC validation. Non-ref-based pipeline uses `generation_manifest` for MOVE action validation.
+
+---
+
+## scene-context-wrong-location
+
+**Resolved:** 2026-01-02 | **Priority:** High | **Related Sessions:** 324
+
+**Problem:** After moving to a new location, "look around" described the previous location. Branch cache contained stale branches from the departure location.
+
+**Solution:** Obsolete in ref-based architecture - generates fresh content each turn (`was_cache_hit=False`), no branch cache staleness. Recommended to use `--ref-based` flag.
