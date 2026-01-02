@@ -72,3 +72,49 @@ This file summarizes issues that have been fixed and are no longer active. Origi
 
 **Part 2 (ONGOING):** NPC names still occasionally unkeyed with local LLM (qwen3:32b)
 - See active issue tracking for Part 2 if work continues
+
+---
+
+## create-entity-invalid-item-type
+
+**Resolved:** 2026-01-01 | **Priority:** High | **Related Sessions:** 314
+
+**Problem:** CREATE_ENTITY delta with `entity_type: "item"` failed because "item" is not a valid `entitytype` enum value. Items should be created in `items` table, not `entities` table.
+
+**Solution:** Modified `_apply_single_delta` in `collapse.py` to detect item types and route to `ItemManager.create_item()` instead of `EntityManager.create_entity()`.
+
+---
+
+## delta-transfer-item-not-found
+
+**Resolved:** 2026-01-01 | **Priority:** High | **Related Sessions:** 323
+
+**Problem:** TRANSFER_ITEM deltas referenced hallucinated item keys (e.g., `ale_mug_001`) that didn't exist in the database.
+
+**Solution:**
+- Fixed validation naming mismatch (`from/to` vs `from_entity_key/to_entity_key`)
+- Added item existence check in validation
+- Removed hardcoded example key from prompt that LLM was copying
+
+---
+
+## narrative-wrong-location
+
+**Resolved:** 2026-01-01 | **Priority:** High | **Related Sessions:** 323
+
+**Problem:** After moving to a new location, narrative still described the previous location because manifest was built for departure location instead of destination.
+
+**Solution:** In `_generate_sync`, detect MOVE actions and build manifest for `action.target_key` (destination) instead of current location.
+
+---
+
+## player-location-update-movement
+
+**Resolved:** 2026-01-01 | **Priority:** High | **Related Sessions:** 326
+
+**Problem:** UPDATE_LOCATION delta used invented location keys (e.g., `rusty_tankard`) instead of exact manifest keys (e.g., `village_tavern`).
+
+**Solution:**
+- Strengthened system prompt with explicit instruction to use exact exit keys
+- Upgraded validation severity from WARNING to ERROR for invalid exit keys
+- Added runtime validation in collapse.py to check location exists before applying
