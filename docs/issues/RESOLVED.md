@@ -118,3 +118,43 @@ This file summarizes issues that have been fixed and are no longer active. Origi
 - Strengthened system prompt with explicit instruction to use exact exit keys
 - Upgraded validation severity from WARNING to ERROR for invalid exit keys
 - Added runtime validation in collapse.py to check location exists before applying
+
+---
+
+## grounding-hallucinated-ale-mug
+
+**Resolved:** 2026-01-02 | **Priority:** Medium | **Related Sessions:** 324
+
+**Problem:** Branch generator referenced entity keys (like `ale_mug_001`) that didn't exist in the database, causing grounding validation warnings.
+
+**Solution:** Ref-based architecture assigns single-letter refs (A, B, C) to entities. LLM can only reference existing refs - invalid refs produce errors, not guessed items.
+
+---
+
+## narrative-state-desync-item-take
+
+**Resolved:** 2026-01-02 | **Priority:** High | **Related Sessions:** 324
+
+**Problem:** Narrative described taking items that were never created in database, causing state/narrative desync.
+
+**Solution:** Ref-based architecture validates all entity refs before generating deltas. `RefDeltaTranslator` only creates TRANSFER_ITEM deltas for items that exist in the manifest.
+
+---
+
+## transfer-item-nonexistent-item
+
+**Resolved:** 2026-01-02 | **Priority:** High | **Related Sessions:** 330
+
+**Problem:** TRANSFER_ITEM deltas referenced hallucinated item keys that didn't exist, causing delta application failure.
+
+**Solution:** Ref-based architecture requires refs to exist in manifest. Invalid refs produce clear errors instead of silent failures.
+
+---
+
+## quantum-branch-hallucinated-npc
+
+**Resolved:** 2026-01-02 | **Priority:** High | **Related Sessions:** 330
+
+**Problem:** Branch generator hallucinated NPC references (like `[innkeeper_mary:Mary]`) not in the scene manifest.
+
+**Solution:** Ref-based architecture assigns refs only to NPCs present in the scene. LLM outputs refs (A, B, C) which are validated against the manifest.
