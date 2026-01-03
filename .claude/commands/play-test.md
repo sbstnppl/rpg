@@ -111,6 +111,9 @@ Alternative: Use the interactive `play` command (quantum is default):
 
    # Check branch cache metrics
    grep -r "cache_hit\|cache_miss\|branch_expired\|branch_invalidated" logs/llm/session_{SESSION_ID}/
+
+   # Check delta post-processing (repairs, clarifications, regenerations)
+   grep -rE "Repaired|RegenerationNeeded|clarify|unknown_key" logs/llm/session_{SESSION_ID}/
    ```
 
    **Validation checks performed by quantum pipeline:**
@@ -123,6 +126,7 @@ Alternative: Use the interactive `play` command (quantum is default):
    | Placeholders | No `[TODO]`, `<placeholder>` | Incomplete generation |
    | Delta conflicts | No CREATE+DELETE same entity | Inconsistent state changes |
    | Staleness | Expected state = current state | World changed since generation |
+   | **DeltaPostProcessor** | Unknown keys, missing creates, value ranges | Auto-repaired or clarified |
 
    **What to look for:**
 
@@ -133,12 +137,18 @@ Alternative: Use the interactive `play` command (quantum is default):
    | `StaleStateError` | Branch rejected at collapse (OK) | Note in observations |
    | `branch_expired` | TTL exceeded (normal) | Note if excessive |
    | `branch_invalidated` | Location state changed (normal) | Note count |
+   | `Repaired.*delta` | DeltaPostProcessor auto-fixed issues (OK) | Note pattern |
+   | `RegenerationNeeded` | Deltas unfixable, branch regenerated | Note frequency |
+   | `clarify.*unknown` | LLM asked to clarify entity key | Note if excessive |
 
    **Healthy anticipation metrics:**
    - Cache hit rate > 30% after 5+ turns
    - Zero grounding ERRORs
    - Zero AI identity leaks
    - Some StaleStateErrors OK (shows detection working)
+   - Delta repairs occasional (shows auto-fix working)
+   - Zero RegenerationNeeded (repairs should handle most issues)
+   - Clarifications rare (LLM usually gets keys right)
 
 8. **Compare against expectations**:
 
@@ -286,8 +296,10 @@ python -m src.main play --ref-based -s <session_id>
 - **Grounding errors in branches**: Check `GroundingManifest` includes all scene entities
 - **AI identity in cached content**: Branch generator prompt needs stricter character rules
 - **Excessive StaleStateErrors**: Anticipation cycle too slow, state changing before collapse
-- **Delta conflicts**: Bug in branch generator - creating contradictory state changes
+- **Delta conflicts**: Usually auto-repaired; if `RegenerationNeeded`, check branch generator prompt
 - **Invalid ref error**: LLM output a ref (like "X") that doesn't exist in manifest
+- **Excessive clarifications**: LLM keeps using wrong entity keys; may need better context in prompt
+- **RegenerationNeeded loops**: DeltaPostProcessor can't fix errors; check for structural issues
 - **Ref-based fallback**: Check if `reason_with_refs()` prompt includes entity list correctly
 
 ## Config Reference
