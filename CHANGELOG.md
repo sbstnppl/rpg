@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **Intent Classifier Speech Acts** - Fix dialog requests misclassified as questions
+  - "ask NPC if X" now correctly classified as ACTION instead of QUESTION (`src/world_server/quantum/intent_classifier.py`)
+  - Added "Speech Acts vs Meta Questions" section to classifier prompt
+  - Speech acts (ask, tell, greet, say) are actions; modal verbs (could, can) are questions
+  - 10 new tests for speech act classification (`tests/test_world_server/test_quantum/test_intent_classifier.py`)
+
 - **Movement Location Recording** - Fix turn saved with pre-action location instead of post-action
   - Reordered commit/refresh before save in game loop (`src/cli/commands/game.py`)
   - Turns now correctly record where player ended up, not where they started

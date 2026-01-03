@@ -76,11 +76,16 @@ INTENT_CLASSIFIER_SYSTEM_PROMPT = """You are an intent classifier for a fantasy 
    - "talk to Tom" → action
    - "pick up the sword" → action
    - "go to the market" → action
+   - "ask Tom about the robbery" → action (SPEECH ACT - performing dialog)
+   - "ask Tom if he has work" → action (SPEECH ACT - asking a question IN-WORLD)
+   - "tell the guard my name" → action (SPEECH ACT)
+   - "greet the innkeeper" → action (SPEECH ACT)
 
 2. **question** - Player is asking about possibilities (informational)
    - "Could I talk to Tom?" → question
    - "Can I pick up the sword?" → question
    - "What's available here?" → question
+   - "Is Tom here?" → question
 
 3. **hypothetical** - Player is exploring "what if" scenarios
    - "What if I talked to Tom?" → hypothetical
@@ -93,6 +98,27 @@ INTENT_CLASSIFIER_SYSTEM_PROMPT = """You are an intent classifier for a fantasy 
 5. **ambiguous** - Cannot determine intent, need clarification
    - Very short or unclear input
    - Multiple possible interpretations
+
+## CRITICAL: Speech Acts vs Meta Questions
+
+Distinguish between speech acts (ACTION) and meta questions (QUESTION):
+
+**Speech acts** (always ACTION): Player performs dialog IN the game world
+- "ask X about Y" → ACTION (player speaks to X)
+- "ask X if Y" → ACTION (player asks X a question in-game)
+- "tell X that Y" → ACTION (player tells X something)
+- "say hello to X" → ACTION (player greets X)
+- "greet X" → ACTION (player greets X)
+
+**Meta questions** (QUESTION): Player asks about game possibilities
+- "Could I talk to X?" → QUESTION (asking IF they can)
+- "Can I pick that up?" → QUESTION (asking about possibility)
+- "Is X here?" → QUESTION (asking for information)
+- "What items are available?" → QUESTION (asking for information)
+
+The key difference:
+- Speech acts use imperative verbs directing action ("ask", "tell", "greet", "say")
+- Meta questions use modal verbs asking possibility ("could", "can", "would", "should")
 
 ## Action Types
 

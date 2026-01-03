@@ -297,3 +297,214 @@ class TestIntentClassificationResponse:
                 intent_type="action",
                 confidence=1.5,  # Invalid
             )
+
+
+class TestSpeechActsVsMetaQuestions:
+    """Tests for distinguishing speech acts (ACTION) from meta questions (QUESTION).
+
+    This is critical for proper classification:
+    - "ask Tom if he has work" should be ACTION (player performs dialog in-game)
+    - "Could I talk to Tom?" should be QUESTION (player asks about possibility)
+    """
+
+    @pytest.fixture
+    def mock_llm(self):
+        """Create a mock LLM provider."""
+        llm = MagicMock()
+        llm.complete_structured = AsyncMock()
+        return llm
+
+    @pytest.fixture
+    def classifier(self, mock_llm):
+        """Create classifier with mock LLM."""
+        return IntentClassifier(llm=mock_llm)
+
+    @pytest.fixture
+    def sample_input(self):
+        """Create sample classifier input with tavern scene."""
+        return IntentClassifierInput(
+            player_input="",  # Will be set per test
+            location_display="The Rusty Tankard",
+            location_key="village_tavern",
+            npcs_present=["Old Tom"],
+            items_available=["Ale Mug", "Sword"],
+            exits_available=["Village Square"],
+        )
+
+    # =========================================================================
+    # Speech Acts - These should all be classified as ACTION
+    # =========================================================================
+
+    @pytest.mark.asyncio
+    async def test_ask_about_is_action(self, classifier, mock_llm, sample_input):
+        """'ask X about Y' is a speech act, should be ACTION."""
+        sample_input.player_input = "ask Old Tom about work"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="action",
+            confidence=0.95,
+            action_type="interact_npc",
+            target="Old Tom",
+            topic="work",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+        assert result.intent_type == IntentType.ACTION
+
+    @pytest.mark.asyncio
+    async def test_ask_if_is_action(self, classifier, mock_llm, sample_input):
+        """'ask X if Y' is a speech act, should be ACTION (not QUESTION)."""
+        sample_input.player_input = "ask Old Tom if he has any work for me"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="action",
+            confidence=0.95,
+            action_type="interact_npc",
+            target="Old Tom",
+            topic="work",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+        assert result.intent_type == IntentType.ACTION
+        assert result.is_informational is False
+
+    @pytest.mark.asyncio
+    async def test_tell_is_action(self, classifier, mock_llm, sample_input):
+        """'tell X that Y' is a speech act, should be ACTION."""
+        sample_input.player_input = "tell the guard my name"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="action",
+            confidence=0.95,
+            action_type="interact_npc",
+            target="guard",
+            topic="name",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+        assert result.intent_type == IntentType.ACTION
+
+    @pytest.mark.asyncio
+    async def test_greet_is_action(self, classifier, mock_llm, sample_input):
+        """'greet X' is a speech act, should be ACTION."""
+        sample_input.player_input = "greet the innkeeper"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="action",
+            confidence=0.95,
+            action_type="interact_npc",
+            target="innkeeper",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+        assert result.intent_type == IntentType.ACTION
+
+    @pytest.mark.asyncio
+    async def test_say_hello_is_action(self, classifier, mock_llm, sample_input):
+        """'say hello to X' is a speech act, should be ACTION."""
+        sample_input.player_input = "say hello to Old Tom"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="action",
+            confidence=0.95,
+            action_type="interact_npc",
+            target="Old Tom",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+        assert result.intent_type == IntentType.ACTION
+
+    # =========================================================================
+    # Meta Questions - These should be classified as QUESTION
+    # =========================================================================
+
+    @pytest.mark.asyncio
+    async def test_could_i_is_question(self, classifier, mock_llm, sample_input):
+        """'Could I talk to X?' is a meta question, should be QUESTION."""
+        sample_input.player_input = "could I talk to Old Tom?"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="question",
+            confidence=0.9,
+            action_type="interact_npc",
+            target="Old Tom",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+        assert result.intent_type == IntentType.QUESTION
+        assert result.is_informational is True
+
+    @pytest.mark.asyncio
+    async def test_can_i_is_question(self, classifier, mock_llm, sample_input):
+        """'Can I X?' is a meta question, should be QUESTION."""
+        sample_input.player_input = "can I pick up the sword?"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="question",
+            confidence=0.9,
+            action_type="manipulate_item",
+            target="sword",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+        assert result.intent_type == IntentType.QUESTION
+
+    @pytest.mark.asyncio
+    async def test_is_x_here_is_question(self, classifier, mock_llm, sample_input):
+        """'Is X here?' is a meta question, should be QUESTION."""
+        sample_input.player_input = "is Old Tom here?"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="question",
+            confidence=0.9,
+            action_type="interact_npc",
+            target="Old Tom",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+        assert result.intent_type == IntentType.QUESTION
+
+    @pytest.mark.asyncio
+    async def test_what_items_is_question(self, classifier, mock_llm, sample_input):
+        """'What items are available?' is a meta question, should be QUESTION."""
+        sample_input.player_input = "what items are available?"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="question",
+            confidence=0.9,
+            action_type="observe",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+        assert result.intent_type == IntentType.QUESTION
+
+    # =========================================================================
+    # Edge Cases
+    # =========================================================================
+
+    @pytest.mark.asyncio
+    async def test_ask_guard_if_can_enter_is_action(self, classifier, mock_llm, sample_input):
+        """'ask the guard if I can enter' is a speech act despite 'if I can'."""
+        sample_input.player_input = "ask the guard if I can enter"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="action",
+            confidence=0.95,
+            action_type="interact_npc",
+            target="guard",
+            topic="entering",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+        # This should be ACTION - player is asking the guard IN the game
+        assert result.intent_type == IntentType.ACTION
