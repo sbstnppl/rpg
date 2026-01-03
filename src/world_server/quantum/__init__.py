@@ -119,6 +119,11 @@ from src.world_server.quantum.validation import (
     DeltaValidator,
     BranchValidator,
 )
+from src.world_server.quantum.delta_postprocessor import (
+    DeltaPostProcessor,
+    PostProcessResult,
+    RegenerationNeeded,
+)
 
 __all__ = [
     # Enums
@@ -213,4 +218,8 @@ __all__ = [
     "NarrativeConsistencyValidator",
     "DeltaValidator",
     "BranchValidator",
+    # Delta Post-Processing
+    "DeltaPostProcessor",
+    "PostProcessResult",
+    "RegenerationNeeded",
 ]

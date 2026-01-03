@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Delta Post-Processor with LLM Clarification** - Repairs common LLM errors in state deltas
+  - New `DeltaPostProcessor` class with 740 lines of validation and repair logic (`src/world_server/quantum/delta_postprocessor.py`)
+  - Async `process_async()` for LLM clarification when entity keys are ambiguous
+  - Fuzzy key matching using `difflib.SequenceMatcher` to suggest corrections
+  - Auto-injects `CREATE_ENTITY` for missing item parents (e.g., items in containers)
+  - Detects conflicts (CREATE+DELETE same entity, duplicate creates, negative time)
+  - Clamps out-of-range values and reorders deltas for consistency
+  - 76 unit tests covering all repair scenarios (`tests/test_world_server/test_quantum/test_delta_postprocessor.py`)
+
 - **Ref-Based Quantum Pipeline Architecture** - Deterministic entity resolution using single-letter refs
   - New `RefManifest` class assigns A/B/C refs to entities, eliminates fuzzy matching (`src/world_server/quantum/ref_manifest.py`)
   - New `RefDeltaTranslator` with direct ref→key lookup, invalid refs produce errors (`src/world_server/quantum/delta_translator.py`)

@@ -459,7 +459,9 @@ class TestPromptBuilding:
 class TestVariantParsing:
     """Tests for variant parsing."""
 
-    def test_parse_variants_success(self, mock_db, mock_game_session, mock_llm):
+    async def test_parse_variants_success(
+        self, mock_db, mock_game_session, mock_llm, sample_manifest
+    ):
         """Test parsing successful variants."""
         generator = BranchGenerator(mock_db, mock_game_session, mock_llm)
 
@@ -475,14 +477,14 @@ class TestVariantParsing:
             action_summary="Test",
         )
 
-        variants = generator._parse_variants(response)
+        variants = await generator._parse_variants(response, sample_manifest)
 
         assert "success" in variants
         assert variants["success"].variant_type == VariantType.SUCCESS
         assert variants["success"].narrative == "You succeed!"
 
-    def test_parse_variants_with_state_deltas(
-        self, mock_db, mock_game_session, mock_llm
+    async def test_parse_variants_with_state_deltas(
+        self, mock_db, mock_game_session, mock_llm, sample_manifest
     ):
         """Test parsing variants with state deltas."""
         generator = BranchGenerator(mock_db, mock_game_session, mock_llm)
@@ -505,13 +507,18 @@ class TestVariantParsing:
             action_summary="Pick up item",
         )
 
-        variants = generator._parse_variants(response)
+        variants = await generator._parse_variants(response, sample_manifest)
 
-        assert len(variants["success"].state_deltas) == 1
-        assert variants["success"].state_deltas[0].target_key == "sword_001"
+        # State deltas may include auto-created items if needed
+        assert len(variants["success"].state_deltas) >= 1
+        # Find the original TRANSFER_ITEM delta
+        transfer_delta = next(
+            d for d in variants["success"].state_deltas if d.target_key == "sword_001"
+        )
+        assert transfer_delta.target_key == "sword_001"
 
-    def test_parse_variants_with_skill_check(
-        self, mock_db, mock_game_session, mock_llm
+    async def test_parse_variants_with_skill_check(
+        self, mock_db, mock_game_session, mock_llm, sample_manifest
     ):
         """Test parsing variants with skill checks."""
         generator = BranchGenerator(mock_db, mock_game_session, mock_llm)
@@ -531,14 +538,14 @@ class TestVariantParsing:
             action_summary="Pick lock",
         )
 
-        variants = generator._parse_variants(response)
+        variants = await generator._parse_variants(response, sample_manifest)
 
         assert variants["success"].requires_dice is True
         assert variants["success"].skill == "lockpicking"
         assert variants["success"].dc == 15
 
-    def test_parse_variants_unknown_type_skipped(
-        self, mock_db, mock_game_session, mock_llm
+    async def test_parse_variants_unknown_type_skipped(
+        self, mock_db, mock_game_session, mock_llm, sample_manifest
     ):
         """Test that unknown variant types are skipped."""
         generator = BranchGenerator(mock_db, mock_game_session, mock_llm)
@@ -561,7 +568,7 @@ class TestVariantParsing:
             action_summary="Test",
         )
 
-        variants = generator._parse_variants(response)
+        variants = await generator._parse_variants(response, sample_manifest)
 
         # Unknown type skipped, success included
         assert "unknown_type" not in variants

@@ -8,12 +8,15 @@ These schemas define the core data structures used for:
 - State deltas (changes to apply on collapse)
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any
 
 from src.world_server.schemas import PredictionReason
+
+logger = logging.getLogger(__name__)
 
 
 class ActionType(str, Enum):
@@ -224,6 +227,7 @@ class QuantumMetrics:
     branches_collapsed: int = 0
     branches_expired: int = 0
     branches_invalidated: int = 0  # Stale state detected
+    regenerations_triggered: int = 0  # Deltas too broken to repair
 
     # Variant selection
     successes: int = 0
@@ -316,6 +320,11 @@ class QuantumMetrics:
         """Record a branch was invalidated due to stale state."""
         self.branches_invalidated += 1
 
+    def record_regeneration(self, reason: str) -> None:
+        """Record that branch regeneration was triggered due to unfixable deltas."""
+        self.regenerations_triggered += 1
+        logger.debug(f"Regeneration triggered: {reason}")
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for logging/display."""
         return {
@@ -328,6 +337,7 @@ class QuantumMetrics:
             "branches_collapsed": self.branches_collapsed,
             "branches_expired": self.branches_expired,
             "branches_invalidated": self.branches_invalidated,
+            "regenerations_triggered": self.regenerations_triggered,
             "avg_generation_time_ms": f"{self.avg_generation_time_ms:.0f}",
             "avg_cache_hit_latency_ms": f"{self.avg_cache_hit_latency_ms:.1f}",
             "success_rate": f"{self.success_rate:.1%}",

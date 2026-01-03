@@ -26,6 +26,10 @@ from src.database.models.session import GameSession
 from src.gm.grounding import GroundingManifest
 from src.llm.base import LLMProvider
 from src.llm.message_types import Message
+from src.world_server.quantum.delta_postprocessor import (
+    DeltaPostProcessor,
+    RegenerationNeeded,
+)
 from src.world_server.quantum.schemas import (
     ActionPrediction,
     ActionType,
@@ -144,12 +148,15 @@ class BranchGenerator:
                 parsed = response.parsed_content
                 if isinstance(parsed, dict):
                     parsed = BranchGenerationResponse.model_validate(parsed)
-                variants = self._parse_variants(parsed)
+                variants = await self._parse_variants(parsed, manifest)
             else:
                 # Fallback: try to parse from raw content
                 variants = self._generate_fallback_variants(action, gm_decision)
                 logger.warning("Using fallback variants - structured output failed")
 
+        except RegenerationNeeded:
+            # Re-raise to let pipeline handle regeneration
+            raise
         except Exception as e:
             logger.error(f"Branch generation failed: {e}")
             variants = self._generate_fallback_variants(action, gm_decision)
@@ -438,16 +445,22 @@ Generate the JSON response now."""
         else:
             return f"Perform {action_type.value}"
 
-    def _parse_variants(
-        self, response: BranchGenerationResponse
+    async def _parse_variants(
+        self, response: BranchGenerationResponse, manifest: GroundingManifest
     ) -> dict[str, OutcomeVariant]:
         """Parse LLM response into OutcomeVariant objects.
 
+        Applies delta post-processing to fix common LLM errors.
+
         Args:
             response: Structured response from LLM
+            manifest: Grounding manifest for entity validation
 
         Returns:
             Dict mapping variant_type to OutcomeVariant
+
+        Raises:
+            RegenerationNeeded: If deltas have unfixable errors
         """
         variants = {}
 
@@ -471,13 +484,27 @@ Generate the JSON response now."""
                 except ValueError:
                     logger.warning(f"Unknown delta type: {gen_delta.delta_type}")
 
+            # Post-process deltas to fix common LLM errors
+            # Uses async version for LLM clarification of unknown keys
+            processor = DeltaPostProcessor(manifest)
+            result = await processor.process_async(state_deltas, self.llm)
+
+            if result.needs_regeneration:
+                raise RegenerationNeeded(result.regeneration_reason or "Unknown error")
+
+            if result.repairs_made:
+                logger.info(
+                    f"Repaired {len(result.repairs_made)} delta issues "
+                    f"in variant '{variant_type.value}'"
+                )
+
             variant = OutcomeVariant(
                 variant_type=variant_type,
                 requires_dice=gen_variant.requires_skill_check,
                 skill=gen_variant.skill,
                 dc=gen_variant.dc,
                 narrative=gen_variant.narrative,
-                state_deltas=state_deltas,
+                state_deltas=result.deltas,  # Use fixed deltas
                 time_passed_minutes=gen_variant.time_passed_minutes,
             )
 

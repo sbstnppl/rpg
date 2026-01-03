@@ -42,6 +42,7 @@ from src.world_server.quantum.intent_classifier import (
     CachedBranchSummary,
 )
 from src.world_server.quantum.branch_generator import BranchContext, BranchGenerator
+from src.world_server.quantum.delta_postprocessor import RegenerationNeeded
 
 # Split architecture imports (Phases 2-5)
 from src.world_server.quantum.reasoning import (
@@ -887,6 +888,80 @@ class QuantumPipeline:
                 generation_time_ms=generation_time_ms,
             )
 
+        except RegenerationNeeded as e:
+            # Deltas were too broken to repair - try once more
+            self._metrics.record_regeneration(e.reason)
+            logger.warning(f"Regenerating branch: {e.reason}")
+
+            try:
+                branch = await self.branch_generator.generate_branch(
+                    action=action,
+                    gm_decision=selected_decision,
+                    manifest=generation_manifest,
+                    context=context,
+                )
+
+                generation_time_ms = (time.perf_counter() - gen_start) * 1000
+
+                # Validate and collapse the retry
+                validator = BranchValidator(generation_manifest, self.db, self.game_session)
+                validation_result = validator.validate(branch)
+
+                if not validation_result.valid:
+                    for issue in validation_result.errors:
+                        logger.warning(f"Branch validation: {issue.category} - {issue.message}")
+
+                    should_block, fallback_narrative = _has_blocking_grounding_errors(
+                        validation_result
+                    )
+                    if should_block:
+                        return TurnResult(
+                            narrative=fallback_narrative,
+                            was_cache_hit=False,
+                            matched_action=action,
+                            match_confidence=confidence,
+                            generation_time_ms=generation_time_ms,
+                            used_fallback=True,
+                            error=f"Validation errors after retry: {', '.join(err.message for err in validation_result.errors)}",
+                        )
+
+                if validation_result.valid:
+                    await self.branch_cache.put_branch(branch)
+
+                collapse_result = await self.collapse_manager.collapse_branch(
+                    branch=branch,
+                    player_input=player_input,
+                    turn_number=turn_number,
+                    attribute_modifier=attribute_modifier,
+                    skill_modifier=skill_modifier,
+                    advantage_type=advantage_type,
+                )
+
+                return TurnResult(
+                    narrative=collapse_result.narrative,
+                    raw_narrative=collapse_result.raw_narrative,
+                    was_cache_hit=False,
+                    matched_action=action,
+                    match_confidence=confidence,
+                    gm_decision=selected_decision,
+                    had_twist=collapse_result.had_twist,
+                    collapse_result=collapse_result,
+                    generation_time_ms=generation_time_ms,
+                )
+
+            except Exception as retry_error:
+                logger.error(f"Retry also failed: {retry_error}")
+                generation_time_ms = (time.perf_counter() - gen_start) * 1000
+                return TurnResult(
+                    narrative=f"You attempt to {player_input.lower()[:50]}...",
+                    was_cache_hit=False,
+                    matched_action=action,
+                    match_confidence=confidence,
+                    generation_time_ms=generation_time_ms,
+                    error=f"Regeneration failed: {retry_error}",
+                    used_fallback=True,
+                )
+
         except Exception as e:
             logger.error(f"Branch generation failed: {e}")
             generation_time_ms = (time.perf_counter() - gen_start) * 1000
@@ -1696,6 +1771,11 @@ class QuantumPipeline:
                             )
                             await self.branch_cache.put_branch(branch)
                             branches_generated += 1
+
+                        except RegenerationNeeded as e:
+                            # Skip branches with unfixable deltas during anticipation
+                            self._metrics.record_regeneration(e.reason)
+                            logger.debug(f"Anticipation skipped (regeneration): {e.reason}")
 
                         except Exception as e:
                             logger.warning(f"Anticipation generation failed: {e}")
