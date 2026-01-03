@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **Narrative Time Consistency** - Pass game time context to narrator engine
+  - Added `game_time`, `game_period`, `game_day` fields to `NarrationContext` (`src/world_server/quantum/narrator.py`)
+  - Added Time of Day section to `NARRATOR_SYSTEM_PROMPT` with period-specific guidance
+  - Added `_get_time_state()` and `_calculate_game_period()` helpers to pipeline (`src/world_server/quantum/pipeline.py`)
+  - Both split architecture PHASE 4 locations now pass time context to narrator
+  - 14 new tests for time context handling
+
 - **Intent Classifier Speech Acts** - Fix dialog requests misclassified as questions
   - "ask NPC if X" now correctly classified as ACTION instead of QUESTION (`src/world_server/quantum/intent_classifier.py`)
   - Added "Speech Acts vs Meta Questions" section to classifier prompt

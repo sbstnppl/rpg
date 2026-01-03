@@ -497,6 +497,40 @@ class QuantumPipeline:
         player = self._get_player_entity()
         return player.id if player else 0
 
+    def _get_time_state(self) -> TimeState | None:
+        """Get current time state for the session."""
+        return (
+            self.db.query(TimeState)
+            .filter(TimeState.session_id == self.game_session.id)
+            .first()
+        )
+
+    def _calculate_game_period(self, game_time: str) -> str:
+        """Calculate period of day from time string.
+
+        Args:
+            game_time: Time in "HH:MM" or "HH:MM:SS" format.
+
+        Returns:
+            Period string: "night", "dawn", "morning", "afternoon", or "evening".
+        """
+        try:
+            hours = int(str(game_time).split(":")[0])
+            if hours < 6:
+                return "night"
+            elif hours < 7:
+                return "dawn"
+            elif hours < 12:
+                return "morning"
+            elif hours < 18:
+                return "afternoon"
+            elif hours < 21:
+                return "evening"
+            else:
+                return "night"
+        except (ValueError, IndexError):
+            return "afternoon"  # Default fallback
+
     def _select_gm_decision(self, decisions: list[GMDecision]) -> GMDecision:
         """Select a GM decision based on probabilities.
 
@@ -1181,6 +1215,12 @@ class QuantumPipeline:
             )
 
             # ===== PHASE 4: Narration =====
+            # Fetch time state for narrator context
+            time_state = self._get_time_state()
+            game_time = str(time_state.current_time)[:5] if time_state else "12:00"
+            game_day = time_state.current_day if time_state else 1
+            game_period = self._calculate_game_period(game_time)
+
             # Build narration context with full key mapping
             narration_context = NarrationContext(
                 what_happens=outcome.what_happens,
@@ -1197,6 +1237,9 @@ class QuantumPipeline:
                     item.display_name: item.key
                     for item in (manifest.items_at_location or {}).values()
                 },
+                game_time=game_time,
+                game_period=game_period,
+                game_day=game_day,
             )
 
             narration_response = await self.narrator_engine.narrate(narration_context)
@@ -1567,6 +1610,12 @@ class QuantumPipeline:
             )
 
             # ===== PHASE 4: Narration =====
+            # Fetch time state for narrator context
+            time_state = self._get_time_state()
+            game_time = str(time_state.current_time)[:5] if time_state else "12:00"
+            game_day = time_state.current_day if time_state else 1
+            game_period = self._calculate_game_period(game_time)
+
             # Build narration context with resolved entity keys
             narration_context = NarrationContext(
                 what_happens=outcome.what_happens,
@@ -1583,6 +1632,9 @@ class QuantumPipeline:
                     item.display_name: item.key
                     for item in (manifest.items_at_location or {}).values()
                 },
+                game_time=game_time,
+                game_period=game_period,
+                game_day=game_day,
             )
 
             narration_response = await self.narrator_engine.narrate(narration_context)

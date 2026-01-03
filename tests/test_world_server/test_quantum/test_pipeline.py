@@ -674,3 +674,64 @@ class TestEdgeCases:
 
             # Should handle gracefully
             assert result is not None
+
+
+class TestCalculateGamePeriod:
+    """Tests for _calculate_game_period helper method."""
+
+    @pytest.fixture
+    def pipeline(self, mock_db, mock_game_session, mock_llm_provider):
+        """Create pipeline for testing."""
+        with patch("src.world_server.quantum.pipeline.GMContextBuilder"):
+            return QuantumPipeline(
+                db=mock_db,
+                game_session=mock_game_session,
+                llm_provider=mock_llm_provider,
+            )
+
+    def test_night_early_morning(self, pipeline):
+        """Test times before 6am return night."""
+        assert pipeline._calculate_game_period("00:00") == "night"
+        assert pipeline._calculate_game_period("03:30") == "night"
+        assert pipeline._calculate_game_period("05:59") == "night"
+
+    def test_dawn(self, pipeline):
+        """Test 6-7am returns dawn."""
+        assert pipeline._calculate_game_period("06:00") == "dawn"
+        assert pipeline._calculate_game_period("06:30") == "dawn"
+        assert pipeline._calculate_game_period("06:59") == "dawn"
+
+    def test_morning(self, pipeline):
+        """Test 7am-noon returns morning."""
+        assert pipeline._calculate_game_period("07:00") == "morning"
+        assert pipeline._calculate_game_period("09:00") == "morning"
+        assert pipeline._calculate_game_period("11:59") == "morning"
+
+    def test_afternoon(self, pipeline):
+        """Test noon-6pm returns afternoon."""
+        assert pipeline._calculate_game_period("12:00") == "afternoon"
+        assert pipeline._calculate_game_period("15:00") == "afternoon"
+        assert pipeline._calculate_game_period("17:59") == "afternoon"
+
+    def test_evening(self, pipeline):
+        """Test 6pm-9pm returns evening."""
+        assert pipeline._calculate_game_period("18:00") == "evening"
+        assert pipeline._calculate_game_period("19:30") == "evening"
+        assert pipeline._calculate_game_period("20:59") == "evening"
+
+    def test_night_late(self, pipeline):
+        """Test 9pm onwards returns night."""
+        assert pipeline._calculate_game_period("21:00") == "night"
+        assert pipeline._calculate_game_period("23:00") == "night"
+        assert pipeline._calculate_game_period("23:59") == "night"
+
+    def test_invalid_time_returns_afternoon(self, pipeline):
+        """Test invalid time strings fall back to afternoon."""
+        assert pipeline._calculate_game_period("invalid") == "afternoon"
+        assert pipeline._calculate_game_period("") == "afternoon"
+        assert pipeline._calculate_game_period("not:time") == "afternoon"
+
+    def test_handles_seconds(self, pipeline):
+        """Test handles HH:MM:SS format."""
+        assert pipeline._calculate_game_period("15:30:45") == "afternoon"
+        assert pipeline._calculate_game_period("08:00:00") == "morning"

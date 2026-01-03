@@ -101,6 +101,18 @@ You MUST only reference entities that are provided in the key mapping.
 - NEVER invent new entity keys
 - NEVER reference NPCs, items, or locations not in the mapping
 
+## Time of Day
+
+CRITICAL: Match your narrative to the time period. The current time will be provided in the prompt.
+
+- **morning/dawn** (5am-12pm): sunrise, morning light, dew, breakfast smells, early risers
+- **afternoon** (12pm-6pm): midday sun, warm light, lunch/afternoon activity, busy
+- **evening** (6pm-9pm): sunset, lanterns lighting, dinner time, winding down
+- **night** (9pm-5am): darkness, moonlight, stars, candlelight, quiet, late hours
+
+Do NOT describe morning light or early patrons when it's afternoon/evening/night.
+Do NOT describe sunset or dinner crowds when it's morning.
+
 ## Examples
 
 Input:
@@ -148,6 +160,11 @@ class NarrationContext:
 
     # Optional hints for tone
     tone_hints: list[str] = field(default_factory=list)
+
+    # Time context for temporal consistency
+    game_time: str = ""  # "14:30" format
+    game_period: str = ""  # "morning", "afternoon", "evening", "night"
+    game_day: int = 1
 
     @property
     def full_key_mapping(self) -> dict[str, str]:
@@ -263,6 +280,12 @@ class NarratorEngine:
             lines.append(f"## Location: {context.location_display}")
             lines.append("")
 
+        # Add time context if available
+        if context.game_period:
+            lines.append(f"## Time: Day {context.game_day}, {context.game_time} ({context.game_period})")
+            lines.append("Match your descriptions to this time period!")
+            lines.append("")
+
         # Build key mapping section
         lines.append("## Entity Key Mapping")
         lines.append("Use these EXACT keys in [key:display] format:")
@@ -326,6 +349,9 @@ def build_narration_context(
     npcs_in_scene: dict[str, str] | None = None,
     items_in_scene: dict[str, str] | None = None,
     tone_hints: list[str] | None = None,
+    game_time: str = "",
+    game_period: str = "",
+    game_day: int = 1,
 ) -> NarrationContext:
     """Build NarrationContext from components.
 
@@ -341,6 +367,9 @@ def build_narration_context(
         npcs_in_scene=npcs_in_scene or {},
         items_in_scene=items_in_scene or {},
         tone_hints=tone_hints or [],
+        game_time=game_time,
+        game_period=game_period,
+        game_day=game_day,
     )
 
 

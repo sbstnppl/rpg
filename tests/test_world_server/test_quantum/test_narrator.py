@@ -310,3 +310,121 @@ class TestNarratorEngine:
         result = narrator._fallback_narration(context)
 
         assert "[hero_001:you]" in result.narrative or "[hero_001:You]" in result.narrative
+
+
+class TestNarrationContextTimeFields:
+    """Tests for time context fields in NarrationContext."""
+
+    def test_time_fields_defaults(self):
+        """Test that time fields have sensible defaults."""
+        context = NarrationContext(
+            what_happens="Something happens",
+            outcome_type="success",
+            key_mapping={},
+            player_key="hero",
+        )
+
+        assert context.game_time == ""
+        assert context.game_period == ""
+        assert context.game_day == 1
+
+    def test_time_fields_can_be_set(self):
+        """Test that time fields can be explicitly set."""
+        context = NarrationContext(
+            what_happens="Something happens",
+            outcome_type="success",
+            key_mapping={},
+            player_key="hero",
+            game_time="15:30",
+            game_period="afternoon",
+            game_day=3,
+        )
+
+        assert context.game_time == "15:30"
+        assert context.game_period == "afternoon"
+        assert context.game_day == 3
+
+    def test_build_narration_context_with_time(self):
+        """Test that helper function accepts time params."""
+        context = build_narration_context(
+            what_happens="Player looks around",
+            outcome_type="success",
+            key_mapping={},
+            player_key="hero_001",
+            game_time="08:00",
+            game_period="morning",
+            game_day=2,
+        )
+
+        assert context.game_time == "08:00"
+        assert context.game_period == "morning"
+        assert context.game_day == 2
+
+
+class TestNarratorEngineTimeContext:
+    """Tests for time context in narrator engine."""
+
+    @pytest.fixture
+    def mock_llm(self):
+        """Create a mock LLM provider."""
+        llm = MagicMock()
+        llm.complete_structured = AsyncMock()
+        return llm
+
+    @pytest.fixture
+    def narrator(self, mock_llm):
+        """Create narrator with mock LLM."""
+        return NarratorEngine(llm=mock_llm)
+
+    def test_build_prompt_includes_time_when_provided(self, narrator):
+        """Test that prompt includes time context when provided."""
+        context = NarrationContext(
+            what_happens="Player looks around",
+            outcome_type="success",
+            key_mapping={},
+            player_key="hero",
+            location_display="The Tavern",
+            location_key="loc_tavern",
+            game_time="15:30",
+            game_period="afternoon",
+            game_day=2,
+        )
+
+        prompt = narrator._build_prompt(context)
+
+        assert "Day 2" in prompt
+        assert "15:30" in prompt
+        assert "afternoon" in prompt
+        assert "Time:" in prompt
+
+    def test_build_prompt_no_time_section_when_empty(self, narrator):
+        """Test that time section is omitted when game_period is empty."""
+        context = NarrationContext(
+            what_happens="Player looks around",
+            outcome_type="success",
+            key_mapping={},
+            player_key="hero",
+            game_time="",
+            game_period="",
+        )
+
+        prompt = narrator._build_prompt(context)
+
+        # Time section should not appear
+        assert "## Time:" not in prompt
+
+    def test_prompt_includes_time_match_instruction(self, narrator):
+        """Test that prompt includes instruction to match time period."""
+        context = NarrationContext(
+            what_happens="Player enters the tavern",
+            outcome_type="success",
+            key_mapping={},
+            player_key="hero",
+            game_time="21:00",
+            game_period="evening",
+            game_day=1,
+        )
+
+        prompt = narrator._build_prompt(context)
+
+        assert "Match your descriptions to this time period" in prompt
