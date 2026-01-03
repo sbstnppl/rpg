@@ -735,3 +735,200 @@ class TestCalculateGamePeriod:
         """Test handles HH:MM:SS format."""
         assert pipeline._calculate_game_period("15:30:45") == "afternoon"
         assert pipeline._calculate_game_period("08:00:00") == "morning"
+
+
+class TestIntentToMatchResult:
+    """Tests for _intent_to_match_result method.
+
+    Validates that the function correctly matches intent classification
+    results to action predictions, with special handling for environmental
+    actions (OBSERVE, WAIT) that don't target specific entities.
+    """
+
+    @pytest.fixture
+    def pipeline(self, mock_db, mock_game_session, mock_llm_provider):
+        """Create a pipeline for testing."""
+        with patch("src.world_server.quantum.pipeline.GMContextBuilder"):
+            return QuantumPipeline(
+                db=mock_db,
+                game_session=mock_game_session,
+                llm_provider=mock_llm_provider,
+            )
+
+    @pytest.fixture
+    def sample_predictions(self):
+        """Create sample predictions including OBSERVE and various action types."""
+        return [
+            ActionPrediction(
+                action_type=ActionType.INTERACT_NPC,
+                target_key="guard_001",
+                input_patterns=["talk.*guard"],
+                probability=0.25,
+                reason=PredictionReason.ADJACENT,
+                display_name="Talk to guard",
+            ),
+            ActionPrediction(
+                action_type=ActionType.MOVE,
+                target_key="village_tavern",
+                input_patterns=["go.*tavern"],
+                probability=0.20,
+                reason=PredictionReason.ADJACENT,
+                display_name="Go to tavern",
+            ),
+            ActionPrediction(
+                action_type=ActionType.OBSERVE,
+                target_key=None,
+                input_patterns=["look around", "examine"],
+                probability=0.15,
+                reason=PredictionReason.ADJACENT,
+                display_name="Look around",
+            ),
+            ActionPrediction(
+                action_type=ActionType.WAIT,
+                target_key=None,
+                input_patterns=["wait", "rest"],
+                probability=0.05,
+                reason=PredictionReason.ADJACENT,
+                display_name="Wait",
+            ),
+        ]
+
+    def test_observe_with_location_target_matches(self, pipeline, sample_predictions):
+        """OBSERVE should match even when target_display contains a location name.
+
+        This is the core bug fix: 'look around the village square' should match
+        OBSERVE even though 'village square' doesn't appear in the prediction's
+        display_name ('Look around').
+        """
+        from src.world_server.quantum.intent import IntentClassification, IntentType
+
+        intent_result = IntentClassification(
+            intent_type=IntentType.ACTION,
+            confidence=0.9,
+            action_type=ActionType.OBSERVE,
+            target_display="village square",  # Location context, not a target
+            raw_input="look around the village square",
+        )
+
+        result = pipeline._intent_to_match_result(intent_result, sample_predictions)
+
+        assert result is not None, "OBSERVE should match despite location in target_display"
+        assert result.prediction.action_type == ActionType.OBSERVE
+        assert result.match_reason == "intent_classifier"
+        assert result.confidence == 0.9
+
+    def test_observe_without_target_matches(self, pipeline, sample_predictions):
+        """OBSERVE without target_display should match."""
+        from src.world_server.quantum.intent import IntentClassification, IntentType
+
+        intent_result = IntentClassification(
+            intent_type=IntentType.ACTION,
+            confidence=0.85,
+            action_type=ActionType.OBSERVE,
+            target_display=None,
+            raw_input="look around",
+        )
+
+        result = pipeline._intent_to_match_result(intent_result, sample_predictions)
+
+        assert result is not None
+        assert result.prediction.action_type == ActionType.OBSERVE
+
+    def test_wait_with_duration_target_matches(self, pipeline, sample_predictions):
+        """WAIT should match even when target_display contains duration text.
+
+        'wait for a few hours' extracts 'a few hours' as target_display,
+        but WAIT predictions have target_key=None and shouldn't require matching.
+        """
+        from src.world_server.quantum.intent import IntentClassification, IntentType
+
+        intent_result = IntentClassification(
+            intent_type=IntentType.ACTION,
+            confidence=0.9,
+            action_type=ActionType.WAIT,
+            target_display="a few hours",  # Duration context, not a target
+            raw_input="wait for a few hours",
+        )
+
+        result = pipeline._intent_to_match_result(intent_result, sample_predictions)
+
+        assert result is not None, "WAIT should match despite duration in target_display"
+        assert result.prediction.action_type == ActionType.WAIT
+        assert result.match_reason == "intent_classifier"
+
+    def test_interact_npc_requires_target_match(self, pipeline, sample_predictions):
+        """INTERACT_NPC should require target matching.
+
+        Unlike OBSERVE/WAIT, NPC interactions target specific entities
+        and should only match if the target is found.
+        """
+        from src.world_server.quantum.intent import IntentClassification, IntentType
+
+        # This should match - 'guard' matches the prediction's display_name
+        intent_result = IntentClassification(
+            intent_type=IntentType.ACTION,
+            confidence=0.9,
+            action_type=ActionType.INTERACT_NPC,
+            target_display="guard",
+            raw_input="talk to the guard",
+        )
+
+        result = pipeline._intent_to_match_result(intent_result, sample_predictions)
+
+        assert result is not None
+        assert result.prediction.action_type == ActionType.INTERACT_NPC
+        assert result.prediction.target_key == "guard_001"
+
+    def test_interact_npc_no_match_wrong_target(self, pipeline, sample_predictions):
+        """INTERACT_NPC should NOT match if target doesn't exist in predictions.
+
+        Ensures entity-targeted actions still require proper target matching.
+        """
+        from src.world_server.quantum.intent import IntentClassification, IntentType
+
+        intent_result = IntentClassification(
+            intent_type=IntentType.ACTION,
+            confidence=0.9,
+            action_type=ActionType.INTERACT_NPC,
+            target_display="blacksmith",  # No blacksmith in predictions
+            raw_input="talk to the blacksmith",
+        )
+
+        result = pipeline._intent_to_match_result(intent_result, sample_predictions)
+
+        # Should NOT match because there's no NPC prediction with blacksmith
+        assert result is None
+
+    def test_move_requires_target_match(self, pipeline, sample_predictions):
+        """MOVE should require target matching to the correct destination."""
+        from src.world_server.quantum.intent import IntentClassification, IntentType
+
+        # This should match - 'tavern' matches the prediction
+        intent_result = IntentClassification(
+            intent_type=IntentType.ACTION,
+            confidence=0.9,
+            action_type=ActionType.MOVE,
+            target_display="tavern",
+            raw_input="go to the tavern",
+        )
+
+        result = pipeline._intent_to_match_result(intent_result, sample_predictions)
+
+        assert result is not None
+        assert result.prediction.action_type == ActionType.MOVE
+        assert result.prediction.target_key == "village_tavern"
+
+    def test_no_action_type_returns_none(self, pipeline, sample_predictions):
+        """Should return None if intent has no action_type."""
+        from src.world_server.quantum.intent import IntentClassification, IntentType
+
+        intent_result = IntentClassification(
+            intent_type=IntentType.ACTION,
+            confidence=0.9,
+            action_type=None,  # No action type
+            raw_input="something vague",
+        )
+
+        result = pipeline._intent_to_match_result(intent_result, sample_predictions)
+
+        assert result is None

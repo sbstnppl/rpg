@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **OBSERVE/WAIT Intent Matching** - Fix "look around" commands causing unintended player movement
+  - Added `UNTARGETED_ACTION_TYPES` set for environmental actions that don't target entities (`src/world_server/quantum/pipeline.py`)
+  - Modified `_intent_to_match_result()` to skip target matching for OBSERVE and WAIT actions
+  - "look around the village square" now correctly matches OBSERVE instead of falling back to fuzzy matcher
+  - 7 new tests for intent-to-match result handling (`tests/test_world_server/test_quantum/test_pipeline.py`)
+
 - **Narrative Time Consistency** - Pass game time context to narrator engine
   - Added `game_time`, `game_period`, `game_day` fields to `NarrationContext` (`src/world_server/quantum/narrator.py`)
   - Added Time of Day section to `NARRATOR_SYSTEM_PROMPT` with period-specific guidance

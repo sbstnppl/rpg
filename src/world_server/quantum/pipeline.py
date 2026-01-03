@@ -80,10 +80,18 @@ from src.world_server.quantum.collapse import (
 from src.world_server.quantum.gm_oracle import GMDecisionOracle
 from src.world_server.quantum.schemas import (
     ActionPrediction,
+    ActionType,
     GMDecision,
     QuantumBranch,
     QuantumMetrics,
 )
+
+# Action types that don't require target matching in intent-to-prediction matching.
+# These are environmental/temporal actions that don't target specific entities -
+# any target_display extracted by the intent classifier refers to context
+# (location name, duration) rather than a targetable entity.
+UNTARGETED_ACTION_TYPES = {ActionType.OBSERVE, ActionType.WAIT}
+
 from src.world_server.quantum.validation import BranchValidator, IssueSeverity
 
 logger = logging.getLogger(__name__)
@@ -729,7 +737,18 @@ class QuantumPipeline:
             if prediction.action_type.value != intent_result.action_type.value:
                 continue
 
-            # Match by target if specified
+            # Skip target matching for environmental actions (OBSERVE, WAIT).
+            # These actions don't target specific entities - any target_display
+            # extracted (like "village square" in "look around the village square")
+            # refers to context, not a targetable entity.
+            if prediction.action_type in UNTARGETED_ACTION_TYPES:
+                return MatchResult(
+                    prediction=prediction,
+                    confidence=intent_result.confidence,
+                    match_reason="intent_classifier",
+                )
+
+            # Match by target if specified (for entity-targeted actions)
             if intent_result.target_display:
                 target_lower = intent_result.target_display.lower()
 
