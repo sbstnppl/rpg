@@ -1382,17 +1382,6 @@ async def _game_loop(
         if turn_result.narrative:
             display_narrative(turn_result.narrative)
 
-            # Immediately persist the turn
-            _save_turn_immediately(
-                db=db,
-                game_session=game_session,
-                turn_number=game_session.total_turns,
-                player_input=player_input,
-                gm_response=turn_result.narrative,
-                player_location=player_location,
-                is_ooc=False,
-            )
-
             # Show cache/latency info
             if turn_result.was_cache_hit:
                 display_info(f"[dim](cache hit, {turn_result.latency_ms:.0f}ms)[/dim]")
@@ -1404,12 +1393,23 @@ async def _game_loop(
             for error in turn_result.errors:
                 display_error(error)
 
-        # Commit after each turn
+        # Commit delta changes and refresh player location BEFORE saving turn
+        # This ensures the turn is saved with the POST-action location, not PRE-action
         db.commit()
-
-        # Refresh player location after turn (may have moved via delta)
         db.refresh(player)
         player_location = _get_player_current_location(player, fallback=player_location)
+
+        # NOW persist the turn with the updated location
+        if turn_result.narrative:
+            _save_turn_immediately(
+                db=db,
+                game_session=game_session,
+                turn_number=game_session.total_turns,
+                player_input=player_input,
+                gm_response=turn_result.narrative,
+                player_location=player_location,
+                is_ooc=False,
+            )
 
 
 def _display_quantum_skill_check(skill_check_result) -> None:

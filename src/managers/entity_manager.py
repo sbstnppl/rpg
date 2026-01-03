@@ -286,38 +286,21 @@ class EntityManager(BaseManager):
         """Get NPCs at a location for scene context.
 
         Args:
-            location_key: Location key to search.
+            location_key: Location key to search (must match exactly).
             alive_only: If True, only return living NPCs.
 
         Returns:
             List of NPC entities at the location.
         """
-        # Get the location's display name for fallback matching
-        location = (
-            self.db.query(Location)
-            .filter(
-                Location.session_id == self.session_id,
-                Location.location_key == location_key,
-            )
-            .first()
-        )
-        display_name = location.display_name if location else None
-
-        # Match by either location_key OR display_name (defensive fix)
-        location_filter = NPCExtension.current_location == location_key
-        if display_name:
-            location_filter = or_(
-                NPCExtension.current_location == location_key,
-                NPCExtension.current_location == display_name,
-            )
-
+        # Match ONLY by location_key - no display_name fallback to prevent
+        # NPCs from appearing at wrong locations due to fuzzy matching
         query = (
             self.db.query(Entity)
             .join(NPCExtension, Entity.id == NPCExtension.entity_id)
             .filter(
                 Entity.session_id == self.session_id,
                 Entity.entity_type == EntityType.NPC,
-                location_filter,
+                NPCExtension.current_location == location_key,
             )
         )
         if alive_only:

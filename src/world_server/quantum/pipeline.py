@@ -158,6 +158,9 @@ class TurnResult:
     error: str | None = None
     used_fallback: bool = False
 
+    # Location after turn (may have changed due to MOVE action)
+    new_location: str | None = None
+
     @property
     def skill_check_result(self):
         """Convenience accessor for skill check result from collapse."""
@@ -810,18 +813,24 @@ class QuantumPipeline:
         generation_manifest = manifest
         generation_location = location_key
 
+        origin_location_for_context = None  # Only set for MOVE actions
         if action.action_type == ActionType.MOVE and action.target_key:
             # Build manifest for destination so narrative describes where player arrives
             try:
                 generation_manifest = await self._build_manifest(
                     self._get_player_id(), action.target_key
                 )
+                origin_location_for_context = location_key  # Remember where we came from
                 generation_location = action.target_key
                 logger.debug(f"Using destination manifest for MOVE to {action.target_key}")
             except Exception as e:
                 logger.warning(f"Failed to build destination manifest: {e}, using current")
 
-        context = self._build_branch_context(generation_location, player_input=player_input)
+        context = self._build_branch_context(
+            generation_location,
+            player_input=player_input,
+            origin_location_key=origin_location_for_context,
+        )
 
         # Generate branch
         try:
@@ -876,6 +885,11 @@ class QuantumPipeline:
                 advantage_type=advantage_type,
             )
 
+            # Determine new location: for MOVE actions, use destination; otherwise unchanged
+            new_location = location_key
+            if action.action_type == ActionType.MOVE and action.target_key:
+                new_location = action.target_key
+
             return TurnResult(
                 narrative=collapse_result.narrative,
                 raw_narrative=collapse_result.raw_narrative,
@@ -886,6 +900,7 @@ class QuantumPipeline:
                 had_twist=collapse_result.had_twist,
                 collapse_result=collapse_result,
                 generation_time_ms=generation_time_ms,
+                new_location=new_location,
             )
 
         except RegenerationNeeded as e:
@@ -937,6 +952,11 @@ class QuantumPipeline:
                     advantage_type=advantage_type,
                 )
 
+                # Determine new location: for MOVE actions, use destination; otherwise unchanged
+                new_location = location_key
+                if action.action_type == ActionType.MOVE and action.target_key:
+                    new_location = action.target_key
+
                 return TurnResult(
                     narrative=collapse_result.narrative,
                     raw_narrative=collapse_result.raw_narrative,
@@ -947,6 +967,7 @@ class QuantumPipeline:
                     had_twist=collapse_result.had_twist,
                     collapse_result=collapse_result,
                     generation_time_ms=generation_time_ms,
+                    new_location=new_location,
                 )
 
             except Exception as retry_error:
@@ -978,13 +999,17 @@ class QuantumPipeline:
             )
 
     def _build_branch_context(
-        self, location_key: str, player_input: str | None = None
+        self,
+        location_key: str,
+        player_input: str | None = None,
+        origin_location_key: str | None = None,
     ) -> BranchContext:
         """Build context for branch generation.
 
         Args:
-            location_key: Current location
+            location_key: Current location (or destination for MOVE)
             player_input: Optional player input for topic-awareness
+            origin_location_key: For MOVE actions, the origin location
 
         Returns:
             BranchContext with scene info
@@ -1044,6 +1069,21 @@ class QuantumPipeline:
         player = self._get_player_entity()
         player_key = player.entity_key if player else "player"
 
+        # For MOVE actions, get origin location display name
+        origin_location_display = None
+        if origin_location_key:
+            origin_location = (
+                self.db.query(Location)
+                .filter(
+                    Location.session_id == self.game_session.id,
+                    Location.location_key == origin_location_key,
+                )
+                .first()
+            )
+            origin_location_display = (
+                origin_location.display_name if origin_location else origin_location_key
+            )
+
         return BranchContext(
             location_key=location_key,
             location_display=location_display,
@@ -1053,6 +1093,8 @@ class QuantumPipeline:
             recent_events=recent_events,
             player_input=player_input,
             game_period=game_period,
+            origin_location_key=origin_location_key,
+            origin_location_display=origin_location_display,
         )
 
     # =========================================================================

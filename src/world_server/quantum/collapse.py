@@ -700,10 +700,15 @@ class BranchCollapseManager:
                 Location.location_key == location_key
             ).first()
             if not location:
-                logger.warning(
-                    f"UPDATE_LOCATION skipped: location '{location_key}' not found in session"
+                # Get available locations for error message
+                available = self.db.query(Location.location_key).filter(
+                    Location.session_id == self.game_session.id
+                ).all()
+                available_keys = [loc[0] for loc in available]
+                raise ValueError(
+                    f"UPDATE_LOCATION failed: location '{location_key}' not found. "
+                    f"Available locations: {available_keys}"
                 )
-                return
 
             entity_manager = EntityManager(self.db, self.game_session)
             entity_manager.update_location(

@@ -84,6 +84,9 @@ class BranchContext:
     recent_events: list[str]  # Recent narrative summaries
     player_input: str | None = None  # Actual player input for topic-awareness
     game_period: str = ""  # e.g., "morning", "afternoon", "evening", "night"
+    # For MOVE actions: origin location so narrative describes departure correctly
+    origin_location_key: str | None = None
+    origin_location_display: str | None = None
 
 
 class BranchGenerator:
@@ -321,13 +324,24 @@ The twist should naturally emerge from the grounding facts. Do not force it - le
         if context.player_input:
             player_input_context = f'\nPLAYER INPUT: "{context.player_input}"'
 
+        # Add movement context for MOVE actions to clarify direction
+        movement_context = ""
+        if action.action_type == ActionType.MOVE and context.origin_location_key:
+            movement_context = f"""
+MOVEMENT DIRECTION: Player is traveling FROM {context.origin_location_display or context.origin_location_key} TO {context.location_display}.
+The narrative should describe:
+1. Leaving {context.origin_location_display or context.origin_location_key}
+2. The journey/transition
+3. Arriving at {context.location_display}
+The SCENE below shows the DESTINATION - describe arrival there, NOT departure from there."""
+
         prompt = f"""Generate narrative variants for this player action.
 
 SCENE: {context.location_display}
 TIME: Day {context.game_day}, {context.game_time} ({context.game_period})
 PLAYER ENTITY KEY: {context.player_key}
 {entities_list}
-
+{movement_context}
 PLAYER ACTION: {action_desc}{player_input_context}
 {twist_context}
 

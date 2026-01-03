@@ -35,6 +35,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **Movement Location Recording** - Fix turn saved with pre-action location instead of post-action
+  - Reordered commit/refresh before save in game loop (`src/cli/commands/game.py`)
+  - Turns now correctly record where player ended up, not where they started
+
+- **MOVE Narrative Direction Reversed** - Fix LLM generating backwards travel narratives
+  - Added `origin_location_key` and `origin_location_display` to BranchContext (`src/world_server/quantum/branch_generator.py`)
+  - Added MOVEMENT DIRECTION section to prompt clarifying FROM→TO direction
+  - Pipeline passes origin location when building context for MOVE actions (`src/world_server/quantum/pipeline.py`)
+  - Added `new_location` field to TurnResult for tracking post-move location
+
+- **NPC False Matches by Display Name** - Fix NPCs appearing at wrong locations
+  - Removed `display_name` fallback in `get_npcs_in_scene()` (`src/managers/entity_manager.py`)
+  - Now uses strict `location_key` matching only
+
+- **Silent UPDATE_LOCATION Failure** - Fix invalid location keys silently skipped
+  - Now raises ValueError with available location keys (`src/world_server/quantum/collapse.py`)
+
 - **Item Location Query** - Fix items at location not appearing in manifest
   - `get_items_at_location()` now checks both `storage_location_id` and `owner_location_id` (`src/managers/item_manager.py`)
 
