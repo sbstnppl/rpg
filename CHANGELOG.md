@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **UPDATE_LOCATION Destination Validation** - Reject deltas with non-existent location destinations
+  - Added destination validation in `_check_unknown_keys()` against manifest exits (`src/world_server/quantum/delta_postprocessor.py`)
+  - Added `_check_unknown_locations()` method for explicit location checking
+  - Invalid destinations trigger regeneration (cannot be clarified via LLM like entity keys)
+  - 4 new tests for destination validation (`tests/test_world_server/test_quantum/test_delta_postprocessor.py`)
+
 - **OBSERVE/WAIT Intent Matching** - Fix "look around" commands causing unintended player movement
   - Added `UNTARGETED_ACTION_TYPES` set for environmental actions that don't target entities (`src/world_server/quantum/pipeline.py`)
   - Modified `_intent_to_match_result()` to skip target matching for OBSERVE and WAIT actions

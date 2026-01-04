@@ -304,7 +304,7 @@ class DeltaPostProcessor:
                             f"UPDATE_RELATIONSHIP to_key '{to_key}' unknown",
                         )
 
-            # Check UPDATE_LOCATION (entity must exist)
+            # Check UPDATE_LOCATION (entity must exist AND destination must exist)
             if delta.delta_type == DeltaType.UPDATE_LOCATION:
                 entity_key = delta.target_key
                 if not self.manifest.contains_key(entity_key):
@@ -313,6 +313,39 @@ class DeltaPostProcessor:
                             True,
                             f"UPDATE_LOCATION for unknown entity '{entity_key}'",
                         )
+
+                # Validate destination location exists in exits
+                destination = delta.changes.get("location_key")
+                if destination and destination not in self.manifest.exits:
+                    return (
+                        True,
+                        f"UPDATE_LOCATION to unknown destination '{destination}'. "
+                        f"Valid exits: {list(self.manifest.exits.keys())}",
+                    )
+
+        return False, None
+
+    def _check_unknown_locations(
+        self, deltas: list[StateDelta]
+    ) -> tuple[bool, str | None]:
+        """Check for UPDATE_LOCATION deltas referencing non-existent destinations.
+
+        Unlike entity keys which can be clarified via LLM, location destinations
+        must exist in the manifest's exits. Invalid locations cannot be fixed and
+        require regeneration.
+
+        Returns:
+            (needs_regeneration, reason) tuple.
+        """
+        for delta in deltas:
+            if delta.delta_type == DeltaType.UPDATE_LOCATION:
+                destination = delta.changes.get("location_key")
+                if destination and destination not in self.manifest.exits:
+                    return (
+                        True,
+                        f"UPDATE_LOCATION to unknown destination '{destination}'. "
+                        f"Valid exits: {list(self.manifest.exits.keys())}",
+                    )
 
         return False, None
 
@@ -491,6 +524,15 @@ class DeltaPostProcessor:
 
         # 1. Check for hard conflicts (CREATE+DELETE, duplicates, negative time)
         needs_regen, reason = self._check_conflicts(deltas)
+        if needs_regen:
+            return PostProcessResult(
+                deltas=deltas,
+                needs_regeneration=True,
+                regeneration_reason=reason,
+            )
+
+        # 1b. Check for unknown location destinations (can't be clarified via LLM)
+        needs_regen, reason = self._check_unknown_locations(deltas)
         if needs_regen:
             return PostProcessResult(
                 deltas=deltas,

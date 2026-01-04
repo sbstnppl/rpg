@@ -667,6 +667,40 @@ class TestUnknownKeyDetection:
         assert result.needs_regeneration
         assert "UPDATE_LOCATION for unknown entity" in result.regeneration_reason
 
+    def test_update_location_unknown_destination(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """UPDATE_LOCATION to non-existent destination should trigger regeneration."""
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.UPDATE_LOCATION,
+                target_key="test_hero",  # Known entity (player)
+                changes={"location_key": "village_tavern_kitchen"},  # Not in exits!
+            ),
+        ]
+
+        result = processor.process(deltas)
+
+        assert result.needs_regeneration
+        assert "unknown destination" in result.regeneration_reason
+        assert "village_tavern_kitchen" in result.regeneration_reason
+
+    def test_update_location_valid_destination(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """UPDATE_LOCATION to valid exit should pass validation."""
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.UPDATE_LOCATION,
+                target_key="test_hero",  # Known entity (player)
+                changes={"location_key": "market_001"},  # Valid exit in sample_manifest
+            ),
+        ]
+
+        result = processor.process(deltas)
+
+        assert not result.needs_regeneration
+
 
 # =============================================================================
 # Test: Exception Class
@@ -1121,6 +1155,44 @@ class TestProcessAsync:
 
         assert result.needs_regeneration
         assert "Conflicting" in (result.regeneration_reason or "")
+
+    async def test_process_async_unknown_destination_triggers_regen(
+        self, sample_manifest: GroundingManifest, mock_llm
+    ) -> None:
+        """UPDATE_LOCATION to unknown destination should trigger regeneration in async path."""
+        processor = DeltaPostProcessor(sample_manifest)
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.UPDATE_LOCATION,
+                target_key="test_hero",  # Known entity (player)
+                changes={"location_key": "village_tavern_kitchen"},  # Not in exits!
+            ),
+        ]
+
+        result = await processor.process_async(deltas, mock_llm)
+
+        assert result.needs_regeneration
+        assert "unknown destination" in result.regeneration_reason
+        assert "village_tavern_kitchen" in result.regeneration_reason
+        # LLM should NOT be called for location validation
+        mock_llm.complete.assert_not_called()
+
+    async def test_process_async_valid_destination_passes(
+        self, sample_manifest: GroundingManifest, mock_llm
+    ) -> None:
+        """UPDATE_LOCATION to valid exit should pass validation in async path."""
+        processor = DeltaPostProcessor(sample_manifest)
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.UPDATE_LOCATION,
+                target_key="test_hero",  # Known entity (player)
+                changes={"location_key": "market_001"},  # Valid exit in sample_manifest
+            ),
+        ]
+
+        result = await processor.process_async(deltas, mock_llm)
+
+        assert not result.needs_regeneration
 
     async def test_process_async_llm_error_defaults_to_create(
         self, sample_manifest: GroundingManifest, mock_llm
