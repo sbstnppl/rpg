@@ -19,22 +19,35 @@ for issues and comparing against documented expectations.
 
 ### Phase 1: Setup
 
-1. **Read documentation for expectations**:
+1. **Check for issues awaiting verification**:
+   - Scan `docs/issues/*/README.md` for Status: "Awaiting Verification"
+   - List any found issues with their verification count:
+     ```
+     Issues Awaiting Verification:
+     - item-state-desync-ref-based (0/3)
+     - narrator-key-format (2/3)
+
+     These issues will be checked after the play test.
+     ```
+   - If none found, continue silently
+
+2. **Read documentation for expectations**:
    - Read `docs/gm-pipeline-e2e-testing.md` for general expectations
    - Read `docs/quantum-branching/README.md` for quantum pipeline specifics
    - Note: LLM is qwen3 via Ollama (reasoning) and magmell (narration), not Anthropic
 
-2. **Create game session**:
+3. **Create game session**:
    ```bash
    source .venv/bin/activate && python -m src.main game start --auto
    ```
    - Note the session ID from output
    - Game creates: player character, starting location, initial NPCs/items
 
-3. **Initialize tracking** (use TodoWrite):
+4. **Initialize tracking** (use TodoWrite):
    - Milestones: 0
    - Issues: 0
    - Turn: 0
+   - Pending verifications: {list from step 1}
 
 ### Phase 2: Gameplay Loop
 
@@ -230,8 +243,55 @@ OBSERVATIONS:
 - {Any patterns noticed}
 - {Recommendations}
 
+PENDING VERIFICATIONS:
+- {issue-name} ({X/Y}) - will check after report
+
 Log location: logs/llm/session_{id}/
 ```
+
+### Phase 5: Issue Verification
+
+If issues were awaiting verification (from Phase 1):
+
+1. **For each issue awaiting verification**, ask:
+   ```
+   ═══════════════════════════════════════════
+   VERIFICATION CHECK: {issue-name}
+   ═══════════════════════════════════════════
+
+   Issue: {brief description from README}
+   Current count: {X/Y}
+
+   During this play test, did you observe this issue?
+
+   1. ✓ No - Issue appears fixed (record PASS)
+   2. ✗ Yes - Issue still occurs (record FAIL)
+   3. ⊘ N/A - Didn't test this scenario (skip)
+   ```
+
+2. **For PASS**: Execute `/tackle verify {issue-name}` logic:
+   - Increment count
+   - Update Last Verified date
+   - Archive if threshold reached
+
+3. **For FAIL**: Execute `/tackle verify {issue-name}` logic:
+   - Reset count to 0
+   - Set status back to "In Progress"
+
+4. **For N/A**: Skip, leave unchanged
+
+5. **Display verification summary**:
+   ```
+   ═══════════════════════════════════════════
+   VERIFICATION SUMMARY
+   ═══════════════════════════════════════════
+
+   ✓ item-state-desync-ref-based: PASS (1/3 → 2/3)
+   ✗ narrator-key-format: FAIL (2/3 → 0/3, reopened)
+   ⊘ ooc-handling: SKIPPED
+
+   Next play test will continue verification.
+   ```
 
 ## Important Notes
 

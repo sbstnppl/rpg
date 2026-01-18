@@ -1,22 +1,71 @@
 # Tackle Command
 
-Load and work on an **existing issue** from the docs folder.
+Load and work on an **existing issue** from the docs folder, or verify a completed fix.
 
 ## Usage
 
 ```
-/tackle <issue-folder-name>
-/tackle                      # Lists available issues
+/tackle <issue-folder-name>          # Work on an issue
+/tackle verify <issue-folder-name>   # Record verification result
+/tackle                              # Lists available issues
 ```
 
 **Examples:**
 ```
 /tackle narrator-key-format
-/tackle context-aware-location-resolution
+/tackle verify item-state-desync-ref-based
 /tackle                      # Shows list to choose from
 ```
 
 ## Instructions
+
+### If `verify` subcommand - Record verification result:
+
+1. **Verify folder exists**: `docs/issues/<issue-name>/README.md`
+
+2. **Check status** - Must be "Awaiting Verification" or "In Progress"
+
+3. **Ask for verification result**:
+   ```
+   Verification Result for: <issue-name>
+
+   Did the fix work correctly during play-testing?
+
+   1. ✓ Pass - Issue appears fixed
+   2. ✗ Fail - Issue still occurs or regressed
+   ```
+
+4. **On PASS**:
+   - Read current verification count (e.g., `0/3`)
+   - Increment count (e.g., `1/3`)
+   - Update "Last Verified" to today's date (YYYY-MM-DD)
+   - If count reaches threshold (e.g., `3/3`):
+     - Set Status to "Verified"
+     - Move entire folder to `docs/issues/archived/<issue-name>/`
+     - Report: "Issue verified and archived!"
+   - Otherwise:
+     - Keep Status as "Awaiting Verification"
+     - Report: "Verification recorded: 1/3. Need X more successful play-tests."
+
+5. **On FAIL**:
+   - Reset verification count to `0/N` (keep the threshold)
+   - Set Status back to "In Progress"
+   - Update "Last Verified" to today's date
+   - Report: "Verification failed - regression detected. Issue reopened."
+
+6. **Display updated status**:
+   ```
+   ═══════════════════════════════════════════════════════════════
+   VERIFICATION: <issue-name>
+   ═══════════════════════════════════════════════════════════════
+
+   Result: PASS ✓  (or FAIL ✗)
+   Count: 2/3 → 3/3
+   Status: Awaiting Verification → Verified
+
+   Issue archived to: docs/issues/archived/<issue-name>/
+   ═══════════════════════════════════════════════════════════════
+   ```
 
 ### If no argument provided - List available issues:
 
@@ -126,16 +175,20 @@ As you work on the issue:
 
 ## Completion
 
-When all tasks are done:
+When all implementation tasks are done:
 
 1. **Update README.md**:
-   - Set Status to "Done"
+   - Set Status to "Awaiting Verification"
+   - Set Verification to `0/3` (or custom threshold)
    - Fill in all sections
    - Add completion date
 
 2. **Prompt for commit**:
    ```
-   Issue resolved! Run /commit to commit the fix?
+   Implementation complete! Run /commit to commit the fix?
+
+   Note: Issue now needs 3 successful play-test verifications.
+   After each play-test, run: /tackle verify <issue-name>
    ```
 
 ## Status Transitions
@@ -143,9 +196,23 @@ When all tasks are done:
 ```
 Investigating → In Progress (when tackled)
 Planned → In Progress (when tackled)
-In Progress → Done (when all tasks complete)
+In Progress → Awaiting Verification (when implementation complete)
 In Progress → Blocked (if waiting on something)
+Awaiting Verification → Verified (when verification count reaches threshold)
+Awaiting Verification → In Progress (when verification fails - regression)
 ```
+
+## Verification Fields
+
+Add these fields to README.md after Status/Priority:
+```markdown
+**Verification:** 0/3
+**Last Verified:** -
+```
+
+- **Format**: `current/required` (e.g., `0/3`, `2/5`)
+- **Default threshold**: 3 (configurable per-issue by changing the number)
+- **Last Verified**: date (YYYY-MM-DD) or `-` if never verified
 
 ## Example Session
 
@@ -182,3 +249,52 @@ Reading src/narrator/scene_narrator.py...
 ```
 
 *[Claude reads files, updates findings, completes tasks]*
+
+---
+
+**User:** `/tackle verify narrator-key-format`
+
+**Claude:**
+```
+Verification Result for: narrator-key-format
+
+Did the fix work correctly during play-testing?
+
+1. ✓ Pass - Issue appears fixed
+2. ✗ Fail - Issue still occurs or regressed
+```
+
+**User:** 1
+
+**Claude:**
+```
+═══════════════════════════════════════════════════════════════
+VERIFICATION: narrator-key-format
+═══════════════════════════════════════════════════════════════
+
+Result: PASS ✓
+Count: 0/3 → 1/3
+Status: Awaiting Verification
+
+Need 2 more successful play-tests to verify this fix.
+Next: Play-test and run /tackle verify narrator-key-format
+═══════════════════════════════════════════════════════════════
+```
+
+---
+
+**User:** `/tackle verify narrator-key-format` (after 2 more passes)
+
+**Claude:**
+```
+═══════════════════════════════════════════════════════════════
+VERIFICATION: narrator-key-format
+═══════════════════════════════════════════════════════════════
+
+Result: PASS ✓
+Count: 2/3 → 3/3
+Status: Awaiting Verification → Verified
+
+Issue archived to: docs/issues/archived/narrator-key-format/
+═══════════════════════════════════════════════════════════════
+```

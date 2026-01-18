@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Issue Verification Tracking System** - Track play-test verifications before archiving issues
+  - New `/tackle verify <issue-name>` subcommand for recording verification results (`.claude/commands/tackle.md`)
+  - New "Awaiting Verification" and "Verified" status values for issue lifecycle
+  - Configurable verification threshold (default: 3 successful play-tests)
+  - Auto-archive to `docs/issues/archived/` when threshold reached
+  - `/play-test` integration: scans for pending verifications at start, prompts after session (`.claude/commands/play-test.md`)
+  - New `**Verification:** 0/3` and `**Last Verified:** -` fields in issue template (`.claude/commands/issue.md`)
+
 - **Delta Post-Processor with LLM Clarification** - Repairs common LLM errors in state deltas
   - New `DeltaPostProcessor` class with 740 lines of validation and repair logic (`src/world_server/quantum/delta_postprocessor.py`)
   - Async `process_async()` for LLM clarification when entity keys are ambiguous

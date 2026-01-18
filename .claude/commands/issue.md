@@ -39,6 +39,8 @@ Create an **issue documentation folder** for tracking and resolving a detected p
 
 **Status:** Investigating
 **Priority:** Medium
+**Verification:** 0/3
+**Last Verified:** -
 **Detected:** <today's date YYYY-MM-DD>
 **Related Sessions:** <current session context if applicable>
 
@@ -155,7 +157,8 @@ Use these in README.md:
 - **Planned** - Understood, solution designed
 - **In Progress** - Actively being worked on
 - **Blocked** - Waiting on something
-- **Done** - Completed and verified
+- **Awaiting Verification** - Implementation complete, needs play-test verification
+- **Verified** - Reached verification threshold, archived
 
 ## Priority Guidelines
 
