@@ -310,6 +310,26 @@ For ambient NPCs:
 - NEVER mention NPCs in plain prose without [key:display] format
 - All NPCs mentioned MUST be interactable - players will try to talk to them
 
+INVARIANT FOR NEED-SATISFYING ACTIONS:
+If your narrative describes a need-satisfying activity, you MUST generate an update_need delta.
+
+| Activity | Need | Amount Guide |
+|----------|------|--------------|
+| Eating food, meal, bread, snack | hunger | 10=snack, 25=meal, 40=feast |
+| Drinking water, ale, wine | thirst | 10=sip, 20=drink, 30=quench |
+| Resting, sitting, relaxing | stamina | 5=brief, 10=rest, 20=extended |
+| Sleeping, napping, dozing | sleep_pressure | 20=nap, 35=long rest, 50=full night |
+| Bathing, washing, cleaning | hygiene | 20=quick wash, 30=bath, 40=thorough |
+| Talking, chatting, conversation | social_connection | 10=chat, 20=conversation, 30=deep talk |
+
+Example update_need when player drinks ale (use the player's actual entity_key):
+{"delta_type": "update_need", "target_key": "<PLAYER_ENTITY_KEY>", "changes": {"entity_key": "<PLAYER_ENTITY_KEY>", "need_name": "thirst", "amount": 20}}
+
+Example update_need for having a conversation with an NPC:
+{"delta_type": "update_need", "target_key": "<PLAYER_ENTITY_KEY>", "changes": {"entity_key": "<PLAYER_ENTITY_KEY>", "need_name": "social_connection", "amount": 15}}
+
+NEVER skip update_need when narrative describes consuming food/drink or completing a need-satisfying activity - this causes state desync where the narrative says the player ate but the hunger stat doesn't change.
+
 CRITICAL: Use ACTUAL entity keys from the scene manifest, NOT placeholders or generic terms. The player's key varies (e.g., "test_hero", "brave_knight") - always check the manifest for the correct key.
 
 CRITICAL: All entity references MUST use [key:text] format. Never mention an entity without this format.

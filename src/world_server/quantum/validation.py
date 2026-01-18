@@ -691,7 +691,7 @@ class DeltaValidator:
         issues = []
         changes = delta.changes
 
-        valid_needs = {"hunger", "thirst", "stamina", "sleep_pressure", "wellness", "hygiene"}
+        valid_needs = {"hunger", "thirst", "stamina", "sleep_pressure", "wellness", "hygiene", "social_connection"}
 
         for key, value in changes.items():
             if key not in valid_needs:

@@ -43,6 +43,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **Need-Satisfying Actions Generate Deltas** - LLM now generates `update_need` deltas for activities like eating, drinking, and socializing
+  - Added INVARIANT FOR NEED-SATISFYING ACTIONS to branch generator with activity-to-need mapping table (`src/world_server/quantum/branch_generator.py`)
+  - Added `social_connection` to valid needs in validation and postprocessor (`src/world_server/quantum/validation.py`, `src/world_server/quantum/delta_postprocessor.py`)
+  - Fixes state desync where narrative describes eating/drinking but need stats don't change
+
 - **Narrator Key Format Compliance** - Added validation-based retry loop for [key:text] format enforcement
   - Added `_build_validation_manifest()` and `_validate_narrative()` methods (`src/world_server/quantum/narrator.py`)
   - Retry loop with error feedback (max 3 attempts) before fallback

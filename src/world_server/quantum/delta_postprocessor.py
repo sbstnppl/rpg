@@ -161,7 +161,7 @@ NPC_KEY_HINTS: set[str] = {
     "worker", "visitor", "customer", "guest", "passerby",
 }
 
-VALID_NEEDS = {"hunger", "thirst", "stamina", "sleep_pressure", "wellness", "hygiene"}
+VALID_NEEDS = {"hunger", "thirst", "stamina", "sleep_pressure", "wellness", "hygiene", "social_connection"}
 VALID_RELATIONSHIP_ATTRS = {"trust", "liking", "respect", "romantic_interest", "knows"}
 VALID_FACT_CATEGORIES = {
     "personal",

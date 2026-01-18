@@ -2,26 +2,27 @@
 
 ## Investigation Phase
 - [x] Reproduce the issue (Session 304, Turn 7)
-- [x] Identify affected code paths (gm_node.py tool loop)
+- [x] Identify affected code paths (quantum pipeline, not gm_node.py)
 - [x] Document current behavior (see README.md)
-- [ ] Find root cause (prompt structure vs model capability)
+- [x] Find root cause (missing INVARIANT section in branch_generator.py prompt)
 
 ## Design Phase
-- [ ] Propose solution
-- [ ] Identify files to modify
-- [ ] Define test cases
-- [ ] Review with user (if needed)
+- [x] Propose solution (add INVARIANT FOR NEED-SATISFYING ACTIONS)
+- [x] Identify files to modify (branch_generator.py, validation.py, delta_postprocessor.py)
+- [x] Define test cases (existing tests cover needs functionality)
+- [x] Review with user (if needed)
 
 ## Implementation Phase
-- [ ] Implement fix/feature
-- [ ] Add/update tests
-- [ ] Update documentation
+- [x] Add INVARIANT section to branch_generator.py with activity-to-need mapping
+- [x] Add `social_connection` to VALID_NEEDS in validation.py
+- [x] Add `social_connection` to VALID_NEEDS in delta_postprocessor.py
+- [x] Run test suite (all tests pass)
 
-## Verification Phase
-- [ ] Test manually
-- [ ] Run test suite
-- [ ] Verify fix in gameplay
+## Verification Phase (Pending)
+- [ ] Test manually via play-testing
+- [x] Run test suite - 68 validation tests + 21 branch generator tests passed
+- [ ] Verify fix in gameplay (needs 3 successful play-tests)
 
 ## Completion
-- [ ] Update README.md status to "Done"
+- [ ] Update README.md status to "Awaiting Verification" after commit
 - [ ] Create commit with `/commit`
