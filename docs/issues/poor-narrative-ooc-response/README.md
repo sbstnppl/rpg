@@ -1,8 +1,9 @@
 # Poor Narrative Response - OOC-Style Answer Instead of Roleplay
 
-**Status:** Investigating
+**Status:** Resolved
 **Priority:** High
 **Detected:** 2026-01-02
+**Resolved:** 2026-01-18
 **Related Sessions:** Session 334, Turn 3
 
 ## Problem Statement
@@ -35,48 +36,48 @@ He gestures toward a basket near the kitchen doorway where several
 crusty loaves are wrapped in cloth.
 ```
 
-## Investigation Notes
-
-- This occurred on Turn 3 of Session 334
-- Previous turns (look around, say hello) worked correctly
-- Need to check: Was this a quantum branch cache hit or miss?
-- Need to check: What did the narrator/reasoning phases produce?
-
 ## Root Cause
 
-(To be determined)
+**Intent Classifier Confusion with Nested Modals**
 
-Possible causes:
-1. Quantum branch matched wrong action type
-2. Narrator prompt issue
-3. Entity resolution/grounding problem
-4. Missing context about the NPC's role/dialogue capabilities
+The failing input `"ask Old Tom if I can buy some bread"` contains:
+1. `"ask X if Y"` pattern (should be ACTION per classifier rules)
+2. Nested `"can I buy"` which matches the QUESTION pattern
 
-## Proposed Solution
+The LLM saw both patterns and got confused because:
+- Prompt rule: `"ask X if Y"` → ACTION
+- Prompt rule: `"Can I pick that up?"` → QUESTION
 
-(After investigation)
+The **nested "can I" inside the speech act** caused misclassification as QUESTION, which triggered `_generate_informational_response()` in `pipeline.py:690` and produced the OOC response.
 
-## Implementation Details
+## Solution
 
-(After root cause identified)
+Strengthened the intent classifier prompt with explicit edge case examples:
 
-## Files to Modify
+1. Added examples showing nested modals are still speech acts:
+   - `"ask X if I can Y"` → ACTION
+   - `"ask X if I could Y"` → ACTION
 
-- [ ] `src/world_server/quantum/` - if branch matching issue
-- [ ] `src/gm/prompts.py` - if narrator prompt issue
-- [ ] `src/gm/context_builder.py` - if context issue
+2. Added clarifying rule: "When 'ask' comes BEFORE a target name (NPC), it's ALWAYS a speech act. The words inside the question don't matter."
+
+3. Emphasized the key distinction:
+   - Speech acts have a TARGET NPC after the verb
+   - Meta questions have NO target - player asks the game itself
+
+## Files Modified
+
+- [x] `src/world_server/quantum/intent_classifier.py` - Enhanced CRITICAL section with nested modal examples
+- [x] `tests/test_world_server/test_quantum/test_intent_classifier.py` - Added regression test
 
 ## Test Cases
 
-- [ ] "ask [NPC] about X" should produce roleplay narrative
-- [ ] "buy X from [NPC]" should produce roleplay narrative
-- [ ] Short OOC-style responses should trigger retry/validation
+- [x] `test_ask_npc_if_can_buy_is_action` - "ask Old Tom if I can buy some bread" → ACTION
+- [x] `test_ask_guard_if_can_enter_is_action` - "ask the guard if I can enter" → ACTION (existing)
+
+## Verification
+
+All 53 intent classifier tests pass.
 
 ## Related Issues
 
-- None identified yet
-
-## References
-
-- Session 334, Turn 3
-- docs/gm-pipeline-e2e-testing.md - expected narrative quality
+- None

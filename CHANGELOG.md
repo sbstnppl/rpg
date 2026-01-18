@@ -78,6 +78,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Invalid destinations trigger regeneration (cannot be clarified via LLM like entity keys)
   - 4 new tests for destination validation (`tests/test_world_server/test_quantum/test_delta_postprocessor.py`)
 
+- **Speech Acts with Nested Modals** - Fix "ask X if I can Y" being misclassified as QUESTION
+  - Input like "ask Old Tom if I can buy bread" was returning OOC responses instead of roleplay
+  - Added explicit nested modal examples to intent classifier (`src/world_server/quantum/intent_classifier.py`)
+  - Clarified rule: when "ask" comes before a target NPC, it's ALWAYS a speech act
+  - Added regression test `test_ask_npc_if_can_buy_is_action` (`tests/test_world_server/test_quantum/test_intent_classifier.py`)
+
 - **OBSERVE/WAIT Intent Matching** - Fix "look around" commands causing unintended player movement
   - Added `UNTARGETED_ACTION_TYPES` set for environmental actions that don't target entities (`src/world_server/quantum/pipeline.py`)
   - Modified `_intent_to_match_result()` to skip target matching for OBSERVE and WAIT actions

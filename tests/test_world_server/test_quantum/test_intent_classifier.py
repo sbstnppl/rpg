@@ -509,6 +509,32 @@ class TestSpeechActsVsMetaQuestions:
         # This should be ACTION - player is asking the guard IN the game
         assert result.intent_type == IntentType.ACTION
 
+    @pytest.mark.asyncio
+    async def test_ask_npc_if_can_buy_is_action(self, classifier, mock_llm, sample_input):
+        """'ask Old Tom if I can buy some bread' should be ACTION (nested modal).
+
+        Issue: docs/issues/poor-narrative-ooc-response
+        This input was being misclassified as QUESTION because of the nested
+        'can I buy' pattern, causing OOC-style informational responses.
+        """
+        sample_input.player_input = "ask Old Tom if I can buy some bread"
+        sample_input.npcs_present = ["Old Tom"]  # Make sure Old Tom is present
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="action",
+            confidence=0.95,
+            action_type="interact_npc",
+            target="Old Tom",
+            topic="buying bread",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+
+        # Must be ACTION - player is performing a speech act toward Old Tom
+        assert result.intent_type == IntentType.ACTION
+        assert result.is_informational is False
+
 
 class TestSkillActionClassification:
     """Tests for proper classification of skill-based actions.

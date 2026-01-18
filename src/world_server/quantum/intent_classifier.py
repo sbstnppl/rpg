@@ -106,19 +106,30 @@ Distinguish between speech acts (ACTION) and meta questions (QUESTION):
 **Speech acts** (always ACTION): Player performs dialog IN the game world
 - "ask X about Y" → ACTION (player speaks to X)
 - "ask X if Y" → ACTION (player asks X a question in-game)
+- "ask X if I can Y" → ACTION (still a speech act, even with "can I")
+- "ask X if I could Y" → ACTION (still a speech act, even with "could I")
 - "tell X that Y" → ACTION (player tells X something)
 - "say hello to X" → ACTION (player greets X)
 - "greet X" → ACTION (player greets X)
 
-**Meta questions** (QUESTION): Player asks about game possibilities
+**IMPORTANT**: When "ask" comes BEFORE a target name (NPC), it's ALWAYS a speech act.
+The words inside the question ("can", "could", "would") don't matter - the player
+is performing the action of asking someone something IN the game world.
+
+Examples that are ALWAYS speech acts (ACTION):
+- "ask Old Tom if I can buy some bread" → ACTION (asking NPC in-game)
+- "ask the guard if I can enter the city" → ACTION (asking NPC in-game)
+- "ask the merchant if he could give me a discount" → ACTION (asking NPC in-game)
+
+**Meta questions** (QUESTION): Player asks the GAME about possibilities (no target NPC)
 - "Could I talk to X?" → QUESTION (asking IF they can)
 - "Can I pick that up?" → QUESTION (asking about possibility)
 - "Is X here?" → QUESTION (asking for information)
 - "What items are available?" → QUESTION (asking for information)
 
 The key difference:
-- Speech acts use imperative verbs directing action ("ask", "tell", "greet", "say")
-- Meta questions use modal verbs asking possibility ("could", "can", "would", "should")
+- Speech acts have a TARGET NPC after the verb ("ask Tom...", "tell the guard...")
+- Meta questions have NO target - player asks the game itself ("Could I...", "Can I...")
 
 ## Action Types
 
