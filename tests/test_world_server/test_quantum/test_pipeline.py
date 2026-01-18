@@ -932,3 +932,150 @@ class TestIntentToMatchResult:
         result = pipeline._intent_to_match_result(intent_result, sample_predictions)
 
         assert result is None
+
+
+class TestCreateEntityKeyInjection:
+    """Tests for injecting CREATE_ENTITY keys into manifest before validation.
+
+    When the LLM generates narrative with `[patron_01:display]` format for ambient
+    NPCs, the DeltaPostProcessor._inject_missing_npc_creates() creates CREATE_ENTITY
+    deltas. These keys must be added to the manifest's additional_valid_keys before
+    grounding validation runs.
+    """
+
+    @pytest.fixture
+    def manifest_with_no_patron(self):
+        """Create a manifest that doesn't include patron NPCs."""
+        return GroundingManifest(
+            location_key="tavern_main",
+            location_display="The Rusty Anchor",
+            player_key="player_001",
+            player_display="you",
+            npcs={
+                "barkeep_001": GroundedEntity(
+                    key="barkeep_001",
+                    display_name="Barkeep",
+                    entity_type="npc",
+                    short_description="a gruff bartender",
+                ),
+            },
+            items_at_location={},
+            exits={},
+        )
+
+    @pytest.fixture
+    def branch_with_injected_npcs(self):
+        """Create a branch that has CREATE_ENTITY deltas for dynamically created NPCs."""
+        from src.world_server.quantum.schemas import DeltaType, StateDelta
+
+        return QuantumBranch(
+            branch_key="test_branch_001",
+            action=ActionPrediction(
+                action_type=ActionType.OBSERVE,
+                target_key=None,
+                input_patterns=["look around"],
+                probability=0.5,
+                reason=PredictionReason.ADJACENT,
+            ),
+            variants={
+                VariantType.SUCCESS: OutcomeVariant(
+                    variant_type=VariantType.SUCCESS,
+                    requires_dice=False,
+                    narrative="[patron_01:a weathered farmer] sits at a corner table, nursing an ale. [patron_02:a young merchant] haggles with the barkeep.",
+                    state_deltas=[
+                        StateDelta(
+                            delta_type=DeltaType.CREATE_ENTITY,
+                            target_key="patron_01",
+                            changes={
+                                "entity_type": "npc",
+                                "display_name": "a weathered farmer",
+                                "is_ambient": True,
+                            },
+                        ),
+                        StateDelta(
+                            delta_type=DeltaType.CREATE_ENTITY,
+                            target_key="patron_02",
+                            changes={
+                                "entity_type": "npc",
+                                "display_name": "a young merchant",
+                                "is_ambient": True,
+                            },
+                        ),
+                    ],
+                ),
+            },
+            gm_decision=GMDecision(decision_type="no_twist", probability=0.7),
+        )
+
+    def test_create_entity_keys_added_to_manifest(
+        self, manifest_with_no_patron, branch_with_injected_npcs
+    ):
+        """CREATE_ENTITY target keys should be added to additional_valid_keys."""
+        from src.world_server.quantum.schemas import DeltaType
+
+        # Simulate what pipeline does after generate_branch() returns
+        for variant in branch_with_injected_npcs.variants.values():
+            for delta in variant.state_deltas:
+                if delta.delta_type == DeltaType.CREATE_ENTITY:
+                    manifest_with_no_patron.additional_valid_keys.add(delta.target_key)
+
+        # Verify the keys were added
+        assert "patron_01" in manifest_with_no_patron.additional_valid_keys
+        assert "patron_02" in manifest_with_no_patron.additional_valid_keys
+
+    def test_manifest_contains_injected_keys(
+        self, manifest_with_no_patron, branch_with_injected_npcs
+    ):
+        """Manifest's contains_key() should return True for injected keys."""
+        from src.world_server.quantum.schemas import DeltaType
+
+        # Initially, patron keys are NOT in manifest
+        assert not manifest_with_no_patron.contains_key("patron_01")
+        assert not manifest_with_no_patron.contains_key("patron_02")
+
+        # Apply the key injection logic from pipeline
+        for variant in branch_with_injected_npcs.variants.values():
+            for delta in variant.state_deltas:
+                if delta.delta_type == DeltaType.CREATE_ENTITY:
+                    manifest_with_no_patron.additional_valid_keys.add(delta.target_key)
+
+        # Now they should be found
+        assert manifest_with_no_patron.contains_key("patron_01")
+        assert manifest_with_no_patron.contains_key("patron_02")
+
+    def test_validation_passes_with_injected_keys(
+        self, manifest_with_no_patron, branch_with_injected_npcs, mock_db, mock_game_session
+    ):
+        """Branch validation should pass when CREATE_ENTITY keys are injected."""
+        from src.world_server.quantum.schemas import DeltaType
+        from src.world_server.quantum.validation import BranchValidator
+
+        # Apply the key injection logic from pipeline
+        for variant in branch_with_injected_npcs.variants.values():
+            for delta in variant.state_deltas:
+                if delta.delta_type == DeltaType.CREATE_ENTITY:
+                    manifest_with_no_patron.additional_valid_keys.add(delta.target_key)
+
+        # Validate - should pass because keys are now in additional_valid_keys
+        validator = BranchValidator(manifest_with_no_patron, mock_db, mock_game_session)
+        result = validator.validate(branch_with_injected_npcs)
+
+        # Should not have grounding errors for patron_01 or patron_02
+        grounding_errors = [
+            e for e in result.errors if "grounding" in e.category and "patron" in e.message
+        ]
+        assert len(grounding_errors) == 0, f"Unexpected grounding errors: {grounding_errors}"
+
+    def test_validation_fails_without_key_injection(
+        self, manifest_with_no_patron, branch_with_injected_npcs, mock_db, mock_game_session
+    ):
+        """Branch validation should fail if CREATE_ENTITY keys are NOT injected."""
+        from src.world_server.quantum.validation import BranchValidator
+
+        # Don't inject keys - simulate the bug
+        validator = BranchValidator(manifest_with_no_patron, mock_db, mock_game_session)
+        result = validator.validate(branch_with_injected_npcs)
+
+        # Should have grounding errors for the patron keys
+        grounding_errors = [e for e in result.errors if "grounding" in e.category]
+        assert len(grounding_errors) > 0, "Expected grounding errors without key injection"

@@ -279,6 +279,19 @@ For transfer_item deltas:
 - If the item is NEW (NPC gives/creates it), use a descriptive snake_case key (e.g., "ale_mug", "bread_loaf", "iron_key") - it will be auto-created
 - NEVER skip transfer_item when narrative describes receiving an item - this causes state desync
 
+INVARIANT FOR AMBIENT NPCs:
+If your narrative describes NPCs in the scene (patrons, travelers, guards, etc.), you MUST:
+1. Use [key:display] format for ALL NPC references (e.g., [patron_01:a weathered farmer])
+2. Generate a create_entity delta for each new NPC
+
+Example create_entity for ambient NPC:
+{"delta_type": "create_entity", "target_key": "patron_01", "changes": {"entity_type": "npc", "display_name": "Weathered Farmer", "short_description": "a tired-looking man nursing a drink"}}
+
+For ambient NPCs:
+- Use descriptive snake_case keys (e.g., "patron_01", "traveler_02", "guard_01")
+- NEVER mention NPCs in plain prose without [key:display] format
+- All NPCs mentioned MUST be interactable - players will try to talk to them
+
 CRITICAL: Use ACTUAL entity keys from the scene manifest, NOT placeholders or generic terms. The player's key varies (e.g., "test_hero", "brave_knight") - always check the manifest for the correct key.
 
 CRITICAL: All entity references MUST use [key:text] format. Never mention an entity without this format.
@@ -503,8 +516,11 @@ Generate the JSON response now."""
 
             # Post-process deltas to fix common LLM errors
             # Uses async version for LLM clarification of unknown keys
+            # Pass narrative to auto-create NPCs referenced in [key:display] format
             processor = DeltaPostProcessor(manifest)
-            result = await processor.process_async(state_deltas, self.llm)
+            result = await processor.process_async(
+                state_deltas, self.llm, narrative=gen_variant.narrative
+            )
 
             if result.needs_regeneration:
                 raise RegenerationNeeded(result.regeneration_reason or "Unknown error")

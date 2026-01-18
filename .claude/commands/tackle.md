@@ -7,6 +7,7 @@ Load and work on an **existing issue** from the docs folder, or verify a complet
 ```
 /tackle <issue-folder-name>          # Work on an issue
 /tackle verify <issue-folder-name>   # Record verification result
+/tackle next                         # Auto-tackle first open issue
 /tackle                              # Lists available issues
 ```
 
@@ -14,6 +15,7 @@ Load and work on an **existing issue** from the docs folder, or verify a complet
 ```
 /tackle narrator-key-format
 /tackle verify item-state-desync-ref-based
+/tackle next                 # Auto-selects highest priority open issue
 /tackle                      # Shows list to choose from
 ```
 
@@ -66,6 +68,31 @@ Load and work on an **existing issue** from the docs folder, or verify a complet
    Issue archived to: docs/issues/archived/<issue-name>/
    ═══════════════════════════════════════════════════════════════
    ```
+
+### If `next` subcommand - Auto-tackle first open issue:
+
+1. **Scan for open issues** in `docs/issues/*/README.md`
+   - Filter to statuses: "Investigating", "Planned", "In Progress"
+   - Exclude: "Awaiting Verification", "Verified", "Blocked"
+
+2. **Sort by priority**:
+   - High → Medium → Low
+   - Within same priority: alphabetical by folder name
+
+3. **If no open issues found**:
+   ```
+   No open issues found.
+
+   All issues are either:
+   - Awaiting Verification (run /tackle verify <name>)
+   - Verified and archived
+   - Blocked
+   ```
+
+4. **If issues found**:
+   - Select the first issue from sorted list
+   - Display: "Auto-selected: <issue-name> (Priority: High)"
+   - Proceed with normal `/tackle <issue-name>` flow
 
 ### If no argument provided - List available issues:
 
@@ -150,16 +177,17 @@ Load and work on an **existing issue** from the docs folder, or verify a complet
 
 ## During Work
 
-As you work on the issue:
+As you work on the issue, **keep documentation in sync**:
 
-1. **Update README.md** with findings:
+1. **Update README.md** with findings (do this as you discover things):
    - Add to "Investigation Notes" section
    - Fill in "Root Cause" when discovered
    - Update "Proposed Solution" when designed
+   - For regression fixes: update "Regression Notes" section with root cause
 
 2. **Update TODO.md** as tasks complete:
    - Change `- [ ]` to `- [x]` for completed items
-   - Add new tasks if discovered
+   - Add new tasks if discovered during implementation
 
 3. **Use TodoWrite** to track progress in current session
 
@@ -173,23 +201,42 @@ As you work on the issue:
    Next: Propose solution approach
    ```
 
+5. **After implementing code changes**, immediately:
+   - Update README.md with solution details (files changed, approach taken)
+   - Update TODO.md to mark implementation tasks complete
+   - Don't wait until the end - document as you go
+
 ## Completion
 
-When all implementation tasks are done:
+When all implementation tasks are done, **automatically update documentation**:
 
-1. **Update README.md**:
+1. **Update README.md** (REQUIRED - do this automatically, don't wait for user):
    - Set Status to "Awaiting Verification"
    - Set Verification to `0/3` (or custom threshold)
-   - Fill in all sections
-   - Add completion date
+   - Add "Fixed:" date field if not present
+   - Document the solution:
+     - **Root Cause**: What was actually wrong
+     - **Solution**: What was changed and why
+     - **Files Modified**: List all changed files with brief descriptions
+     - **Tests Added**: List new test classes/methods
+   - If this is a regression fix, add details to "Regression Notes" section
 
-2. **Prompt for commit**:
+2. **Update TODO.md** (REQUIRED - do this automatically):
+   - Mark all completed items as `[x]`
+   - Add "Verification Phase (Pending)" section if not present
+   - List remaining manual verification steps
+
+3. **Prompt for commit**:
    ```
-   Implementation complete! Run /commit to commit the fix?
+   Implementation complete! Documentation updated.
+
+   Run /commit to commit the fix?
 
    Note: Issue now needs 3 successful play-test verifications.
    After each play-test, run: /tackle verify <issue-name>
    ```
+
+**Important**: Documentation updates are NOT optional. Always update README.md and TODO.md before prompting for commit.
 
 ## Status Transitions
 
@@ -228,6 +275,25 @@ Available Issues:
 | context-aware-location-resolution   | Planned       | Medium   |
 
 Which issue do you want to tackle?
+```
+
+**User:** `/tackle next`
+
+**Claude:**
+```
+Auto-selected: item-state-desync-ref-based (Priority: HIGH)
+
+═══════════════════════════════════════════════════════════════
+TACKLING: Item State Desync - Ref-Based Mode
+═══════════════════════════════════════════════════════════════
+
+Priority: High
+Status: In Progress (was: Investigating)
+
+PROBLEM:
+Items given by NPCs don't appear in player inventory...
+
+Starting Investigation Phase...
 ```
 
 **User:** `/tackle narrator-key-format`

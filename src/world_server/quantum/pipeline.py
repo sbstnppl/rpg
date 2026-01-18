@@ -81,6 +81,7 @@ from src.world_server.quantum.gm_oracle import GMDecisionOracle
 from src.world_server.quantum.schemas import (
     ActionPrediction,
     ActionType,
+    DeltaType,
     GMDecision,
     QuantumBranch,
     QuantumMetrics,
@@ -896,6 +897,14 @@ class QuantumPipeline:
 
             generation_time_ms = (time.perf_counter() - gen_start) * 1000
 
+            # Add entity keys from injected CREATE_ENTITY deltas to manifest
+            # This allows grounding validation to pass for NPCs created by
+            # DeltaPostProcessor._inject_missing_npc_creates()
+            for variant in branch.variants.values():
+                for delta in variant.state_deltas:
+                    if delta.delta_type == DeltaType.CREATE_ENTITY:
+                        generation_manifest.additional_valid_keys.add(delta.target_key)
+
             # Validate the branch for grounding/hallucination issues
             # Use the same manifest that was used for generation (destination for MOVE)
             validator = BranchValidator(generation_manifest, self.db, self.game_session)
@@ -970,6 +979,12 @@ class QuantumPipeline:
                 )
 
                 generation_time_ms = (time.perf_counter() - gen_start) * 1000
+
+                # Add entity keys from injected CREATE_ENTITY deltas to manifest
+                for variant in branch.variants.values():
+                    for delta in variant.state_deltas:
+                        if delta.delta_type == DeltaType.CREATE_ENTITY:
+                            generation_manifest.additional_valid_keys.add(delta.target_key)
 
                 # Validate and collapse the retry
                 validator = BranchValidator(generation_manifest, self.db, self.game_session)

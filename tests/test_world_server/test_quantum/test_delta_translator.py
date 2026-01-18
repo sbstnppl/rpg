@@ -817,3 +817,94 @@ class TestRefDeltaTranslator:
         create_deltas = [d for d in result.deltas if d.delta_type == DeltaType.CREATE_ENTITY]
         assert len(create_deltas) == 1
         assert create_deltas[0].changes["entity_type"] == "item"
+
+    def test_give_item_with_descriptive_key_new_item(self, translator, ref_manifest):
+        """give_item with a descriptive key (not a ref) produces TRANSFER_ITEM.
+
+        When an NPC gives a new item that doesn't exist in the manifest,
+        the LLM uses a descriptive snake_case key like "ale_mug" instead of a ref.
+        The translator should accept this and pass it through for postprocessor
+        to auto-create the item.
+        """
+        from src.world_server.quantum.reasoning import RefBasedOutcome, RefBasedChange
+
+        tom_ref = ref_manifest.get_ref_for_key("npc_tom_001")
+
+        outcome = RefBasedOutcome(
+            what_happens="Tom gives the player a fresh mug of ale",
+            changes=[
+                RefBasedChange(
+                    change_type="give_item",
+                    entity="ale_mug",  # Descriptive key, not a ref
+                    from_entity=tom_ref,
+                    to_entity="player",
+                )
+            ],
+        )
+
+        result = translator.translate(outcome, ref_manifest)
+
+        # Should NOT error - descriptive keys are allowed for new items
+        assert not result.has_errors
+        transfer_deltas = [d for d in result.deltas if d.delta_type == DeltaType.TRANSFER_ITEM]
+        assert len(transfer_deltas) == 1
+        assert transfer_deltas[0].target_key == "ale_mug"
+        assert transfer_deltas[0].changes["from_entity_key"] == "npc_tom_001"
+        assert transfer_deltas[0].changes["to_entity_key"] == "test_hero"
+
+        # Key should be in key_mapping
+        assert "ale_mug" in result.key_mapping
+        assert result.key_mapping["ale_mug"] == "ale_mug"
+
+    def test_give_item_with_descriptive_key_lowercase(self, translator, ref_manifest):
+        """give_item with lowercase word (no underscore) is also accepted."""
+        from src.world_server.quantum.reasoning import RefBasedOutcome, RefBasedChange
+
+        tom_ref = ref_manifest.get_ref_for_key("npc_tom_001")
+
+        outcome = RefBasedOutcome(
+            what_happens="Tom gives the player bread",
+            changes=[
+                RefBasedChange(
+                    change_type="give_item",
+                    entity="bread",  # Lowercase, no underscore
+                    from_entity=tom_ref,
+                    to_entity="player",
+                )
+            ],
+        )
+
+        result = translator.translate(outcome, ref_manifest)
+
+        assert not result.has_errors
+        transfer_deltas = [d for d in result.deltas if d.delta_type == DeltaType.TRANSFER_ITEM]
+        assert len(transfer_deltas) == 1
+        assert transfer_deltas[0].target_key == "bread"
+
+    def test_give_item_uppercase_non_ref_still_errors(self, translator, ref_manifest):
+        """give_item with uppercase non-ref value should error.
+
+        If the entity value is uppercase (like a ref) but not in manifest,
+        this is likely a mistake and should error rather than silently create.
+        """
+        from src.world_server.quantum.reasoning import RefBasedOutcome, RefBasedChange
+
+        tom_ref = ref_manifest.get_ref_for_key("npc_tom_001")
+
+        outcome = RefBasedOutcome(
+            what_happens="Tom gives the player something",
+            changes=[
+                RefBasedChange(
+                    change_type="give_item",
+                    entity="Z",  # Looks like a ref but doesn't exist
+                    from_entity=tom_ref,
+                    to_entity="player",
+                )
+            ],
+        )
+
+        result = translator.translate(outcome, ref_manifest)
+
+        # Should error because "Z" looks like a ref but isn't valid
+        assert result.has_errors
+        assert any("Invalid ref 'Z'" in e for e in result.errors)

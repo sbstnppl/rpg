@@ -58,6 +58,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `UNTARGETED_ACTION_TYPES` set for environmental actions that don't target entities (`src/world_server/quantum/pipeline.py`)
   - Modified `_intent_to_match_result()` to skip target matching for OBSERVE and WAIT actions
   - "look around the village square" now correctly matches OBSERVE instead of falling back to fuzzy matcher
+
+- **Ambient NPC Grounding** - Fix "Invalid entity key" errors for dynamically created NPCs
+  - Added `INVARIANT FOR AMBIENT NPCs` to branch generator system prompt requiring `[key:display]` format (`src/world_server/quantum/branch_generator.py`)
+  - Added `_inject_missing_npc_creates()` to auto-create NPCs from narrative patterns (`src/world_server/quantum/delta_postprocessor.py`)
+  - Added `NPC_KEY_HINTS` for recognizing NPC keys (patron, traveler, guard, etc.)
+  - Fixed regression: CREATE_ENTITY keys now added to `additional_valid_keys` before validation (`src/world_server/quantum/pipeline.py`)
+  - Updated `give_item` translator to handle new item keys that will be auto-created (`src/world_server/quantum/delta_translator.py`)
+  - 4 new tests for key injection (`tests/test_world_server/test_quantum/test_pipeline.py`)
   - 7 new tests for intent-to-match result handling (`tests/test_world_server/test_quantum/test_pipeline.py`)
 
 - **Narrative Time Consistency** - Pass game time context to narrator engine

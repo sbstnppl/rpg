@@ -1289,3 +1289,146 @@ class TestProcessAsync:
         # Should have CREATE_ENTITY as fallback
         creates = [d for d in result.deltas if d.delta_type == DeltaType.CREATE_ENTITY]
         assert len(creates) >= 1
+
+
+# =============================================================================
+# Test: Inject Missing NPC Creates from Narrative
+# =============================================================================
+
+
+class TestInjectMissingNPCCreates:
+    """Tests for auto-injecting CREATE_ENTITY for NPCs in narrative."""
+
+    def test_inject_npc_from_narrative(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """NPCs in [key:display] format in narrative should be auto-created."""
+        narrative = "You see [patron_01:a weary traveler] drinking at the bar."
+        deltas: list[StateDelta] = []
+
+        result = processor.process(deltas, narrative=narrative)
+
+        assert len(result.deltas) == 1
+        create = result.deltas[0]
+        assert create.delta_type == DeltaType.CREATE_ENTITY
+        assert create.target_key == "patron_01"
+        assert create.changes["entity_type"] == "npc"
+        assert "Injected CREATE_ENTITY for NPC 'patron_01'" in result.repairs_made
+
+    def test_no_inject_for_existing_npc(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """NPCs already in manifest should not be re-created."""
+        narrative = "You approach [bartender_001:Old Tom] at the bar."
+        deltas: list[StateDelta] = []
+
+        result = processor.process(deltas, narrative=narrative)
+
+        # bartender_001 exists in fixture, should not be created
+        assert len(result.deltas) == 0
+
+    def test_inject_multiple_npcs(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """Multiple NPCs in narrative should all be created."""
+        narrative = "[patron_01:A farmer] and [patron_02:a merchant] are arguing."
+        deltas: list[StateDelta] = []
+
+        result = processor.process(deltas, narrative=narrative)
+
+        assert len(result.deltas) == 2
+        keys = {d.target_key for d in result.deltas}
+        assert keys == {"patron_01", "patron_02"}
+
+    def test_non_npc_keys_not_created(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """Keys that don't look like NPCs should not be auto-created as NPCs."""
+        narrative = "You pick up the [rusty_sword:old blade]."
+        deltas: list[StateDelta] = []
+
+        result = processor.process(deltas, narrative=narrative)
+
+        # rusty_sword doesn't match NPC hints, should not create NPC
+        npc_creates = [
+            d for d in result.deltas
+            if d.delta_type == DeltaType.CREATE_ENTITY
+            and d.changes.get("entity_type") == "npc"
+        ]
+        assert len(npc_creates) == 0
+
+    def test_no_inject_for_pending_create(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """NPCs already in pending CREATE_ENTITY should not be duplicated."""
+        narrative = "You see [patron_01:a weary traveler] drinking at the bar."
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.CREATE_ENTITY,
+                target_key="patron_01",
+                changes={"entity_type": "npc", "display_name": "Weary Traveler"},
+            ),
+        ]
+
+        result = processor.process(deltas, narrative=narrative)
+
+        # Should only have the original CREATE, not a duplicate
+        creates = [d for d in result.deltas if d.delta_type == DeltaType.CREATE_ENTITY]
+        assert len(creates) == 1
+
+    def test_npc_create_includes_location(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """Auto-created NPCs should include location_key from manifest."""
+        narrative = "The [guard_01:town guard] eyes you suspiciously."
+        deltas: list[StateDelta] = []
+
+        result = processor.process(deltas, narrative=narrative)
+
+        assert len(result.deltas) == 1
+        create = result.deltas[0]
+        assert create.changes.get("location_key") == "tavern_001"  # From fixture
+
+    def test_empty_narrative_no_change(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """Empty or None narrative should not cause errors."""
+        deltas: list[StateDelta] = []
+
+        result_none = processor.process(deltas, narrative=None)
+        result_empty = processor.process(deltas, narrative="")
+
+        assert len(result_none.deltas) == 0
+        assert len(result_empty.deltas) == 0
+
+    def test_various_npc_key_hints(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """Various NPC key hints should all be recognized."""
+        narrative = (
+            "In the corner, [traveler_01:a dusty wanderer] talks with "
+            "[merchant_02:a portly trader]. Near the door, "
+            "[villager_03:an old woman] watches quietly."
+        )
+        deltas: list[StateDelta] = []
+
+        result = processor.process(deltas, narrative=narrative)
+
+        assert len(result.deltas) == 3
+        keys = {d.target_key for d in result.deltas}
+        assert keys == {"traveler_01", "merchant_02", "villager_03"}
+
+    def test_no_duplicate_creates_same_npc(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """Same NPC mentioned multiple times should only create one entity."""
+        narrative = (
+            "[patron_01:the farmer] laughs. Later, [patron_01:the farmer] "
+            "buys another drink."
+        )
+        deltas: list[StateDelta] = []
+
+        result = processor.process(deltas, narrative=narrative)
+
+        creates = [d for d in result.deltas if d.target_key == "patron_01"]
+        assert len(creates) == 1

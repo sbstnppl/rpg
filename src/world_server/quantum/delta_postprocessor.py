@@ -154,6 +154,13 @@ ITEM_TYPE_HINTS: dict[str, str] = {
     "gauntlet": "armor",
 }
 
+# NPC type hints for auto-creation from narrative
+NPC_KEY_HINTS: set[str] = {
+    "patron", "traveler", "stranger", "guard", "merchant",
+    "villager", "farmer", "laborer", "beggar", "servant",
+    "worker", "visitor", "customer", "guest", "passerby",
+}
+
 VALID_NEEDS = {"hunger", "thirst", "stamina", "sleep_pressure", "wellness", "hygiene"}
 VALID_RELATIONSHIP_ATTRS = {"trust", "liking", "respect", "romantic_interest", "knows"}
 VALID_FACT_CATEGORIES = {
@@ -192,11 +199,14 @@ class DeltaPostProcessor:
         self.manifest = manifest
         self.repairs_made: list[str] = []
 
-    def process(self, deltas: list[StateDelta]) -> PostProcessResult:
+    def process(
+        self, deltas: list[StateDelta], narrative: str | None = None
+    ) -> PostProcessResult:
         """Process deltas, fixing what we can.
 
         Args:
             deltas: Raw deltas from LLM.
+            narrative: Optional narrative text to parse for NPC references.
 
         Returns:
             PostProcessResult with fixed deltas or regeneration flag.
@@ -223,6 +233,9 @@ class DeltaPostProcessor:
 
         # Apply repairs
         fixed = deltas
+
+        # Inject missing NPC creates from narrative [key:display] patterns
+        fixed = self._inject_missing_npc_creates(fixed, narrative)
 
         # Inject missing CREATE_ENTITY for TRANSFER_ITEM
         fixed = self._inject_missing_creates(fixed)
@@ -411,6 +424,60 @@ class DeltaPostProcessor:
             or key in self.manifest.additional_valid_keys
         )
 
+    def _get_all_known_keys(self) -> set[str]:
+        """Get all entity keys known to the manifest."""
+        return set(self.manifest.all_keys())
+
+    def _inject_missing_npc_creates(
+        self, deltas: list[StateDelta], narrative: str | None
+    ) -> list[StateDelta]:
+        """Auto-create NPCs referenced in narrative [key:display] format but not in manifest.
+
+        Parses narrative for [key:Display Name] patterns and creates NPC entities
+        for keys that look like NPCs (based on NPC_KEY_HINTS) but don't exist.
+
+        Args:
+            deltas: Current delta list.
+            narrative: Narrative text to parse for NPC references.
+
+        Returns:
+            Deltas with CREATE_ENTITY prepended for new NPC keys.
+        """
+        if not narrative:
+            return deltas
+
+        # Parse [key:Display Name] patterns
+        pattern = r'\[([a-z][a-z0-9_]*):([^\]]+)\]'
+        matches = re.findall(pattern, narrative)
+
+        # Track what we've already created
+        existing_keys = self._get_all_known_keys()
+        pending_creates = {d.target_key for d in deltas if d.delta_type == DeltaType.CREATE_ENTITY}
+
+        create_deltas = []
+        seen_keys: set[str] = set()
+
+        for key, display in matches:
+            # Skip if known, pending, or already processed
+            if key in existing_keys or key in pending_creates or key in seen_keys:
+                continue
+
+            # Check if this looks like an NPC key
+            if any(hint in key for hint in NPC_KEY_HINTS):
+                create_deltas.append(StateDelta(
+                    delta_type=DeltaType.CREATE_ENTITY,
+                    target_key=key,
+                    changes={
+                        "entity_type": "npc",
+                        "display_name": self._key_to_display_name(key),
+                        "location_key": self.manifest.location_key,
+                    },
+                ))
+                self.repairs_made.append(f"Injected CREATE_ENTITY for NPC '{key}'")
+                seen_keys.add(key)
+
+        return create_deltas + deltas
+
     def _infer_entity_type(self, key: str) -> str:
         """Guess entity type from key name."""
         key_lower = key.lower()
@@ -524,6 +591,7 @@ class DeltaPostProcessor:
         self,
         deltas: list[StateDelta],
         llm: LLMProvider,
+        narrative: str | None = None,
     ) -> PostProcessResult:
         """Process deltas with async LLM clarification for unknown keys.
 
@@ -533,6 +601,7 @@ class DeltaPostProcessor:
         Args:
             deltas: Raw deltas from LLM.
             llm: LLM provider for clarification queries.
+            narrative: Optional narrative text to parse for NPC references.
 
         Returns:
             PostProcessResult with fixed deltas.
@@ -581,7 +650,8 @@ class DeltaPostProcessor:
         # 5. Inject CREATE_ENTITY for keys LLM wants to create
         fixed = self._inject_creates_for_keys(fixed, keys_to_create)
 
-        # 6. Apply standard repairs
+        # 6. Apply standard repairs (including NPC injection from narrative)
+        fixed = self._inject_missing_npc_creates(fixed, narrative)
         fixed = self._inject_missing_creates(fixed)
         fixed = self._reorder_deltas(fixed)
         fixed = self._normalize_entity_types(fixed)

@@ -754,14 +754,37 @@ class RefDeltaTranslator:
         key_mapping: dict[str, str],
         errors: list[str],
     ) -> StateDelta | None:
-        """Translate give_item to TRANSFER_ITEM delta."""
-        item_key = self._resolve_ref(change.entity, manifest, errors, "give_item entity")
-        if not item_key:
+        """Translate give_item to TRANSFER_ITEM delta.
+
+        For existing items, change.entity is a ref (A, B, C).
+        For NEW items (NPC creates/gives), change.entity is a descriptive key
+        like "ale_mug" - the postprocessor will auto-create it.
+        """
+        if not change.entity:
+            errors.append("give_item requires an entity")
             return None
 
+        # Try to resolve as ref first
+        # Use a local errors list so we don't pollute the main one
+        local_errors: list[str] = []
+        item_key = self._resolve_ref(change.entity, manifest, local_errors, "give_item entity")
+
+        if not item_key:
+            # Not a valid ref - check if it looks like a descriptive item key
+            # Descriptive keys are snake_case (e.g., "ale_mug", "bread_loaf")
+            if "_" in change.entity or change.entity.islower():
+                # Treat as a new item key that will be auto-created
+                item_key = change.entity
+                logger.debug(
+                    f"give_item: treating '{change.entity}' as new item key (not a ref)"
+                )
+            else:
+                # Neither a ref nor a descriptive key - report error
+                errors.extend(local_errors)
+                return None
+
         # Store in key_mapping
-        if change.entity:
-            key_mapping[change.entity] = item_key
+        key_mapping[change.entity] = item_key
 
         # Resolve source and target
         from_key = self._resolve_ref(change.from_entity, manifest, errors, "give_item from")
