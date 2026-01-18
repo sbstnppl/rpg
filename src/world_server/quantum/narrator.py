@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 
 from pydantic import BaseModel, Field
 
+from src.gm.grounding import GroundedEntity, GroundingManifest
+from src.gm.grounding_validator import GroundingValidator
 from src.llm.base import LLMProvider
 from src.llm.factory import get_narrator_provider
 from src.llm.message_types import Message
@@ -183,20 +185,116 @@ class NarratorEngine:
 
     Uses the narrator model (magmell) to transform semantic outcomes
     into vivid narrative text with proper entity grounding.
+
+    Includes validation and retry logic to ensure [key:text] format compliance.
     """
 
     llm: LLMProvider | None = None
+    max_retries: int = 3
+    temperature: float = 0.5  # Lowered from 0.7 for better format compliance
+    strict_grounding: bool = True
 
     def __post_init__(self) -> None:
         """Initialize with default provider if not provided."""
         if self.llm is None:
             self.llm = get_narrator_provider()
 
+    def _build_validation_manifest(self, context: NarrationContext) -> GroundingManifest:
+        """Build a GroundingManifest from NarrationContext for validation.
+
+        Args:
+            context: The narration context with key mappings.
+
+        Returns:
+            GroundingManifest suitable for GroundingValidator.
+        """
+        # Build NPC entities from npcs_in_scene
+        npcs: dict[str, GroundedEntity] = {}
+        for display_name, key in context.npcs_in_scene.items():
+            npcs[key] = GroundedEntity(
+                key=key,
+                display_name=display_name,
+                entity_type="npc",
+            )
+
+        # Build item entities from items_in_scene and key_mapping
+        items_at_location: dict[str, GroundedEntity] = {}
+        for display_name, key in context.items_in_scene.items():
+            items_at_location[key] = GroundedEntity(
+                key=key,
+                display_name=display_name,
+                entity_type="item",
+            )
+
+        # Add items from key_mapping that aren't NPCs or location
+        for display_name, key in context.key_mapping.items():
+            if key not in npcs and key != context.location_key:
+                items_at_location[key] = GroundedEntity(
+                    key=key,
+                    display_name=display_name,
+                    entity_type="item",
+                )
+
+        return GroundingManifest(
+            location_key=context.location_key or "unknown_location",
+            location_display=context.location_display or "Unknown Location",
+            player_key=context.player_key,
+            player_display="you",
+            npcs=npcs,
+            items_at_location=items_at_location,
+        )
+
+    def _validate_narrative(
+        self,
+        narrative: str,
+        context: NarrationContext,
+    ) -> tuple[bool, list[str]]:
+        """Validate narrative output for [key:text] format compliance.
+
+        Args:
+            narrative: The generated narrative text.
+            context: The narration context with valid keys.
+
+        Returns:
+            Tuple of (is_valid, error_messages).
+        """
+        if not self.strict_grounding:
+            return True, []
+
+        manifest = self._build_validation_manifest(context)
+        validator = GroundingValidator(manifest, skip_player_items=True)
+        result = validator.validate(narrative)
+
+        if result.valid:
+            return True, []
+
+        errors: list[str] = []
+
+        for inv_key in result.invalid_keys:
+            errors.append(
+                f"Invalid key [{inv_key.key}:{inv_key.text}] - "
+                f"'{inv_key.key}' not in manifest"
+            )
+
+        for unkeyed in result.unkeyed_mentions:
+            errors.append(
+                f"Unkeyed mention: '{unkeyed.display_name}' should be "
+                f"[{unkeyed.expected_key}:{unkeyed.display_name}]"
+            )
+
+        return False, errors
+
     async def narrate(
         self,
         context: NarrationContext,
     ) -> NarrationResponse:
-        """Generate narrative prose for an outcome.
+        """Generate narrative prose for an outcome with validation and retry.
+
+        Uses a retry loop to ensure [key:text] format compliance:
+        1. Generate narrative
+        2. Validate output using GroundingValidator
+        3. On failure, retry with error feedback (max attempts)
+        4. Fall back to safe narration if all retries fail
 
         Args:
             context: Context including what happened and key mappings.
@@ -204,31 +302,59 @@ class NarratorEngine:
         Returns:
             NarrationResponse with prose using [key:display] format.
         """
-        prompt = self._build_prompt(context)
+        errors: list[str] = []
 
-        try:
-            response = await self.llm.complete_structured(
-                messages=[Message.user(prompt)],
-                response_schema=NarrationResponse,
-                system_prompt=NARRATOR_SYSTEM_PROMPT,
-                temperature=0.7,  # Higher temperature for creativity
-                max_tokens=512,
-            )
+        for attempt in range(self.max_retries):
+            prompt = self._build_prompt(context, previous_errors=errors)
 
-            if response.parsed_content is None:
-                logger.warning("Narrator returned no parsed content")
-                return self._fallback_narration(context)
+            try:
+                response = await self.llm.complete_structured(
+                    messages=[Message.user(prompt)],
+                    response_schema=NarrationResponse,
+                    system_prompt=NARRATOR_SYSTEM_PROMPT,
+                    temperature=self.temperature,
+                    max_tokens=512,
+                )
 
-            # Handle dict response (some providers return dict instead of Pydantic model)
-            result = response.parsed_content
-            if isinstance(result, dict):
-                result = NarrationResponse(**result)
+                if response.parsed_content is None:
+                    logger.warning("Narrator returned no parsed content")
+                    errors = ["LLM returned no content"]
+                    continue
 
-            return result
+                # Handle dict response (some providers return dict instead of Pydantic)
+                result = response.parsed_content
+                if isinstance(result, dict):
+                    result = NarrationResponse(**result)
 
-        except Exception as e:
-            logger.error(f"Narration failed: {e}")
-            return self._fallback_narration(context)
+                # Validate the narrative output
+                is_valid, validation_errors = self._validate_narrative(
+                    result.narrative, context
+                )
+
+                if is_valid:
+                    if attempt > 0:
+                        logger.info(
+                            f"Narration succeeded on attempt {attempt + 1} "
+                            f"after fixing format issues"
+                        )
+                    return result
+
+                # Validation failed, prepare for retry
+                errors = validation_errors
+                logger.debug(
+                    f"Narration validation failed (attempt {attempt + 1}/{self.max_retries}): "
+                    f"{len(errors)} errors"
+                )
+
+            except Exception as e:
+                logger.error(f"Narration failed on attempt {attempt + 1}: {e}")
+                errors = [f"LLM error: {e}"]
+
+        # All retries exhausted
+        logger.warning(
+            f"Narration failed after {self.max_retries} attempts, using fallback"
+        )
+        return self._fallback_narration(context)
 
     async def narrate_from_outcome(
         self,
@@ -266,8 +392,20 @@ class NarratorEngine:
         )
         return await self.narrate(context)
 
-    def _build_prompt(self, context: NarrationContext) -> str:
-        """Build the narration prompt."""
+    def _build_prompt(
+        self,
+        context: NarrationContext,
+        previous_errors: list[str] | None = None,
+    ) -> str:
+        """Build the narration prompt.
+
+        Args:
+            context: The narration context.
+            previous_errors: Errors from a previous attempt (for retry).
+
+        Returns:
+            Formatted prompt string.
+        """
         lines = [
             "## What Happens",
             context.what_happens,
@@ -318,6 +456,26 @@ class NarratorEngine:
         if context.tone_hints:
             lines.append("")
             lines.append(f"Tone: {', '.join(context.tone_hints)}")
+
+        # Add error feedback from previous attempt
+        if previous_errors:
+            lines.extend(
+                [
+                    "",
+                    "## IMPORTANT: Previous Attempt Had Errors",
+                    "Your previous response had formatting errors. Please fix them:",
+                    "",
+                ]
+            )
+            for error in previous_errors:
+                lines.append(f"- {error}")
+            lines.extend(
+                [
+                    "",
+                    "Remember: ALL entity mentions MUST use [key:display] format!",
+                    "Do NOT mention entity names without wrapping them in [key:name].",
+                ]
+            )
 
         return "\n".join(lines)
 

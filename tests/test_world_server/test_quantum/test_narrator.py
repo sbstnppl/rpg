@@ -428,3 +428,238 @@ class TestNarratorEngineTimeContext:
         prompt = narrator._build_prompt(context)
 
         assert "Match your descriptions to this time period" in prompt
+
+
+class TestNarratorValidation:
+    """Tests for narrator validation and retry behavior."""
+
+    @pytest.fixture
+    def mock_llm(self):
+        """Create a mock LLM provider."""
+        llm = MagicMock()
+        llm.complete_structured = AsyncMock()
+        return llm
+
+    @pytest.fixture
+    def narrator(self, mock_llm):
+        """Create narrator with mock LLM."""
+        return NarratorEngine(llm=mock_llm, max_retries=3, strict_grounding=True)
+
+    @pytest.fixture
+    def sample_context(self):
+        """Create sample narration context with NPCs."""
+        return NarrationContext(
+            what_happens="Old Tom gives the player a mug of honeyed ale",
+            outcome_type="success",
+            key_mapping={"a mug of honeyed ale": "item_ale_001"},
+            player_key="hero_001",
+            location_display="The Rusty Tankard",
+            location_key="loc_tavern",
+            npcs_in_scene={"Old Tom": "npc_tom_001"},
+            items_in_scene={},
+        )
+
+    @pytest.mark.asyncio
+    async def test_retry_on_unkeyed_mention(self, narrator, mock_llm, sample_context):
+        """Test that narration retries when entity mentioned without [key:text]."""
+        # First call: returns unkeyed mention (no [npc_tom_001:Old Tom])
+        bad_response = MagicMock()
+        bad_response.parsed_content = NarrationResponse(
+            narrative="Old Tom slides a mug of honeyed ale across the bar."
+        )
+
+        # Second call: returns properly keyed narrative
+        good_response = MagicMock()
+        good_response.parsed_content = NarrationResponse(
+            narrative="[npc_tom_001:Old Tom] slides [item_ale_001:a mug of honeyed ale] "
+            "across the worn bar toward [hero_001:you]."
+        )
+
+        mock_llm.complete_structured.side_effect = [bad_response, good_response]
+
+        result = await narrator.narrate(sample_context)
+
+        # Should have called LLM twice (first bad, then good)
+        assert mock_llm.complete_structured.call_count == 2
+        # Should return the good response
+        assert "[npc_tom_001:Old Tom]" in result.narrative
+        assert "[item_ale_001:a mug of honeyed ale]" in result.narrative
+
+    @pytest.mark.asyncio
+    async def test_fallback_after_max_retries(self, narrator, mock_llm, sample_context):
+        """Test that narrator falls back after max retries exhausted."""
+        # All calls return unkeyed mentions
+        bad_response = MagicMock()
+        bad_response.parsed_content = NarrationResponse(
+            narrative="Old Tom slides a mug of honeyed ale across the bar."
+        )
+
+        mock_llm.complete_structured.return_value = bad_response
+
+        result = await narrator.narrate(sample_context)
+
+        # Should have called LLM max_retries times
+        assert mock_llm.complete_structured.call_count == 3
+        # Should return fallback (which uses what_happens)
+        assert "ale" in result.narrative.lower() or "tom" in result.narrative.lower()
+
+    @pytest.mark.asyncio
+    async def test_error_feedback_in_retry_prompt(self, narrator, mock_llm, sample_context):
+        """Test that error messages are included in retry prompts."""
+        # First call: returns unkeyed mention
+        bad_response = MagicMock()
+        bad_response.parsed_content = NarrationResponse(
+            narrative="Old Tom waves at you."
+        )
+
+        # Second call: returns good response
+        good_response = MagicMock()
+        good_response.parsed_content = NarrationResponse(
+            narrative="[npc_tom_001:Old Tom] waves at [hero_001:you]."
+        )
+
+        mock_llm.complete_structured.side_effect = [bad_response, good_response]
+
+        await narrator.narrate(sample_context)
+
+        # Check the second call's prompt contains error feedback
+        second_call = mock_llm.complete_structured.call_args_list[1]
+        messages = second_call.kwargs.get("messages") or second_call.args[0]
+        prompt_content = messages[0].content
+
+        # Should contain error section
+        assert "Previous Attempt Had Errors" in prompt_content
+        # Should mention the unkeyed entity
+        assert "Old Tom" in prompt_content or "npc_tom_001" in prompt_content
+
+    @pytest.mark.asyncio
+    async def test_valid_narrative_returns_without_retry(
+        self, narrator, mock_llm, sample_context
+    ):
+        """Test that valid narrative returns immediately without retry."""
+        good_response = MagicMock()
+        good_response.parsed_content = NarrationResponse(
+            narrative="[npc_tom_001:Old Tom] slides [item_ale_001:a mug of honeyed ale] "
+            "across the worn bar toward [hero_001:you]."
+        )
+
+        mock_llm.complete_structured.return_value = good_response
+
+        result = await narrator.narrate(sample_context)
+
+        # Should have called LLM only once
+        assert mock_llm.complete_structured.call_count == 1
+        assert "[npc_tom_001:Old Tom]" in result.narrative
+
+    @pytest.mark.asyncio
+    async def test_strict_grounding_disabled_skips_validation(self, mock_llm):
+        """Test that validation is skipped when strict_grounding=False."""
+        narrator = NarratorEngine(
+            llm=mock_llm, max_retries=3, strict_grounding=False
+        )
+
+        # Return unkeyed mention - should not trigger retry
+        response = MagicMock()
+        response.parsed_content = NarrationResponse(
+            narrative="Old Tom slides a mug across the bar."
+        )
+        mock_llm.complete_structured.return_value = response
+
+        context = NarrationContext(
+            what_happens="Tom gives ale",
+            outcome_type="success",
+            key_mapping={},
+            player_key="hero",
+            npcs_in_scene={"Old Tom": "npc_tom"},
+        )
+
+        result = await narrator.narrate(context)
+
+        # Should only call once (no retry since validation disabled)
+        assert mock_llm.complete_structured.call_count == 1
+        assert "Old Tom" in result.narrative
+
+    def test_build_prompt_includes_previous_errors(self, narrator):
+        """Test that _build_prompt includes previous errors when provided."""
+        context = NarrationContext(
+            what_happens="Tom gives ale",
+            outcome_type="success",
+            key_mapping={},
+            player_key="hero",
+            npcs_in_scene={"Old Tom": "npc_tom"},
+        )
+
+        errors = [
+            "Unkeyed mention: 'Old Tom' should be [npc_tom:Old Tom]",
+            "Invalid key [bad_key:text]",
+        ]
+
+        prompt = narrator._build_prompt(context, previous_errors=errors)
+
+        assert "Previous Attempt Had Errors" in prompt
+        assert "Old Tom" in prompt
+        assert "should be [npc_tom:Old Tom]" in prompt
+        assert "Invalid key" in prompt
+
+    def test_build_validation_manifest(self, narrator):
+        """Test that _build_validation_manifest creates correct manifest."""
+        context = NarrationContext(
+            what_happens="Tom gives ale",
+            outcome_type="success",
+            key_mapping={"a mug of ale": "item_ale_001"},
+            player_key="hero_001",
+            location_display="Tavern",
+            location_key="loc_tavern",
+            npcs_in_scene={"Old Tom": "npc_tom_001"},
+            items_in_scene={"bread": "item_bread_001"},
+        )
+
+        manifest = narrator._build_validation_manifest(context)
+
+        # Check basic structure
+        assert manifest.player_key == "hero_001"
+        assert manifest.location_key == "loc_tavern"
+
+        # Check NPCs
+        assert "npc_tom_001" in manifest.npcs
+        assert manifest.npcs["npc_tom_001"].display_name == "Old Tom"
+
+        # Check items (from items_in_scene + key_mapping)
+        assert "item_bread_001" in manifest.items_at_location
+        assert "item_ale_001" in manifest.items_at_location
+
+    def test_validate_narrative_valid(self, narrator):
+        """Test _validate_narrative returns valid for properly formatted text."""
+        context = NarrationContext(
+            what_happens="Tom gives ale",
+            outcome_type="success",
+            key_mapping={},
+            player_key="hero_001",
+            npcs_in_scene={"Old Tom": "npc_tom_001"},
+        )
+
+        narrative = "[npc_tom_001:Old Tom] waves at [hero_001:you]."
+
+        is_valid, errors = narrator._validate_narrative(narrative, context)
+
+        assert is_valid
+        assert len(errors) == 0
+
+    def test_validate_narrative_unkeyed_mention(self, narrator):
+        """Test _validate_narrative detects unkeyed entity mentions."""
+        context = NarrationContext(
+            what_happens="Tom gives ale",
+            outcome_type="success",
+            key_mapping={},
+            player_key="hero_001",
+            npcs_in_scene={"Old Tom": "npc_tom_001"},
+        )
+
+        # "Old Tom" without [key:text] format
+        narrative = "Old Tom waves at [hero_001:you]."
+
+        is_valid, errors = narrator._validate_narrative(narrative, context)
+
+        assert not is_valid
+        assert len(errors) > 0
+        assert any("Old Tom" in e for e in errors)

@@ -43,6 +43,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **Narrator Key Format Compliance** - Added validation-based retry loop for [key:text] format enforcement
+  - Added `_build_validation_manifest()` and `_validate_narrative()` methods (`src/world_server/quantum/narrator.py`)
+  - Retry loop with error feedback (max 3 attempts) before fallback
+  - Lowered temperature from 0.7 to 0.5 for better format compliance
+  - 9 new tests for validation and retry behavior (`tests/test_world_server/test_quantum/test_narrator.py`)
+
 - **Skill Checks Not Triggering** - Skill actions like sneaking and climbing now correctly trigger dice rolls
   - Expanded `skill_use` guidance in intent classifier with 15+ explicit examples (`src/world_server/quantum/intent_classifier.py`)
   - Added explicit SKILL CHECK RULES to branch generator system prompt (`src/world_server/quantum/branch_generator.py`)

@@ -1,8 +1,9 @@
 # Narrator Key Format Issue
 
-**Status:** Investigating
+**Status:** Resolved
 **Priority:** High
 **Detected:** 2024-12-21
+**Resolved:** 2026-01-18
 **Related Sessions:** Session 77 gameplay testing
 
 ## Problem Statement
@@ -74,36 +75,44 @@ is at the center of the scene, with a rope attached to it.
 
 ## Root Cause
 
-<To be determined after investigation>
+1. **Temperature too high**: `NarratorEngine` used 0.7, while working `SceneNarrator` uses 0.4
+2. **No retry loop**: Single LLM call with no validation or retry mechanism
+3. **Warnings not errors**: Unkeyed mentions detected but not enforced
+4. **No enforcement**: Validation detected issues but didn't block invalid output
 
-## Proposed Solution
+## Solution Implemented
 
-<After investigation>
+Added validation-based retry loop to `NarratorEngine` (mirroring the working `SceneNarrator` pattern):
 
-Options to consider:
-1. Strengthen prompt with explicit examples
-2. Add key format to system prompt
-3. Provide manifest keys more prominently in context
-4. Use structured output instead of free-form text
-5. Post-process to convert names to keys
+1. **Generate narrative** via LLM
+2. **Validate output** using `GroundingValidator`
+3. **On failure, retry** with error feedback (max 3 attempts)
+4. **Fall back** to safe narration if all retries fail
 
-## Implementation Details
+### Key Changes
 
-<Specific code changes>
+1. **Lowered temperature** from 0.7 to 0.5 for better format compliance
+2. **Added `_build_validation_manifest()`** to create manifest from `NarrationContext`
+3. **Added `_validate_narrative()`** to check for invalid keys and unkeyed mentions
+4. **Rewrote `narrate()`** with retry loop and validation
+5. **Updated `_build_prompt()`** to include error feedback on retry
 
-## Files to Modify
+## Files Modified
 
-- [ ] `src/narrator/scene_narrator.py` - Main narrator logic
-- [ ] `src/agents/nodes/constrained_narrator_node.py` - Node wrapper
-- [ ] Narrator prompt templates
+- [x] `src/world_server/quantum/narrator.py` - Added retry loop, validation, lower temperature
+- [x] `tests/test_world_server/test_quantum/test_narrator.py` - Added 9 new tests
 
 ## Test Cases
 
-- [ ] Narrator uses `[key]` format for all scene entities
-- [ ] Validation passes on first attempt (no retries needed)
-- [ ] Display correctly strips keys to natural language
-- [ ] Edge case: Entity mentioned multiple times uses same key
-- [ ] Edge case: Pronouns don't need keys ("he", "she", "it")
+- [x] `test_retry_on_unkeyed_mention` - Verify retry triggered on format violation
+- [x] `test_fallback_after_max_retries` - Verify fallback after 3 failures
+- [x] `test_error_feedback_in_retry_prompt` - Verify errors included in retry
+- [x] `test_valid_narrative_returns_without_retry` - No retry for valid output
+- [x] `test_strict_grounding_disabled_skips_validation` - Skip when disabled
+- [x] `test_build_prompt_includes_previous_errors` - Errors in prompt
+- [x] `test_build_validation_manifest` - Correct manifest creation
+- [x] `test_validate_narrative_valid` - Properly formatted text passes
+- [x] `test_validate_narrative_unkeyed_mention` - Unkeyed mentions detected
 
 ## Related Issues
 
