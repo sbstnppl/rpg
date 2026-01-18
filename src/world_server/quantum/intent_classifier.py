@@ -127,7 +127,32 @@ When intent is action/question/hypothetical, classify the action type:
 - **manipulate_item**: Take, drop, use, examine item
 - **move**: Go somewhere, travel, enter/exit
 - **observe**: Look around, examine environment
-- **skill_use**: Pick lock, climb, sneak, hide
+- **skill_use**: Actions with uncertain outcomes requiring dice rolls
+
+  SKILL_USE examples (classify these as skill_use, NOT move):
+  - "sneak past the guard" → skill_use (stealth)
+  - "try to sneak into the alley" → skill_use (stealth)
+  - "hide in the shadows" → skill_use (stealth)
+  - "creep quietly behind them" → skill_use (stealth)
+  - "climb the wall" → skill_use (athletics)
+  - "scale the cliff" → skill_use (athletics)
+  - "jump across the gap" → skill_use (athletics)
+  - "pick the lock" → skill_use (sleight of hand)
+  - "lockpick the door" → skill_use (sleight of hand)
+  - "steal the purse" → skill_use (sleight of hand)
+  - "persuade the merchant" → skill_use (persuasion)
+  - "convince them to help" → skill_use (persuasion)
+  - "intimidate the guard" → skill_use (intimidation)
+  - "deceive the shopkeeper" → skill_use (deception)
+  - "bluff your way past" → skill_use (deception)
+
+  NOT skill_use (these are move):
+  - "go to the alley" → move (no skill verb)
+  - "walk into the market" → move (simple travel)
+  - "enter the tavern" → move (no uncertainty)
+
+  KEY: Look for skill verbs (sneak, hide, climb, pick, steal, persuade, etc.).
+  If present, it's skill_use even if movement is involved.
 - **combat**: Attack, defend, flee
 - **wait**: Wait, rest, sleep
 

@@ -239,6 +239,24 @@ Your task is to generate multiple outcome variants for a player action. Each var
    - night: darkness, moonlight, stars, quiet, late hours, candlelight
    Do NOT mention morning sunlight, dawn, or early hours when it's evening/night.
 
+## SKILL CHECK RULES
+
+When action_type is SKILL_USE, you MUST:
+1. Set requires_skill_check: true
+2. Set skill: the relevant skill name
+3. Set dc: difficulty class (10=easy, 15=medium, 20=hard)
+4. Generate BOTH success AND failure variants
+
+Skill categories:
+- stealth: sneaking, hiding, moving quietly, creeping
+- athletics: climbing, jumping, swimming, forcing doors
+- persuasion: convincing, charming, negotiating
+- deception: lying, bluffing, disguising, misdirecting
+- intimidation: threatening, scaring, coercing
+- sleight_of_hand: picking locks, pickpocketing, stealing
+
+NEVER skip skill checks for SKILL_USE actions. The uncertainty is the point.
+
 For skill checks, generate both success and failure variants. The dice roll happens at runtime.
 
 State deltas should capture meaningful changes. Each delta type has required fields:

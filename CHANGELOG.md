@@ -43,6 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **Skill Checks Not Triggering** - Skill actions like sneaking and climbing now correctly trigger dice rolls
+  - Expanded `skill_use` guidance in intent classifier with 15+ explicit examples (`src/world_server/quantum/intent_classifier.py`)
+  - Added explicit SKILL CHECK RULES to branch generator system prompt (`src/world_server/quantum/branch_generator.py`)
+  - Fixed duplicate "pick" verb mapping that caused conflicts (`src/world_server/quantum/action_matcher.py`)
+  - Added 20 parametrized tests for skill action classification (`tests/test_world_server/test_quantum/test_intent_classifier.py`)
+  - Deleted stale issue `grounding-retry-repeats-previous-turn` referencing non-existent `gm_node.py`
+
 - **NPC Item Transactions** - Generate transfer_item deltas when NPCs give items to player
   - Updated system prompt to require transfer_item deltas when narrative describes receiving items (`src/world_server/quantum/branch_generator.py`)
   - Added 14 item type hints for NPC-given items (mug, tankard, bowl, loaf, etc.) (`src/world_server/quantum/delta_postprocessor.py`)

@@ -508,3 +508,138 @@ class TestSpeechActsVsMetaQuestions:
         result = await classifier.classify(sample_input)
         # This should be ACTION - player is asking the guard IN the game
         assert result.intent_type == IntentType.ACTION
+
+
+class TestSkillActionClassification:
+    """Tests for proper classification of skill-based actions.
+
+    Skill actions like sneaking, climbing, and picking locks should be
+    classified as SKILL_USE, not MOVE or MANIPULATE_ITEM.
+
+    Issue: docs/issues/skill-checks-not-triggering/
+    """
+
+    @pytest.fixture
+    def mock_llm(self):
+        """Create a mock LLM provider."""
+        llm = MagicMock()
+        llm.complete_structured = AsyncMock()
+        return llm
+
+    @pytest.fixture
+    def classifier(self, mock_llm):
+        """Create classifier with mock LLM."""
+        return IntentClassifier(llm=mock_llm)
+
+    @pytest.fixture
+    def sample_input(self):
+        """Create sample classifier input."""
+        return IntentClassifierInput(
+            player_input="",  # Will be set per test
+            location_display="Dark Alley",
+            location_key="dark_alley",
+            npcs_present=["Guard"],
+            items_available=["Locked Chest"],
+            exits_available=["Market Square", "Back Street"],
+        )
+
+    # =========================================================================
+    # Skill Actions - These should be classified as SKILL_USE
+    # =========================================================================
+
+    @pytest.mark.parametrize("player_input,expected_skill", [
+        # Stealth actions
+        ("sneak past the guard", "stealth"),
+        ("try to sneak into the alley", "stealth"),
+        ("hide in the shadows", "stealth"),
+        ("creep quietly behind them", "stealth"),
+        # Athletics actions
+        ("climb the wall", "athletics"),
+        ("scale the cliff", "athletics"),
+        ("jump across the gap", "athletics"),
+        # Sleight of hand actions
+        ("pick the lock on the door", "sleight_of_hand"),
+        ("lockpick the chest", "sleight_of_hand"),
+        ("steal the purse", "sleight_of_hand"),
+        # Social skills
+        ("persuade the merchant to lower his price", "persuasion"),
+        ("intimidate the guard", "intimidation"),
+        ("deceive the shopkeeper", "deception"),
+        ("bluff your way past", "deception"),
+    ])
+    @pytest.mark.asyncio
+    async def test_skill_actions_classified_as_skill_use(
+        self, classifier, mock_llm, sample_input, player_input, expected_skill
+    ):
+        """Skill actions should be classified as SKILL_USE with correct skill."""
+        sample_input.player_input = player_input
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="action",
+            confidence=0.95,
+            action_type="skill_use",
+            target=None,
+            topic=expected_skill,
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+
+        assert result.intent_type == IntentType.ACTION
+        assert result.action_type == ActionType.SKILL_USE
+
+    # =========================================================================
+    # Movement Actions - These should NOT be SKILL_USE
+    # =========================================================================
+
+    @pytest.mark.parametrize("player_input", [
+        "walk to the market",
+        "go into the alley",
+        "enter the tavern",
+        "head to the square",
+        "travel to the village",
+    ])
+    @pytest.mark.asyncio
+    async def test_movement_not_skill_use(
+        self, classifier, mock_llm, sample_input, player_input
+    ):
+        """Simple movement should be MOVE, not SKILL_USE."""
+        sample_input.player_input = player_input
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="action",
+            confidence=0.95,
+            action_type="move",
+            target=None,
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+
+        assert result.intent_type == IntentType.ACTION
+        assert result.action_type == ActionType.MOVE
+
+    # =========================================================================
+    # Edge Cases - Skill verbs with movement intent
+    # =========================================================================
+
+    @pytest.mark.asyncio
+    async def test_sneak_into_is_skill_not_move(
+        self, classifier, mock_llm, sample_input
+    ):
+        """'sneak into' should be SKILL_USE even though destination is mentioned."""
+        sample_input.player_input = "try to sneak into the alley"
+        mock_response = MagicMock()
+        mock_response.parsed_content = IntentClassificationResponse(
+            intent_type="action",
+            confidence=0.95,
+            action_type="skill_use",
+            target="alley",
+            topic="stealth",
+        )
+        mock_llm.complete_structured.return_value = mock_response
+
+        result = await classifier.classify(sample_input)
+
+        # The key test: even with a destination, this should be SKILL_USE
+        assert result.action_type == ActionType.SKILL_USE

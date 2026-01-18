@@ -36,7 +36,6 @@ ACTION_VERBS = {
     # Item manipulation
     "take": ActionType.MANIPULATE_ITEM,
     "grab": ActionType.MANIPULATE_ITEM,
-    "pick": ActionType.MANIPULATE_ITEM,
     "get": ActionType.MANIPULATE_ITEM,
     "use": ActionType.MANIPULATE_ITEM,
     "equip": ActionType.MANIPULATE_ITEM,
