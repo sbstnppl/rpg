@@ -161,6 +161,23 @@ THIRD_PERSON_RE = [re.compile(p, re.IGNORECASE) for p in THIRD_PERSON_PATTERNS]
 PLACEHOLDER_RE = [re.compile(p, re.IGNORECASE) for p in PLACEHOLDER_PATTERNS]
 NPC_DIALOGUE_RE = [re.compile(p, re.IGNORECASE) for p in NPC_DIALOGUE_PATTERNS]
 
+# Tool-call meta-commentary patterns (LLM exposing game mechanics)
+TOOL_CALL_PATTERNS = [
+    # Direct tool name mentions
+    r"\b(?:take_item|drop_item|move_to|satisfy_need|skill_check|attack_roll|damage_entity|give_item|record_fact|create_entity|apply_stimulus|get_npc_attitude|mark_need_communicated|assign_quest|update_quest|complete_quest|create_task|complete_task|create_appointment|complete_appointment|get_rules|get_scene_details|get_player_state|get_story_context|get_time|transfer_item)\b",
+    # Tool usage announcements
+    r"\b(?:call|use|execute|invoke)\s+(?:the\s+)?\w+\s+tool\b",
+    r"\byou\s+then\s+(?:call|use)\b",
+    # Process announcements
+    r"\blet\s+me\s+(?:check|get|update)\b",
+    r"\bi'?ll\s+(?:check|get|update)\s+(?:your|the)\b",
+    # System references
+    r"\bthe\s+system\s+(?:updates?|advances?|changes?)\b",
+    r"\binventory\s+(?:is\s+)?(?:now\s+)?updated\b",
+]
+
+TOOL_CALL_RE = [re.compile(p, re.IGNORECASE) for p in TOOL_CALL_PATTERNS]
+
 
 class NarrativeConsistencyValidator:
     """Validates pre-generated narrative for consistency and quality.
@@ -241,6 +258,9 @@ class NarrativeConsistencyValidator:
 
         # 9. Narrative quality checks
         issues.extend(self._check_quality(narrative))
+
+        # 10. Tool-call meta-commentary detection
+        issues.extend(self._check_tool_commentary(narrative))
 
         # Valid if no errors
         valid = not any(i.severity == IssueSeverity.ERROR for i in issues)
@@ -427,6 +447,28 @@ class NarrativeConsistencyValidator:
                 severity=IssueSeverity.INFO,
                 suggestion="Clean up whitespace",
             ))
+
+        return issues
+
+    def _check_tool_commentary(self, narrative: str) -> list[ValidationIssue]:
+        """Check for tool-call meta-commentary that breaks immersion.
+
+        Detects when the LLM exposes game mechanics by mentioning tool names,
+        announcing tool calls, or referencing system processes.
+        """
+        issues = []
+
+        for pattern in TOOL_CALL_RE:
+            match = pattern.search(narrative)
+            if match:
+                issues.append(ValidationIssue(
+                    category="meta_commentary",
+                    message=f"Tool-call meta-commentary detected: '{match.group(0)}'",
+                    severity=IssueSeverity.ERROR,  # ERROR triggers retry
+                    location=match.group(0),
+                    suggestion="Remove game mechanic references from narrative",
+                ))
+                break  # One error is enough to trigger retry
 
         return issues
 

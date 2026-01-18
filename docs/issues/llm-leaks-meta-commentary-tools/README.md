@@ -1,8 +1,9 @@
 # LLM Leaks Meta-Commentary About Tool Calls Into Narrative
 
-**Status:** Investigating
+**Status:** Resolved
 **Priority:** High
 **Detected:** 2025-12-30
+**Resolved:** 2026-01-18
 **Related Sessions:** Session 304
 
 ## Problem Statement
@@ -51,30 +52,44 @@ Despite these instructions, qwen3:32b still occasionally leaks meta-commentary.
 
 ## Root Cause
 
-Possible causes:
-1. Model training bias toward explaining tool usage
-2. Confusion between calling a tool vs describing calling a tool
-3. System prompt length causing instruction degradation
-4. Model not properly distinguishing between narrative and tool calls
+1. **System prompt rules are aspirational, not enforced** - Lines 21-22 of `prompts.py` forbid meta-commentary but there was no validation
+2. **`NarrativeConsistencyValidator._check_quality()` didn't check for tool names** - It only checked capitalization, punctuation, and whitespace
+3. **No pattern matching for tool-call leakage** - The validator had patterns for meta-questions, AI identity, third-person, but NOT tool mentions
 
-## Proposed Solution
+## Solution
 
-Options:
-1. Add post-processing filter to detect and remove/reject meta-commentary
-2. Add this pattern to character break detection (`_validate_character`)
-3. Use stricter prompt formatting or few-shot examples
-4. Retry with correction when meta-commentary detected
+Added tool-call meta-commentary detection to `NarrativeConsistencyValidator` in `validation.py`.
 
-## Files to Modify
+### Implementation Details
 
-- [ ] `src/gm/gm_node.py` - Add meta-commentary detection to character validation
-- [ ] `src/gm/prompts.py` - Strengthen instructions against meta-commentary
+1. **Added `TOOL_CALL_PATTERNS` and `TOOL_CALL_RE` constants** (validation.py ~line 165)
+   - Direct tool name mentions: `take_item`, `drop_item`, `transfer_item`, etc.
+   - Tool usage announcements: "call the X tool", "use the X tool"
+   - Process announcements: "let me check", "I'll update"
+   - System references: "the system updates", "inventory is now updated"
+
+2. **Added `_check_tool_commentary()` method** (validation.py ~line 447)
+   - Scans narrative for TOOL_CALL_RE patterns
+   - Returns ERROR severity issue (triggers retry in pipeline)
+
+3. **Integrated into `validate()` method** (validation.py line 248)
+   - Called as step 10 after quality checks
+
+## Files Modified
+
+- [x] `src/world_server/quantum/validation.py` - Added patterns and detection method
+- [x] `tests/test_world_server/test_quantum/test_validation.py` - Added `TestToolCommentaryDetection` class
 
 ## Test Cases
 
-- [ ] "Take the sword" should not mention take_item tool in narrative
-- [ ] "Check my inventory" should not mention get_player_state tool
-- [ ] Any tool call should be invisible to player
+- [x] `test_detects_tool_name_mention` - Detects "take_item tool" in narrative
+- [x] `test_detects_tool_usage_announcement` - Detects "Let me update your inventory"
+- [x] `test_detects_you_then_call_pattern` - Detects "You then use the pickup function"
+- [x] `test_detects_system_reference` - Detects "The system updates your inventory"
+- [x] `test_detects_inventory_updated` - Detects "inventory is now updated"
+- [x] `test_detects_transfer_item_tool` - Detects "transfer_item" tool name
+- [x] `test_clean_narrative_passes` - Clean narrative without tool commentary passes
+- [x] `test_natural_word_use_not_flagged` - Common words like "use" in natural context not flagged
 
 ## Related Issues
 

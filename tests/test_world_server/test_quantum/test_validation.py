@@ -793,6 +793,91 @@ class TestBranchValidator:
 
 
 # =============================================================================
+# Tool Commentary Detection Tests
+# =============================================================================
+
+
+class TestToolCommentaryDetection:
+    """Test detection of tool-call meta-commentary in narratives."""
+
+    def test_detects_tool_name_mention(self, sample_manifest: GroundingManifest):
+        """Direct tool name mentions are detected."""
+        validator = NarrativeConsistencyValidator(sample_manifest)
+        result = validator.validate(
+            "You reach for the bread. You then call the take_item tool."
+        )
+        assert not result.valid
+        assert any("meta_commentary" in i.category for i in result.issues)
+
+    def test_detects_tool_usage_announcement(self, sample_manifest: GroundingManifest):
+        """Tool usage announcements are detected."""
+        validator = NarrativeConsistencyValidator(sample_manifest)
+        result = validator.validate(
+            "You take the sword. Let me update your inventory."
+        )
+        assert not result.valid
+        assert any("meta_commentary" in i.category for i in result.issues)
+
+    def test_detects_you_then_call_pattern(self, sample_manifest: GroundingManifest):
+        """'You then call/use' pattern is detected."""
+        validator = NarrativeConsistencyValidator(sample_manifest)
+        result = validator.validate(
+            "You decide to pick up the bread. You then use the pickup function."
+        )
+        assert not result.valid
+        assert any("meta_commentary" in i.category for i in result.issues)
+
+    def test_detects_system_reference(self, sample_manifest: GroundingManifest):
+        """System update references are detected."""
+        validator = NarrativeConsistencyValidator(sample_manifest)
+        result = validator.validate(
+            "You grab the loaf of bread. The system updates your inventory."
+        )
+        assert not result.valid
+        assert any("meta_commentary" in i.category for i in result.issues)
+
+    def test_detects_inventory_updated(self, sample_manifest: GroundingManifest):
+        """'Inventory updated' pattern is detected."""
+        validator = NarrativeConsistencyValidator(sample_manifest)
+        result = validator.validate(
+            "You pick up the sword. Your inventory is now updated."
+        )
+        assert not result.valid
+        assert any("meta_commentary" in i.category for i in result.issues)
+
+    def test_detects_transfer_item_tool(self, sample_manifest: GroundingManifest):
+        """The transfer_item tool name is detected."""
+        validator = NarrativeConsistencyValidator(sample_manifest)
+        result = validator.validate(
+            "You receive the item via transfer_item from the merchant."
+        )
+        assert not result.valid
+        assert any("meta_commentary" in i.category for i in result.issues)
+
+    def test_clean_narrative_passes(self, sample_manifest: GroundingManifest):
+        """Clean narrative without tool commentary passes."""
+        validator = NarrativeConsistencyValidator(sample_manifest)
+        result = validator.validate(
+            "You reach for the crusty loaf of bread, lifting it from the basket. "
+            "Its warmth seeps through your fingers as you add it to your pack."
+        )
+        # Should not have meta_commentary errors
+        meta_issues = [i for i in result.issues if i.category == "meta_commentary"]
+        assert len(meta_issues) == 0
+
+    def test_natural_word_use_not_flagged(self, sample_manifest: GroundingManifest):
+        """Common words like 'use' in natural context are not flagged."""
+        validator = NarrativeConsistencyValidator(sample_manifest)
+        result = validator.validate(
+            "[marcus_001:Marcus] suggests you use the sword carefully. "
+            "\"It has a sharp edge,\" he warns."
+        )
+        # 'use' in natural speech should not be flagged
+        meta_issues = [i for i in result.issues if i.category == "meta_commentary"]
+        assert len(meta_issues) == 0
+
+
+# =============================================================================
 # Edge Cases and Integration
 # =============================================================================
 

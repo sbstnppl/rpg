@@ -58,6 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **NPC Item Transactions** - Generate transfer_item deltas when NPCs give items to player
   - Updated system prompt to require transfer_item deltas when narrative describes receiving items (`src/world_server/quantum/branch_generator.py`)
+
+- **Tool-Call Meta-Commentary Detection** - Validates narratives don't expose game mechanics
+  - Added `TOOL_CALL_PATTERNS` and `_check_tool_commentary()` to `NarrativeConsistencyValidator` (`src/world_server/quantum/validation.py`)
+  - Detects tool names (`take_item`, `transfer_item`), usage announcements ("call the X tool"), and system references
+  - Returns ERROR severity to trigger narrative retry when detected
+  - 8 new tests for meta-commentary detection (`tests/test_world_server/test_quantum/test_validation.py`)
   - Added 14 item type hints for NPC-given items (mug, tankard, bowl, loaf, etc.) (`src/world_server/quantum/delta_postprocessor.py`)
   - 3 new tests for NPC item giving scenarios (`tests/test_world_server/test_quantum/test_delta_postprocessor.py`)
 
