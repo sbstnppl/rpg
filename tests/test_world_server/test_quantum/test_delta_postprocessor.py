@@ -209,6 +209,79 @@ class TestInjectMissingCreates:
         creates = [d for d in result.deltas if d.delta_type == DeltaType.CREATE_ENTITY]
         assert len(creates) == 1
 
+    def test_npc_gives_ale_auto_created(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """When NPC gives ale, transfer_item with descriptive key triggers auto-create."""
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.TRANSFER_ITEM,
+                target_key="ale_mug",  # Descriptive key, doesn't exist
+                changes={"to_entity_key": "test_hero"},
+            ),
+        ]
+
+        result = processor.process(deltas)
+
+        assert not result.needs_regeneration
+        assert len(result.deltas) == 2  # CREATE + TRANSFER
+
+        # First delta should be CREATE_ENTITY
+        create_delta = result.deltas[0]
+        assert create_delta.delta_type == DeltaType.CREATE_ENTITY
+        assert create_delta.target_key == "ale_mug"
+        assert create_delta.changes["entity_type"] == "drink"  # 'mug' hint
+        assert create_delta.changes["display_name"] == "Ale Mug"
+
+        # Second should be the original TRANSFER
+        assert result.deltas[1].delta_type == DeltaType.TRANSFER_ITEM
+
+    def test_npc_gives_bread_loaf_auto_created(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """When NPC gives bread, transfer_item with descriptive key triggers auto-create."""
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.TRANSFER_ITEM,
+                target_key="bread_loaf",  # Uses 'loaf' hint
+                changes={"to_entity_key": "test_hero"},
+            ),
+        ]
+
+        result = processor.process(deltas)
+
+        assert not result.needs_regeneration
+        assert len(result.deltas) == 2
+
+        create_delta = result.deltas[0]
+        assert create_delta.delta_type == DeltaType.CREATE_ENTITY
+        assert create_delta.target_key == "bread_loaf"
+        assert create_delta.changes["entity_type"] == "food"  # 'loaf' hint
+        assert create_delta.changes["display_name"] == "Bread Loaf"
+
+    def test_npc_gives_iron_key_auto_created(
+        self, processor: DeltaPostProcessor
+    ) -> None:
+        """When NPC gives key, transfer_item with descriptive key triggers auto-create."""
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.TRANSFER_ITEM,
+                target_key="iron_key",  # Uses 'key' hint
+                changes={"to_entity_key": "test_hero"},
+            ),
+        ]
+
+        result = processor.process(deltas)
+
+        assert not result.needs_regeneration
+        assert len(result.deltas) == 2
+
+        create_delta = result.deltas[0]
+        assert create_delta.delta_type == DeltaType.CREATE_ENTITY
+        assert create_delta.target_key == "iron_key"
+        assert create_delta.changes["entity_type"] == "key"
+        assert create_delta.changes["display_name"] == "Iron Key"
+
 
 # =============================================================================
 # Test: Infer Entity Type

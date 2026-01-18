@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **NPC Item Transactions** - Generate transfer_item deltas when NPCs give items to player
+  - Updated system prompt to require transfer_item deltas when narrative describes receiving items (`src/world_server/quantum/branch_generator.py`)
+  - Added 14 item type hints for NPC-given items (mug, tankard, bowl, loaf, etc.) (`src/world_server/quantum/delta_postprocessor.py`)
+  - 3 new tests for NPC item giving scenarios (`tests/test_world_server/test_quantum/test_delta_postprocessor.py`)
+
 - **UPDATE_LOCATION Destination Validation** - Reject deltas with non-existent location destinations
   - Added destination validation in `_check_unknown_keys()` against manifest exits (`src/world_server/quantum/delta_postprocessor.py`)
   - Added `_check_unknown_locations()` method for explicit location checking

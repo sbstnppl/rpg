@@ -268,13 +268,16 @@ NEVER derive or invent keys from display names (don't use "rusty_tankard" or "th
 Example update_need for satisfying thirst (use the player's actual entity_key from the manifest):
 {"delta_type": "update_need", "target_key": "<PLAYER_ENTITY_KEY>", "changes": {"entity_key": "<PLAYER_ENTITY_KEY>", "need_name": "thirst", "amount": 20}}
 
-Example transfer_item for giving an item to the player (target_key MUST be an actual item key from the ITEMS section below):
-{"delta_type": "transfer_item", "target_key": "<ITEM_KEY_FROM_ITEMS_SECTION>", "changes": {"to_entity_key": "<PLAYER_ENTITY_KEY>"}}
+INVARIANT FOR ITEM TRANSACTIONS:
+If your narrative describes an item being given, served, handed, or transferred to the player, you MUST generate a transfer_item delta. New items will be auto-created.
 
-CRITICAL: For transfer_item deltas:
-- target_key MUST be an actual item key from the ITEMS section in the prompt
-- Do NOT use example keys like "ale_mug_001" or "sword_001" - only use keys that appear in ITEMS
-- If no suitable item exists in ITEMS, do NOT generate a transfer_item delta
+Example transfer_item when NPC gives/sells/serves item to player:
+{"delta_type": "transfer_item", "target_key": "ale_mug", "changes": {"to_entity_key": "<PLAYER_ENTITY_KEY>"}}
+
+For transfer_item deltas:
+- If the item exists in ITEMS section, use its exact key
+- If the item is NEW (NPC gives/creates it), use a descriptive snake_case key (e.g., "ale_mug", "bread_loaf", "iron_key") - it will be auto-created
+- NEVER skip transfer_item when narrative describes receiving an item - this causes state desync
 
 CRITICAL: Use ACTUAL entity keys from the scene manifest, NOT placeholders or generic terms. The player's key varies (e.g., "test_hero", "brave_knight") - always check the manifest for the correct key.
 

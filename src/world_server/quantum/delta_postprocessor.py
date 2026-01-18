@@ -109,6 +109,23 @@ ITEM_TYPE_HINTS: dict[str, str] = {
     "ring": "accessory",
     "necklace": "accessory",
     "amulet": "accessory",
+    "badge": "accessory",
+    # Common NPC-given items (drinks in containers)
+    "mug": "drink",
+    "tankard": "drink",
+    "goblet": "drink",
+    "cup": "drink",
+    "flask": "drink",
+    # Common NPC-given items (food in containers)
+    "bowl": "food",
+    "plate": "food",
+    "loaf": "food",
+    "portion": "food",
+    "serving": "food",
+    # Common NPC-given items (misc)
+    "parchment": "misc",
+    "document": "misc",
+    "token": "misc",
     # Containers
     "chest": "container",
     "box": "container",
