@@ -94,6 +94,7 @@ from src.world_server.quantum.schemas import (
 UNTARGETED_ACTION_TYPES = {ActionType.OBSERVE, ActionType.WAIT}
 
 from src.world_server.quantum.validation import BranchValidator, IssueSeverity
+from src.world_server.quantum.ooc_handler import OOCHandler, OOCContext
 
 logger = logging.getLogger(__name__)
 
@@ -654,7 +655,9 @@ class QuantumPipeline:
         # Generate a descriptive response without executing anything
         # For now, use a simple template - future: use narrator model
 
-        narrative = self._generate_informational_response(intent_result, manifest)
+        narrative = self._generate_informational_response(
+            intent_result, manifest, location_key
+        )
 
         total_time_ms = (time.perf_counter() - start_time) * 1000
 
@@ -665,12 +668,15 @@ class QuantumPipeline:
             used_fallback=False,
         )
 
-    def _generate_informational_response(self, intent_result, manifest: GroundingManifest) -> str:
+    def _generate_informational_response(
+        self, intent_result, manifest: GroundingManifest, location_key: str
+    ) -> str:
         """Generate a response for informational intents.
 
         Args:
             intent_result: The classified intent
             manifest: Current scene manifest
+            location_key: Current location key
 
         Returns:
             Descriptive narrative answering the question
@@ -709,7 +715,14 @@ class QuantumPipeline:
             return "That's an interesting thought. What specifically are you considering?"
 
         elif intent_result.intent_type == IntentType.OUT_OF_CHARACTER:
-            return "That's an out-of-character request. What would you like to know?"
+            # Use OOC handler for out-of-character queries
+            ooc_handler = OOCHandler()
+            context = OOCContext(
+                db=self.db,
+                game_session=self.game_session,
+                location_key=location_key,
+            )
+            return ooc_handler.handle_query(intent_result.raw_input, context)
 
         return "I'm not sure what you're asking. Could you be more specific?"
 

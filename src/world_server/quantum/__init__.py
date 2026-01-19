@@ -124,6 +124,11 @@ from src.world_server.quantum.delta_postprocessor import (
     PostProcessResult,
     RegenerationNeeded,
 )
+from src.world_server.quantum.ooc_handler import (
+    OOCHandler,
+    OOCContext,
+    OOCQueryType,
+)
 
 __all__ = [
     # Enums
@@ -222,4 +227,8 @@ __all__ = [
     "DeltaPostProcessor",
     "PostProcessResult",
     "RegenerationNeeded",
+    # OOC Handler
+    "OOCHandler",
+    "OOCContext",
+    "OOCQueryType",
 ]

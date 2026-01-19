@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **OOC Handler for Out-of-Character Queries** - Routes OOC queries to game state instead of placeholder
+  - New `OOCHandler` class with keyword-based query classification (`src/world_server/quantum/ooc_handler.py`)
+  - Fast-path handlers for exits, time, inventory, location, NPCs, stats, and help
+  - LLM fallback for unrecognized queries with GM-style answers
+  - 24 unit tests (`tests/test_world_server/test_quantum/test_ooc_handler.py`)
+
 - **QwenAgentProvider Unit Tests** - Complete test coverage for Qwen3 tool calling provider
   - 50 unit tests covering initialization, message conversion, tool parsing, and error handling (`tests/test_llm/test_qwen_agent_provider.py`)
   - Tests for thinking block stripping, JSON tool call extraction, and structured output
