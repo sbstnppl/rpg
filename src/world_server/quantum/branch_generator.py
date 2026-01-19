@@ -283,6 +283,24 @@ CRITICAL: For update_location deltas, you MUST use the EXACT location_key from t
 Example: If exits show "[village_tavern:The Rusty Tankard]", use location_key: "village_tavern"
 NEVER derive or invent keys from display names (don't use "rusty_tankard" or "the_rusty_tankard").
 
+IMPORTANT: UPDATE_LOCATION vs POSITION CHANGE
+- UPDATE_LOCATION: Moving to a DIFFERENT room/area (must use a key from Exits or Other known locations)
+- POSITION CHANGE: Moving within the same room (behind bar, at table, near door, by fireplace)
+
+Position changes within a room do NOT require update_location deltas.
+Instead, describe the position change in the narrative only.
+
+Examples:
+- "go to the village square" → UPDATE_LOCATION to village_square (it's in Exits)
+- "sneak behind the bar" → NO update_location (same room, just a position)
+- "climb up to the rafters" → NO update_location (same room, elevated position)
+- "hide under the table" → NO update_location (same room, concealed position)
+- "go down to the cellar" → UPDATE_LOCATION to cellar ONLY if cellar exists in Exits
+- "move to the corner" → NO update_location (same room, different spot)
+
+If the player asks to go somewhere that is NOT in Exits or Other known locations,
+they are describing a position within the current room - handle it narratively without UPDATE_LOCATION.
+
 Example update_need for satisfying thirst (use the player's actual entity_key from the manifest):
 {"delta_type": "update_need", "target_key": "<PLAYER_ENTITY_KEY>", "changes": {"entity_key": "<PLAYER_ENTITY_KEY>", "need_name": "thirst", "amount": 20}}
 

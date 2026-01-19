@@ -365,6 +365,9 @@ class DeltaPostProcessor:
         must exist in the manifest's exits or candidate_locations. Invalid
         locations cannot be fixed and require regeneration.
 
+        NOTE: This method is kept for backwards compatibility with sync process().
+        The async path uses _remove_invalid_location_deltas() instead for graceful handling.
+
         Returns:
             (needs_regeneration, reason) tuple.
         """
@@ -381,6 +384,50 @@ class DeltaPostProcessor:
                     )
 
         return False, None
+
+    def _remove_invalid_location_deltas(
+        self, deltas: list[StateDelta]
+    ) -> list[StateDelta]:
+        """Remove UPDATE_LOCATION deltas with invalid destinations.
+
+        This handles cases where the LLM hallucinates locations that don't exist,
+        or incorrectly treats position changes within a room as location changes.
+        Rather than failing the entire branch, we remove the invalid delta and
+        let the narrative proceed (the player just doesn't actually move).
+
+        Common cases this fixes:
+        - "sneak behind the bar" → LLM generates UPDATE_LOCATION to "tavern_cellar"
+        - "climb to the rafters" → LLM generates UPDATE_LOCATION to "tavern_rafters"
+
+        These are position changes within a room, not actual location moves.
+
+        Args:
+            deltas: List of state deltas to filter.
+
+        Returns:
+            Filtered list with invalid UPDATE_LOCATION deltas removed.
+        """
+        valid_destinations = set(self.manifest.exits.keys()) | set(
+            self.manifest.candidate_locations.keys()
+        )
+        result = []
+
+        for delta in deltas:
+            if delta.delta_type == DeltaType.UPDATE_LOCATION:
+                destination = delta.changes.get("location_key")
+                if destination and destination not in valid_destinations:
+                    logger.warning(
+                        f"Removing invalid UPDATE_LOCATION to '{destination}'. "
+                        f"Valid destinations: {list(valid_destinations)}. "
+                        f"This was likely a position change within the room, not a location move."
+                    )
+                    self.repairs_made.append(
+                        f"Removed invalid UPDATE_LOCATION to '{destination}'"
+                    )
+                    continue  # Skip this delta
+            result.append(delta)
+
+        return result
 
     def _inject_missing_creates(self, deltas: list[StateDelta]) -> list[StateDelta]:
         """Auto-create items referenced by TRANSFER_ITEM but not in manifest."""
@@ -620,14 +667,10 @@ class DeltaPostProcessor:
                 regeneration_reason=reason,
             )
 
-        # 1b. Check for unknown location destinations (can't be clarified via LLM)
-        needs_regen, reason = self._check_unknown_locations(deltas)
-        if needs_regen:
-            return PostProcessResult(
-                deltas=deltas,
-                needs_regeneration=True,
-                regeneration_reason=reason,
-            )
+        # 1b. Remove invalid UPDATE_LOCATION deltas gracefully
+        # This handles cases where LLM confuses position changes (within room) with location moves
+        # e.g., "sneak behind the bar" → hallucinated "tavern_cellar" location
+        deltas = self._remove_invalid_location_deltas(deltas)
 
         # 2. Collect unknown keys that need clarification
         unknown_keys = self._collect_unknown_keys(deltas)

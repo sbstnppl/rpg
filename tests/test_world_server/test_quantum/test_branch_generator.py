@@ -634,3 +634,62 @@ class TestBranchContext:
         assert context.location_key == "tavern"
         assert context.game_day == 1
         assert len(context.recent_events) == 2
+
+
+class TestSystemPromptContent:
+    """Tests for system prompt content - verifying critical guidance is present."""
+
+    def test_system_prompt_includes_position_vs_location_guidance(
+        self, mock_db, mock_game_session, mock_llm
+    ):
+        """The system prompt should include guidance on position vs location changes.
+
+        This is critical to prevent the LLM from generating UPDATE_LOCATION deltas
+        for position changes within a room (e.g., "sneak behind the bar" should not
+        create an UPDATE_LOCATION to "tavern_cellar").
+        """
+        generator = BranchGenerator(mock_db, mock_game_session, mock_llm)
+        prompt = generator._get_system_prompt()
+
+        # Should have the position vs location distinction
+        assert "UPDATE_LOCATION vs POSITION CHANGE" in prompt
+        assert "Position changes within a room do NOT require update_location" in prompt
+
+        # Should give clear examples
+        assert "sneak behind the bar" in prompt.lower()
+        assert "same room" in prompt.lower()
+
+    def test_system_prompt_warns_against_hallucinating_locations(
+        self, mock_db, mock_game_session, mock_llm
+    ):
+        """The prompt should warn against inventing location keys."""
+        generator = BranchGenerator(mock_db, mock_game_session, mock_llm)
+        prompt = generator._get_system_prompt()
+
+        # Should warn about using exact keys from exits
+        assert "EXACT location_key from the Exits" in prompt
+        assert "NEVER derive or invent keys" in prompt
+
+    def test_system_prompt_includes_skill_check_rules(
+        self, mock_db, mock_game_session, mock_llm
+    ):
+        """The prompt should include skill check rules for SKILL_USE actions."""
+        generator = BranchGenerator(mock_db, mock_game_session, mock_llm)
+        prompt = generator._get_system_prompt()
+
+        # Should have skill check rules
+        assert "SKILL CHECK RULES" in prompt
+        assert "stealth" in prompt.lower()
+        assert "requires_skill_check" in prompt
+
+    def test_system_prompt_includes_entity_grounding_rules(
+        self, mock_db, mock_game_session, mock_llm
+    ):
+        """The prompt should enforce entity grounding rules."""
+        generator = BranchGenerator(mock_db, mock_game_session, mock_llm)
+        prompt = generator._get_system_prompt()
+
+        # Should enforce [key:display] format
+        assert "[entity_key:display_name]" in prompt or "[key:display]" in prompt.lower()
+        # Should warn against hallucinating entities
+        assert "ONLY reference entities that appear" in prompt or "Do NOT invent" in prompt

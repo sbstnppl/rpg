@@ -1109,6 +1109,128 @@ class TestInjectCreatesForKeys:
 
 
 # =============================================================================
+# Test: Remove Invalid Location Deltas (Graceful Handling)
+# =============================================================================
+
+
+class TestRemoveInvalidLocationDeltas:
+    """Tests for graceful removal of UPDATE_LOCATION with invalid destinations."""
+
+    def test_remove_invalid_destination(
+        self, sample_manifest: GroundingManifest
+    ) -> None:
+        """Invalid destination should be removed, not trigger regeneration."""
+        processor = DeltaPostProcessor(sample_manifest)
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.UPDATE_LOCATION,
+                target_key="test_hero",
+                changes={"location_key": "tavern_cellar"},  # Not in exits!
+            ),
+        ]
+
+        result = processor._remove_invalid_location_deltas(deltas)
+
+        assert len(result) == 0
+        assert any("Removed invalid UPDATE_LOCATION" in r for r in processor.repairs_made)
+
+    def test_preserve_valid_destination(
+        self, sample_manifest: GroundingManifest
+    ) -> None:
+        """Valid destination should be preserved."""
+        processor = DeltaPostProcessor(sample_manifest)
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.UPDATE_LOCATION,
+                target_key="test_hero",
+                changes={"location_key": "market_001"},  # Valid exit
+            ),
+        ]
+
+        result = processor._remove_invalid_location_deltas(deltas)
+
+        assert len(result) == 1
+        assert result[0].changes["location_key"] == "market_001"
+
+    def test_preserve_candidate_location(
+        self, sample_manifest: GroundingManifest
+    ) -> None:
+        """Candidate locations (non-adjacent known) should also be valid."""
+        # Add a candidate location
+        sample_manifest.candidate_locations = {
+            "distant_castle": GroundedEntity(
+                key="distant_castle",
+                display_name="Castle Blackmoor",
+                entity_type="location",
+                short_description="far to the north",
+            ),
+        }
+        processor = DeltaPostProcessor(sample_manifest)
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.UPDATE_LOCATION,
+                target_key="test_hero",
+                changes={"location_key": "distant_castle"},
+            ),
+        ]
+
+        result = processor._remove_invalid_location_deltas(deltas)
+
+        assert len(result) == 1
+        assert result[0].changes["location_key"] == "distant_castle"
+
+    def test_remove_only_invalid_keep_other_deltas(
+        self, sample_manifest: GroundingManifest
+    ) -> None:
+        """Only invalid location deltas should be removed, others kept."""
+        processor = DeltaPostProcessor(sample_manifest)
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.UPDATE_ENTITY,
+                target_key="bartender_001",
+                changes={"mood": "happy"},
+            ),
+            StateDelta(
+                delta_type=DeltaType.UPDATE_LOCATION,
+                target_key="test_hero",
+                changes={"location_key": "nonexistent_room"},  # Invalid
+            ),
+            StateDelta(
+                delta_type=DeltaType.RECORD_FACT,
+                target_key="test_hero",
+                changes={"predicate": "visited", "value": "the tavern"},
+            ),
+        ]
+
+        result = processor._remove_invalid_location_deltas(deltas)
+
+        assert len(result) == 2
+        assert result[0].delta_type == DeltaType.UPDATE_ENTITY
+        assert result[1].delta_type == DeltaType.RECORD_FACT
+
+    def test_position_change_scenario(
+        self, sample_manifest: GroundingManifest
+    ) -> None:
+        """Simulate 'sneak behind the bar' incorrectly generating UPDATE_LOCATION."""
+        processor = DeltaPostProcessor(sample_manifest)
+        # This is what the LLM might incorrectly generate for "sneak behind the bar"
+        deltas = [
+            StateDelta(
+                delta_type=DeltaType.UPDATE_LOCATION,
+                target_key="test_hero",
+                changes={"location_key": "tavern_behind_bar"},  # Hallucinated location
+            ),
+        ]
+
+        result = processor._remove_invalid_location_deltas(deltas)
+
+        # The invalid delta should be removed
+        assert len(result) == 0
+        # Should log it as a repair
+        assert any("tavern_behind_bar" in r for r in processor.repairs_made)
+
+
+# =============================================================================
 # Test: Async Processing with LLM Clarification
 # =============================================================================
 
@@ -1229,10 +1351,10 @@ class TestProcessAsync:
         assert result.needs_regeneration
         assert "Conflicting" in (result.regeneration_reason or "")
 
-    async def test_process_async_unknown_destination_triggers_regen(
+    async def test_process_async_unknown_destination_removed_gracefully(
         self, sample_manifest: GroundingManifest, mock_llm
     ) -> None:
-        """UPDATE_LOCATION to unknown destination should trigger regeneration in async path."""
+        """UPDATE_LOCATION to unknown destination should be removed gracefully, not trigger regen."""
         processor = DeltaPostProcessor(sample_manifest)
         deltas = [
             StateDelta(
@@ -1244,9 +1366,12 @@ class TestProcessAsync:
 
         result = await processor.process_async(deltas, mock_llm)
 
-        assert result.needs_regeneration
-        assert "unknown destination" in result.regeneration_reason
-        assert "village_tavern_kitchen" in result.regeneration_reason
+        # Should NOT trigger regeneration - delta is removed gracefully
+        assert not result.needs_regeneration
+        # The invalid delta should be removed
+        assert len(result.deltas) == 0
+        # Should log the removal as a repair
+        assert any("Removed invalid UPDATE_LOCATION" in r for r in result.repairs_made)
         # LLM should NOT be called for location validation
         mock_llm.complete.assert_not_called()
 

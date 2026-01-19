@@ -75,6 +75,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **Branch Regeneration for Unknown Location Destinations** - Graceful handling when LLM hallucinates locations
+  - Added position vs location guidance to branch generator prompt (`src/world_server/quantum/branch_generator.py`)
+  - New `_remove_invalid_location_deltas()` method removes invalid `UPDATE_LOCATION` deltas gracefully instead of failing (`src/world_server/quantum/delta_postprocessor.py`)
+  - Fixes "sneak behind the bar" causing `UPDATE_LOCATION` to hallucinated `tavern_cellar`
+  - 9 new tests for removal behavior and prompt content (`tests/test_world_server/test_quantum/`)
+
 - **QwenAgentProvider Structured Output** - Fixed response type handling in `complete_structured` method
   - Now properly handles dict, list, and string responses from qwen-agent (`src/llm/qwen_agent_provider.py`)
   - Matches response handling in `complete` and `complete_with_tools` methods
