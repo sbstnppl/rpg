@@ -398,7 +398,18 @@ class QwenAgentProvider:
                 functions=functions,
                 stream=False,
             ):
-                response_messages.extend(response)
+                # Handle both list and single message responses
+                if isinstance(response, list):
+                    response_messages.extend(response)
+                elif isinstance(response, dict):
+                    response_messages.append(response)
+                elif isinstance(response, str):
+                    response_messages.append({"role": "assistant", "content": response})
+                else:
+                    if hasattr(response, "__iter__") and not isinstance(response, str):
+                        response_messages.extend(response)
+                    else:
+                        response_messages.append({"role": "assistant", "content": str(response)})
 
             llm_response = self._parse_response(response_messages, model_name)
 

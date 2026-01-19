@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **QwenAgentProvider Unit Tests** - Complete test coverage for Qwen3 tool calling provider
+  - 50 unit tests covering initialization, message conversion, tool parsing, and error handling (`tests/test_llm/test_qwen_agent_provider.py`)
+  - Tests for thinking block stripping, JSON tool call extraction, and structured output
+  - Mocked qwen-agent integration tests for skill checks, attack rolls, and entity creation
+
 - **Issue Verification Tracking System** - Track play-test verifications before archiving issues
   - New `/tackle verify <issue-name>` subcommand for recording verification results (`.claude/commands/tackle.md`)
   - New "Awaiting Verification" and "Verified" status values for issue lifecycle
@@ -43,6 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **QwenAgentProvider Structured Output** - Fixed response type handling in `complete_structured` method
+  - Now properly handles dict, list, and string responses from qwen-agent (`src/llm/qwen_agent_provider.py`)
+  - Matches response handling in `complete` and `complete_with_tools` methods
+
 - **Need-Satisfying Actions Generate Deltas** - LLM now generates `update_need` deltas for activities like eating, drinking, and socializing
   - Added INVARIANT FOR NEED-SATISFYING ACTIONS to branch generator with activity-to-need mapping table (`src/world_server/quantum/branch_generator.py`)
   - Added `social_connection` to valid needs in validation and postprocessor (`src/world_server/quantum/validation.py`, `src/world_server/quantum/delta_postprocessor.py`)
