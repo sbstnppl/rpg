@@ -1,12 +1,15 @@
 # Context-Aware Location Resolution
 
-**Status:** Planned
+**Status:** Awaiting Verification
 **Priority:** Medium
-**Affected Components:** `LocationManager.fuzzy_match_location()`, `ActionValidator._validate_move()`
+**Affected Components:** `GMContextBuilder`, `GroundingManifest`, `BranchGenerator`
+**Verification:** 0/3
+**Last Verified:** -
+**Fixed:** 2026-01-18
 
 ## Problem Statement
 
-When a player types a location name like "well", the system needs to resolve it to an actual location key. Currently, the fuzzy matching returns the **first database match** without considering context, which can lead to unexpected behavior.
+When a player types a location name like "well", the system needs to resolve it to an actual location key. The original fuzzy matching returned the **first database match** without considering context, leading to unexpected behavior.
 
 ### Example Scenario
 
@@ -15,179 +18,95 @@ The game world has multiple wells:
 - `city_well` - The City Well in the town square
 - `village_well` - The Village Well in Millbrook
 
-**Current Behavior:**
+**Original Behavior:**
 ```
 Player is at: city_market
 Player types: "go to the well"
 
-Result: Resolves to "family_farm_well" (first match in DB)
+Result: Resolved to "family_farm_well" (first match in DB)
 Expected: Should resolve to "city_well" (nearby/accessible)
 ```
 
-This creates confusion because:
+This created confusion because:
 1. The player expects to go to the obvious nearby well
-2. Instead, they're teleported across the map to a random well
-3. The game feels broken or illogical
+2. Instead, they were teleported across the map to a random well
+3. The game felt broken or illogical
 
-## Current Implementation
+## Solution Implemented
 
-Location: `src/managers/location_manager.py` - `fuzzy_match_location()`
+**Commit:** `58e0bfb` (2026-01-18)
 
-```python
-def fuzzy_match_location(self, location_text: str) -> Location | None:
-    # 1. Exact key match
-    # 2. Display name match (case-insensitive)
-    # 3. Normalized text match (removes "the_" prefix)
-    # 4. Partial match - PROBLEM HERE:
-    for loc in all_locations:
-        if normalized in loc.location_key:
-            return loc  # Returns FIRST match, not best match!
+The fix uses an **LLM-based approach** rather than the originally proposed scoring system. This is better because the LLM has full discourse awareness and can understand conversation context naturally.
+
+### Approach: Let the LLM Decide
+
+Instead of pre-resolving ambiguous locations with heuristics, we now:
+
+1. **Find all matching locations** via `_get_candidate_locations()` in `GMContextBuilder`
+2. **Include them in the manifest** as `candidate_locations` (distinct from `exits`)
+3. **Provide recent conversation context** via `recent_events` in the branch generation prompt
+4. **Let the LLM pick** the contextually appropriate location
+
+This handles edge cases naturally through understanding rather than brittle heuristics.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `src/gm/context_builder.py` | Added `_get_candidate_locations()` method |
+| `src/gm/grounding.py` | Added `candidate_locations` field to `GroundingManifest` |
+| `src/world_server/quantum/branch_generator.py` | Include `recent_events` in prompt |
+| `src/world_server/quantum/delta_postprocessor.py` | Accept `candidate_locations` as valid destinations |
+| `src/world_server/quantum/validation.py` | Add fuzzy matching suggestions in error messages |
+| `src/world_server/quantum/pipeline.py` | Pass candidate locations through pipeline |
+
+### Tests Added
+
+14 new tests covering:
+- `tests/test_gm/test_context_builder.py` - Candidate location gathering
+- `tests/test_gm/test_grounding.py` - Manifest with candidate locations
+
+## Verification Scenarios
+
+To verify this fix works correctly, test these scenarios:
+
+### Scenario 1: Multiple Similar Locations
+```
+Setup: Game world with multiple wells (city_well, village_well, farm_well)
+       Player at city_market
+Test:  Type "go to the well"
+Expected: Goes to city_well (nearby) not a random distant well
 ```
 
-The partial matching (step 4) iterates through all locations and returns the first one containing the search term. Database order is not deterministic or context-aware.
-
-## Proposed Solution
-
-Implement a scoring system that considers multiple factors to find the **best** match, not just the first match.
-
-### Resolution Priority (Highest to Lowest)
-
-1. **Accessible Locations** (can walk there directly)
-   - Check `spatial_layout.exits` from current location
-   - Score: +100 points
-
-2. **Same Parent Location** (sibling locations)
-   - If player is at `city_market`, prefer `city_well` over `farm_well`
-   - Both share parent `city`
-   - Score: +50 points
-
-3. **Child of Current Location**
-   - If player is at `city`, prefer `city_well` (child) over `farm_well`
-   - Score: +40 points
-
-4. **Recently Mentioned** (discourse context)
-   - Location mentioned in last 5 turns of conversation
-   - Score: +30 points
-
-5. **Same Region/Area**
-   - Locations sharing a common ancestor within 2 levels
-   - Score: +20 points
-
-6. **Exact Name Match**
-   - Display name matches exactly (case-insensitive)
-   - Score: +10 points
-
-7. **Partial Key Match**
-   - Location key contains search term
-   - Score: +5 points
-
-### Implementation Approach
-
-```python
-def fuzzy_match_location(
-    self,
-    location_text: str,
-    current_location: str | None = None,  # NEW: context
-    recent_mentions: list[str] | None = None,  # NEW: discourse
-) -> Location | None:
-    """Match location text with context awareness.
-
-    Args:
-        location_text: The location text from player input.
-        current_location: Player's current location key (for proximity).
-        recent_mentions: Location keys mentioned in recent turns.
-
-    Returns:
-        Best matching Location based on context scoring.
-    """
-    candidates = self._find_all_matching_locations(location_text)
-
-    if not candidates:
-        return None
-
-    if len(candidates) == 1:
-        return candidates[0]
-
-    # Score each candidate
-    scored = []
-    for loc in candidates:
-        score = self._calculate_location_score(
-            loc, current_location, recent_mentions
-        )
-        scored.append((score, loc))
-
-    # Return highest scoring match
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return scored[0][1]
+### Scenario 2: Discourse-Referenced Location
+```
+Setup: NPC mentions "the old well of life" in conversation
+       Player hasn't visited that well before
+Test:  Type "go to that well" or "I want to see that well"
+Expected: Goes to the mentioned well, not a different one
 ```
 
-### Ambiguity Handling
-
-When multiple locations have similar scores (within 10 points), the system should:
-
-1. **Ask for clarification** if scores are too close:
-   ```
-   Player: "go to the well"
-   GM: "Which well do you mean? The City Well is nearby,
-        or do you mean The Well at the family farm?"
-   ```
-
-2. **Provide disambiguation hints** in the response:
-   ```
-   Player: "go to the well"
-   GM: "You head to the City Well in the town square."
-   (Clarifies WHICH well was chosen)
-   ```
-
-## Files to Modify
-
-1. **`src/managers/location_manager.py`**
-   - Add `current_location` parameter to `fuzzy_match_location()`
-   - Implement `_calculate_location_score()` helper
-   - Implement `_find_all_matching_locations()` helper
-
-2. **`src/validators/action_validator.py`**
-   - Pass current player location to fuzzy matcher
-   - Handle ambiguity (multiple high-scoring matches)
-
-3. **`src/agents/nodes/resolve_references_node.py`**
-   - Consider adding location resolution alongside entity resolution
-   - Could use DiscourseManager for recent mentions
-
-4. **`src/resolver/reference_resolver.py`** (if exists)
-   - Unified resolution for both entities and locations
-
-## Testing Scenarios
-
-### Test Case 1: Prefer Accessible Location
+### Scenario 3: Explicit vs Contextual
 ```
-Setup: Player at city_market, exits include city_well
-Input: "go to well"
-Expected: Resolves to city_well (accessible)
+Setup: Multiple wells exist, NPC mentioned village_well
+Test:  Type "go to the city well" (explicit)
+Expected: Goes to city_well regardless of recent mentions
+Test:  Type "go to the well" (contextual)
+Expected: Goes to village_well (recently mentioned)
 ```
 
-### Test Case 2: Prefer Sibling Location
-```
-Setup: Player at city_tavern, no direct exit to well
-       city_tavern and city_well share parent "city"
-Input: "go to well"
-Expected: Resolves to city_well (same parent)
-```
+## Original Proposed Solution (Not Implemented)
 
-### Test Case 3: Recently Mentioned
-```
-Setup: GM just said "You notice the old village well across the square"
-Input: "go to the well"
-Expected: Resolves to village_well (recently mentioned)
-```
+The original plan proposed a scoring system in `fuzzy_match_location()`:
+- +100 points for accessible locations
+- +50 points for same parent location
+- +30 points for recently mentioned
+- etc.
 
-### Test Case 4: Ambiguity Clarification
-```
-Setup: Player at crossroads between city and farm
-       Both city_well and farm_well are equidistant
-Input: "go to well"
-Expected: Asks "Which well?" with options
-```
+This was **not implemented** because:
+1. Heuristic scoring can still pick the wrong location in edge cases
+2. The LLM already has discourse context and can reason about it
+3. The LLM approach handles nuance (tone, intent) that rules cannot
 
 ## Related Issues
 
@@ -197,6 +116,6 @@ Expected: Asks "Which well?" with options
 
 ## References
 
+- Commit: `58e0bfb` - Implementation commit
 - `src/managers/discourse_manager.py` - Tracks recent entity mentions
-- `src/resolver/reference_resolver.py` - Entity resolution patterns
-- `docs/scene-first-architecture/` - Architecture context
+- `src/gm/context_builder.py` - Builds context including candidate locations
