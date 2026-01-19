@@ -1,0 +1,182 @@
+{
+  "items": [
+    {
+      "item_key": "mothers_pendant",
+      "display_name": "Mother's Pendant",
+      "item_type": "accessory",
+      "description": "A simple silver chain holds a pendant of dark metal, roughly circular with a pattern of raised dots that might be a constellation. The metal is warm to the touch, always, regardless of the weather. Finn has worn it as long as he can remember. Widow Brennan says his mother left it for him. Sometimes, in the moments between waking and sleep, the constellation seems to shift.",
+      "body_slot": "neck",
+      "body_layer": 0,
+      "properties": {
+        "is_magical": true,
+        "is_starbound_artifact": true,
+        "artifact_tier": "major",
+        "functions": [
+          {
+            "name": "Ward Against Notice",
+            "description": "While worn, the pendant prevents the Hollow One from perceiving the wearer directly. This protection fails if the wearer actively seeks Starbound knowledge.",
+            "activation": "passive"
+          },
+          {
+            "name": "Starbound Resonance",
+            "description": "Grows warm and hums faintly near Starbound locations or artifacts. The warmth intensifies with proximity.",
+            "activation": "passive"
+          },
+          {
+            "name": "Shrine Key",
+            "description": "Can unlock the sealed shrine beneath the village well. Also serves as proof of Starbound lineage.",
+            "activation": "touch_to_seal"
+          },
+          {
+            "name": "Guidance",
+            "description": "When the wearer focuses on finding Starbound places while holding the pendant, they feel a subtle pull in the correct direction.",
+            "activation": "concentration",
+            "difficulty": 12
+          }
+        ],
+        "hidden_notes": "The pendant was forged from star-iron by Elena herself during her training. It contains a fragment of her essence, sacrificed to power the ward that hides Finn. When Finn fully accepts his role as Starbound heir, the pendant will reveal its true form."
+      },
+      "owner_entity_key": "finn",
+      "holder_entity_key": "finn",
+      "starting_item": true
+    },
+    {
+      "item_key": "dawn_star_medallion",
+      "display_name": "Dawn Star Medallion",
+      "item_type": "accessory",
+      "description": "A palm-sized medallion of gold-silver alloy, depicting a radiant star with seven points. The metal seems to glow faintly with its own light, brightest at dawn and dusk. It is cold to the touch, the opposite of Finn's pendant.",
+      "body_slot": "neck",
+      "body_layer": 0,
+      "properties": {
+        "is_magical": true,
+        "is_starbound_artifact": true,
+        "artifact_tier": "major",
+        "functions": [
+          {
+            "name": "Light of Binding",
+            "description": "Can generate brilliant light that causes pain to entities touched by the Hollow One. Useful for driving back corrupted creatures.",
+            "activation": "command_word",
+            "command": "By the Dawn Star"
+          },
+          {
+            "name": "Seal Restoration",
+            "description": "When placed on a Starbound seal point, can temporarily strengthen the ward. Permanent restoration requires the blood price.",
+            "activation": "ritual",
+            "duration_hours": 1,
+            "requirements": ["seal_point"]
+          },
+          {
+            "name": "True Seeing",
+            "description": "Allows the wearer to see through illusions and perceive entities of the Hollow One, even when disguised or invisible.",
+            "activation": "passive_when_worn"
+          }
+        ],
+        "hidden_notes": "The medallion was worn by the High Priest of the Starbound Order during the original Binding. It remembers every ceremony performed with it and can share those memories with a worthy bearer."
+      },
+      "location_key": "temple_dawn_star",
+      "location_description": "resting in the altar depression"
+    },
+    {
+      "item_key": "watchers_spyglass",
+      "display_name": "Watcher's Spyglass",
+      "item_type": "tool",
+      "description": "A brass telescope, perhaps a foot long when extended, with lenses of polished crystal rather than glass. The brass is etched with star patterns, and the eyepiece is shaped to fit only human eyes. Looking through it reveals the world as it truly is.",
+      "properties": {
+        "is_magical": true,
+        "is_starbound_artifact": true,
+        "artifact_tier": "major",
+        "functions": [
+          {
+            "name": "Pierce Illusion",
+            "description": "When looking through the spyglass, all illusions and disguises are revealed. This includes magical concealment, shapeshifting, and invisible entities.",
+            "activation": "looking_through_lens"
+          },
+          {
+            "name": "See the Corruption",
+            "description": "Reveals the taint of the Hollow One on people, places, and objects. Corrupted things appear surrounded by writhing darkness when viewed.",
+            "activation": "looking_through_lens"
+          },
+          {
+            "name": "Long Sight",
+            "description": "Can see clearly at any distance, through weather and darkness, as long as there is a clear line of sight. Reveals the true state of the Hollow Mountains from Millbrook.",
+            "activation": "looking_through_lens"
+          }
+        ],
+        "hidden_notes": "The spyglass reveals something terrible: from the Watcher's Tower, one can see a crack in the highest peak of the Hollow Mountains - and something moving within the darkness there."
+      },
+      "location_key": "watchers_tower",
+      "location_description": "hidden compartment in foundation (Perception DC 18)"
+    },
+    {
+      "item_key": "binding_seal_fragment",
+      "display_name": "Fragment of the Binding",
+      "item_type": "misc",
+      "description": "A chunk of black stone roughly the size of a fist, broken from something larger. Silver veins run through it, forming half of a spiral pattern. It is impossibly heavy for its size and cold enough to sting bare skin.",
+      "properties": {
+        "is_magical": true,
+        "is_starbound_artifact": true,
+        "artifact_tier": "minor",
+        "weight_override": "impossibly_heavy",
+        "functions": [
+          {
+            "name": "Seal Memory",
+            "description": "When held during sleep, grants visions of the original Binding ceremony - the sacrifice, the sealing, the promise made. These visions are disturbing but informative.",
+            "activation": "sleep_while_holding"
+          },
+          {
+            "name": "Proof of Breaking",
+            "description": "The fragment is evidence that the seals are failing. Showing it to the Hermit convinces him that Finn must be trained immediately.",
+            "activation": "show_to_npc"
+          },
+          {
+            "name": "Partial Ward",
+            "description": "Can be used to create a temporary ward against Hollow-touched entities in a small area. The ward lasts until dawn.",
+            "activation": "place_and_speak",
+            "requirements": ["starbound_words"]
+          }
+        ],
+        "hidden_notes": "The fragment broke from the main seal during a particularly strong surge of the Hollow One's influence. The Hermit doesn't know it's missing - finding it reveals the seal is more damaged than anyone realized."
+      },
+      "location_key": "sealed_shrine",
+      "location_description": "near damaged section of the collapsed passage"
+    },
+    {
+      "item_key": "tavern_shield",
+      "display_name": "Star-Marked Shield",
+      "item_type": "equipment",
+      "description": "A wooden shield with metal banding, bearing a star-and-spiral design that seems older than the tavern itself. It hangs on the wall of the Dusty Flagon's common room, behind the bar. Tom says his uncle told him never to take it down.",
+      "properties": {
+        "is_magical": true,
+        "is_starbound_artifact": true,
+        "artifact_tier": "minor",
+        "is_fixed": true,
+        "functions": [
+          {
+            "name": "Ward the Threshold",
+            "description": "Protects the tavern from supernatural intrusion. Entities of the Hollow One cannot enter while the shield hangs on the wall.",
+            "activation": "passive"
+          },
+          {
+            "name": "Burn the Defiler",
+            "description": "Anyone with hostile intent toward the Starbound who touches the shield takes burn damage and is marked with a temporary brand.",
+            "activation": "defensive"
+          }
+        ],
+        "hidden_notes": "Placed here three generations ago by a Starbound agent who knew the tavern would be a gathering place. The shield has protected Millbrook's people from several supernatural threats they never knew existed."
+      },
+      "location_key": "flagon_common_room",
+      "location_description": "hanging on wall behind bar"
+    },
+    {
+      "item_key": "well_key",
+      "display_name": "Well Key",
+      "item_type": "key",
+      "description": "A heavy iron key, cold to the touch and marked with star-spiral patterns. The Hermit has kept it for sixty years, waiting for Elena's child.",
+      "properties": {
+        "unlocks": ["village_well"],
+        "hidden_notes": "The key is one of five made for the major seal points. It contains a trace of the original Binding magic."
+      },
+      "holder_entity_key": "the_hermit"
+    }
+  ]
+}

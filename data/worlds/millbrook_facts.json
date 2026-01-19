@@ -1,0 +1,206 @@
+{
+  "facts": [
+    {
+      "subject_type": "world",
+      "subject_key": "starbound_order",
+      "predicate": "public_legend",
+      "value": "Old stories speak of 'star warriors' who protected the land in ancient times. Most dismiss these as children's tales - heroes who glowed with light, who drove back darkness with fire from their hands.",
+      "category": "history",
+      "is_secret": false,
+      "confidence": 90
+    },
+    {
+      "subject_type": "world",
+      "subject_key": "starbound_order",
+      "predicate": "common_belief",
+      "value": "The symbols carved on the well and tower are 'old decoration' from a forgotten culture. They have no significance beyond historical curiosity.",
+      "category": "world",
+      "is_secret": false,
+      "player_believes": "The symbols are just old decoration",
+      "confidence": 80
+    },
+    {
+      "subject_type": "world",
+      "subject_key": "hollow_mountains",
+      "predicate": "local_legend",
+      "value": "The Hollow Mountains are so named because miners report strange echoes, as if the peaks were empty inside. Sensible folk avoid the deeper mines where men have disappeared.",
+      "category": "history",
+      "is_secret": false,
+      "confidence": 85
+    },
+    {
+      "subject_type": "world",
+      "subject_key": "starbound_order",
+      "predicate": "true_history",
+      "value": "The Starbound Order was real - a group of humans granted power by celestial entities to seal away primordial darkness. They created five seals to bind the entity known as the Hollow One within the mountains. The Order dwindled as the need for vigilance seemed past, until only the Hermit remains.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "world",
+      "subject_key": "starbound_order",
+      "predicate": "seal_mechanics",
+      "value": "The seals require regular maintenance through ritual performed at the five binding points. Without maintenance, they weaken over decades. Without renewal through blood sacrifice, they will eventually fail completely.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "world",
+      "subject_key": "hollow_one",
+      "predicate": "nature",
+      "value": "The Hollow One is not a creature but an absence - a tear in reality that consumes meaning, identity, and existence. It cannot be killed, only contained. It does not want - it simply is, and where it touches, things stop being.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "world",
+      "subject_key": "omens",
+      "predicate": "livestock_marks",
+      "value": "For three months, calves and lambs have been born with strange circular marks on their hides, like brands but present from birth. The marks seem to form patterns that change depending on the light.",
+      "category": "world",
+      "is_secret": false,
+      "is_foreshadowing": true,
+      "foreshadow_target": "seal_weakening",
+      "times_mentioned": 1,
+      "confidence": 90
+    },
+    {
+      "subject_type": "world",
+      "subject_key": "omens",
+      "predicate": "nightmares",
+      "value": "Many villagers report nightmares of falling into endless darkness, of hearing whispers in languages they almost understand, of seeing stars go out one by one. The nightmares began around midsummer.",
+      "category": "world",
+      "is_secret": false,
+      "is_foreshadowing": true,
+      "foreshadow_target": "hollow_one_awakening",
+      "times_mentioned": 2,
+      "confidence": 80
+    },
+    {
+      "subject_type": "world",
+      "subject_key": "omens",
+      "predicate": "unusual_cold",
+      "value": "The autumn has been unseasonably cold, with frost appearing where it shouldn't. The cold seems to radiate from the east, from the direction of the Hollow Mountains, particularly on moonless nights.",
+      "category": "world",
+      "is_secret": false,
+      "is_foreshadowing": true,
+      "foreshadow_target": "hollow_one_stirring",
+      "times_mentioned": 1,
+      "confidence": 85
+    },
+    {
+      "subject_type": "location",
+      "subject_key": "river_moss",
+      "predicate": "strange_fish",
+      "value": "Fish caught from the river bear circular marks on their scales. Some fishermen have cut open these fish to find their organs arranged wrong, as if reflected in a mirror.",
+      "category": "location",
+      "is_secret": false,
+      "is_foreshadowing": true,
+      "foreshadow_target": "reality_thinning",
+      "times_mentioned": 1,
+      "confidence": 75
+    },
+    {
+      "subject_type": "entity",
+      "subject_key": "elena_finn_mother",
+      "predicate": "known_to_aldric",
+      "value": "Old Aldric met Elena once, a year before Finn was born. She came to him asking about the old songs. She wore a star pendant and knew the words to ballads he thought only he remembered.",
+      "category": "relationship",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "entity",
+      "subject_key": "elena_finn_mother",
+      "predicate": "known_to_hermit",
+      "value": "The Hermit trained Elena in Starbound ways for three years. She was to be his successor. She became pregnant, and the darkness began to notice her child. She sacrificed herself to hide Finn from its attention.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "entity",
+      "subject_key": "elena_finn_mother",
+      "predicate": "known_to_maren",
+      "value": "Sister Maren found a death record from nineteen years ago - an unnamed woman who gave birth and died at the Brennan farm. The priest who recorded it noted: 'She wore the old symbols. May the Light forgive my silence.'",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 90
+    },
+    {
+      "subject_type": "entity",
+      "subject_key": "elena_finn_mother",
+      "predicate": "known_to_brennan",
+      "value": "Widow Brennan knows Elena's last words, her final wishes, and the location of her unmarked grave. She has kept these secrets for nineteen years.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "location",
+      "subject_key": "village_well",
+      "predicate": "hidden_purpose",
+      "value": "The sealed shrine of the Starbound Order lies 40 feet below the well. The symbols are genuine warding glyphs, weakened but still active.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "location",
+      "subject_key": "old_mill",
+      "predicate": "supernatural_activity",
+      "value": "The mill sits above tunnels connected to the Starbound shrine network. A collapsed cellar floor leads down to passages that eventually connect to the sealed shrine beneath the well. The 'hauntings' are echoes from the weakening seals.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "location",
+      "subject_key": "watchers_tower",
+      "predicate": "true_purpose",
+      "value": "This was a Starbound watch post, part of a network that monitored the seals on the Hollow Mountains. The Hermit visits here during new moons to perform maintenance on the remaining wards.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "world",
+      "subject_key": "millbrook",
+      "predicate": "seal_point",
+      "value": "Millbrook is built on one of the five seal points. The village well, the chapel foundation, and the tower ruins are all part of the same binding network.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "item",
+      "subject_key": "mothers_pendant",
+      "predicate": "true_nature",
+      "value": "The pendant contains a fragment of Elena's essence, sacrificed to hide Finn from the Hollow One's perception. It is a key, a shield, and a chain binding Finn to his mother's unfinished work.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "entity",
+      "subject_key": "the_hermit",
+      "predicate": "true_identity",
+      "value": "The Hermit's real name is Aldric Starfell. He is the last living member of the Starbound Order, kept alive by his bond to the seals. When the seals break, he will die.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    },
+    {
+      "subject_type": "location",
+      "subject_key": "temple_dawn_star",
+      "predicate": "significance",
+      "value": "The Temple of the Dawn Star was the most sacred site of the Starbound Order in this region. The altar was used for the ceremonies of binding and renewal.",
+      "category": "secret",
+      "is_secret": true,
+      "confidence": 100
+    }
+  ]
+}

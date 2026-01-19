@@ -1,0 +1,646 @@
+# Millbrook Region - Finn's Journey World Data
+# Zone and location definitions for the medieval fantasy setting
+
+name: Millbrook Region
+description: |
+  A modest farming village of two hundred souls, Millbrook sits at the crossroads
+  where the East Road meets the South Road to Thornbury. The village takes its name
+  from the old mill that once ground grain beside the river, though the wheel has
+  stood silent for a generation. Strange signs have appeared lately - livestock
+  marked at birth, nightmares plaguing the villagers, and an unseasonable cold
+  drifting from the distant Hollow Mountains.
+
+starting_zone: millbrook_village
+starting_location: market_square
+
+# =============================================================================
+# ZONES - Terrain regions
+# =============================================================================
+zones:
+  # Parent region containing everything
+  - zone_key: millbrook_region
+    display_name: Millbrook Region
+    terrain_type: grassland
+    base_travel_cost: 30
+    visibility_range: far
+    description: |
+      Rolling farmland surrounding the village of Millbrook, with the dark line
+      of Greywood Forest to the north and the distant purple shadows of the
+      Hollow Mountains to the east.
+
+  # The village itself
+  - zone_key: millbrook_village
+    display_name: Millbrook Village
+    terrain_type: urban
+    parent_zone_key: millbrook_region
+    base_travel_cost: 5
+    visibility_range: medium
+    description: |
+      Weathered timber buildings cluster around a cobblestone market square,
+      their thatched roofs darkened by decades of hearth smoke. Stone walls
+      half-grown with ivy mark the village boundaries.
+
+  # The forest
+  - zone_key: greywood_forest
+    display_name: Greywood Forest
+    terrain_type: forest
+    parent_zone_key: millbrook_region
+    base_travel_cost: 20
+    visibility_range: close
+    description: |
+      Massive oaks, ancient elms, and dense undergrowth that has never known
+      an axe. The trees grow so thick that even midday sun barely reaches
+      the forest floor, creating a perpetual green twilight.
+
+  # Deep woods (harder to navigate)
+  - zone_key: deep_woods
+    display_name: Deep Woods
+    terrain_type: dense_forest
+    parent_zone_key: greywood_forest
+    base_travel_cost: 30
+    visibility_range: close
+    requires_skill: survival
+    skill_difficulty: 12
+    description: |
+      Beyond the known trails, the forest becomes trackless wilderness where
+      it's all too easy to lose direction. Strange things live here.
+
+  # Brennan Farm area
+  - zone_key: brennan_farm_zone
+    display_name: Brennan Farm
+    terrain_type: grassland
+    parent_zone_key: millbrook_region
+    base_travel_cost: 10
+    visibility_range: medium
+    description: |
+      Gentle hillside farmland two miles west of Millbrook, with pastures
+      stretching toward the western farms.
+
+  # Tower ruins area
+  - zone_key: watchers_hill
+    display_name: Watcher's Hill
+    terrain_type: hill
+    parent_zone_key: millbrook_region
+    base_travel_cost: 15
+    visibility_range: far
+    description: |
+      A hilltop rising a mile north of Millbrook, crowned by ancient ruins.
+
+  # River area
+  - zone_key: river_moss_zone
+    display_name: River Moss Valley
+    terrain_type: grassland
+    parent_zone_key: millbrook_region
+    base_travel_cost: 10
+    visibility_range: medium
+    description: |
+      The gentle valley where the Moss River winds through the farmland
+      southeast of Millbrook.
+
+  # Roads
+  - zone_key: east_road_zone
+    display_name: East Road
+    terrain_type: road
+    parent_zone_key: millbrook_region
+    base_travel_cost: 10
+    visibility_range: medium
+    description: |
+      The Imperial road running straight through the farmlands toward Harwick.
+
+  - zone_key: south_road_zone
+    display_name: South Road
+    terrain_type: trail
+    parent_zone_key: millbrook_region
+    base_travel_cost: 15
+    visibility_range: medium
+    description: |
+      The rougher road winding through hills toward the mining town of Thornbury.
+
+# =============================================================================
+# ZONE CONNECTIONS - Travel routes between zones
+# =============================================================================
+connections:
+  # Village connections
+  - from_zone: millbrook_village
+    to_zone: brennan_farm_zone
+    direction: west
+    crossing_minutes: 45
+    connection_type: path
+    bidirectional: true
+
+  - from_zone: millbrook_village
+    to_zone: watchers_hill
+    direction: north
+    crossing_minutes: 20
+    connection_type: trail
+    bidirectional: true
+
+  - from_zone: millbrook_village
+    to_zone: greywood_forest
+    direction: northeast
+    crossing_minutes: 10
+    connection_type: trail
+    bidirectional: true
+
+  - from_zone: millbrook_village
+    to_zone: river_moss_zone
+    direction: southeast
+    crossing_minutes: 15
+    connection_type: path
+    bidirectional: true
+
+  - from_zone: millbrook_village
+    to_zone: east_road_zone
+    direction: east
+    crossing_minutes: 5
+    connection_type: road
+    bidirectional: true
+
+  - from_zone: millbrook_village
+    to_zone: south_road_zone
+    direction: south
+    crossing_minutes: 5
+    connection_type: road
+    bidirectional: true
+
+  # Forest connections
+  - from_zone: greywood_forest
+    to_zone: deep_woods
+    direction: north
+    crossing_minutes: 15
+    connection_type: trail
+    bidirectional: true
+
+  - from_zone: watchers_hill
+    to_zone: greywood_forest
+    direction: north
+    crossing_minutes: 15
+    connection_type: trail
+    bidirectional: true
+
+# =============================================================================
+# LOCATIONS - Specific places within zones
+# =============================================================================
+locations:
+  # ---------------------------------------------------------------------------
+  # MILLBROOK VILLAGE LOCATIONS
+  # ---------------------------------------------------------------------------
+  - location_key: market_square
+    display_name: Market Square
+    zone_key: millbrook_village
+    category: outdoor
+    visibility: landmark
+    description: |
+      The heart of Millbrook opens before you - a cobblestone square worn smooth
+      by generations of feet and cart wheels. A massive old oak dominates the
+      western edge, its branches spreading shade over weathered wooden benches
+      where elders gather to gossip.
+
+      At the square's center stands the village well, its stone rim darkened with
+      age and carved with symbols that most villagers dismiss as "old decoration."
+      The well's wooden cover is secured with an iron lock that no one remembers
+      the key to.
+
+      Market stalls line the eastern edge on trading days. The Dusty Flagon's
+      painted sign creaks above its door to the south, while the Chapel of Light's
+      modest steeple rises to the southeast.
+    atmosphere: |
+      Morning: Merchants setting up stalls, the smell of fresh bread, dogs chasing
+      children between the stalls.
+      Afternoon: Peak bustle of trading, the clink of coins, heated haggling.
+      Evening: Quiet settling over empty stalls, long shadows from the chapel
+      steeple, the first stars appearing.
+    typical_crowd: |
+      Farmers, their families, traveling merchants on market days. Occasional
+      travelers passing through on the roads.
+
+  - location_key: village_well
+    display_name: The Old Well
+    zone_key: millbrook_village
+    category: landmark
+    visibility: landmark
+    description: |
+      The ancient well rises waist-high from the cobblestones, its circular stone
+      rim worn into gentle curves by countless hands. Strange symbols are carved
+      into the weathered stone - spirals and stars that catch the light oddly at
+      dawn and dusk. A heavy oak cover, bound in iron and secured with a rusted
+      lock, seals the well shut.
+
+      Villagers will tell you the well went dry fifty years ago, that the lock is
+      just to keep children from falling in. But on quiet nights, some swear
+      they've heard sounds from below - like distant chanting, or perhaps just
+      the wind playing tricks in the old stones.
+    atmosphere: |
+      There's something about standing near the well that makes the hairs on your
+      neck prickle. The symbols seem to shimmer at the edge of vision, and the
+      air feels cooler here, even in high summer.
+    typical_crowd: |
+      Villagers collecting water from the newer pump by the oak. Children daring
+      each other to touch the old symbols.
+
+  - location_key: dusty_flagon
+    display_name: The Dusty Flagon
+    zone_key: millbrook_village
+    category: building
+    visibility: landmark
+    description: |
+      A two-story building of weathered timber and whitewashed daub, the Dusty
+      Flagon leans slightly to the left as if tired from decades of serving the
+      village. A painted sign depicting a foam-topped tankard swings above the
+      door, its colors faded but the image still clear.
+
+      Warm light spills through diamond-paned windows, and even from outside you
+      can hear the murmur of conversation, the clink of tankards, and occasionally
+      the wavering voice of Old Aldric spinning one of his tales.
+    atmosphere: |
+      The smell of wood smoke, spilled ale, and meat pies greets you at the
+      threshold. Inside, the common room is warm and close, the low ceiling dark
+      with generations of hearth smoke.
+    typical_crowd: |
+      Farmers seeking a drink after the day's work, travelers resting before
+      continuing their journey.
+
+  - location_key: flagon_common_room
+    display_name: Dusty Flagon - Common Room
+    zone_key: millbrook_village
+    category: room
+    visibility: visible_from_zone
+    description: |
+      Low-beamed and smoky, the common room wraps around a massive stone fireplace
+      that dominates the far wall. Mismatched tables and chairs fill the space,
+      their wood dark and scarred from years of use. A long bar of polished oak
+      runs along the right wall, behind which Tom keeps his barrels and bottles
+      in neat rows.
+
+      A corner near the fireplace has been claimed by Old Aldric for as long as
+      anyone remembers - his chair is the only matching piece of furniture in the
+      room, brought from his own home years ago. The locals call it "Aldric's
+      Throne."
+
+      Hunting trophies hang on the walls between oil lamps: a boar's head, a wolf
+      pelt gone moth-eaten, and mysteriously, a shield bearing a star-and-spiral
+      design that no one can explain but Tom refuses to take down.
+    atmosphere: |
+      Evening: Voices rising and falling in familiar rhythms, Old Aldric's corner
+      drawing those who want a story, serious drinkers at the bar.
+      Afternoon: Near-empty except for Tom polishing glasses and perhaps one or
+      two travelers resting.
+    typical_crowd: |
+      Farmers, field hands, the occasional merchant. Widow Brennan comes in on
+      Sundays after chapel.
+
+  - location_key: flagon_private_room
+    display_name: Dusty Flagon - Private Room
+    zone_key: millbrook_village
+    category: room
+    visibility: hidden
+    description: |
+      A small room above the common area, available for rent to travelers. A
+      narrow bed, a washstand, and a small window overlooking the market square.
+      The floorboards creak with every step, and sounds from below filter up
+      through the gaps.
+    atmosphere: |
+      Simple but clean. The smell of dried lavender from a bundle hung by the
+      window. Occasional laughter from below.
+    typical_crowd: |
+      Travelers, merchants like Master Corin when he passes through.
+
+  - location_key: chapel_of_light
+    display_name: Chapel of the Light
+    zone_key: millbrook_village
+    category: building
+    visibility: landmark
+    description: |
+      A modest stone chapel rises from the southeast corner of the square, its
+      single steeple pointing toward heaven like a finger raised in gentle
+      admonishment. The building is old - far older than most structures in
+      Millbrook - its stones fitted without mortar in a style that predates the
+      current faith.
+
+      Villagers say the chapel was built over an older shrine, though the priests
+      who came generations ago consecrated it to the Light and called it holy.
+      Sister Maren tends it now, the only ordained servant of the faith for
+      twenty miles.
+    atmosphere: |
+      Cool and quiet, the chapel smells of candle wax and dried flowers. Dust
+      motes drift in the colored light from the windows. There's a sense of
+      peace here, though also something watchful.
+    typical_crowd: |
+      Villagers seeking prayer or counsel. Fuller on Sundays.
+
+  - location_key: chapel_sanctuary
+    display_name: Chapel Sanctuary
+    zone_key: millbrook_village
+    category: room
+    visibility: visible_from_zone
+    description: |
+      Wooden pews face a simple altar of white stone, upon which a golden sunburst
+      symbol catches the light from the stained windows. Candles burn in iron
+      sconces along the walls, their flames steady despite occasional drafts from
+      the old stones.
+
+      The floor is made of large flagstones, some carved with words worn to
+      illegibility by centuries of feet. One stone near the altar is slightly
+      different from the others - darker, with a faint pattern that might be a
+      constellation if you knew to look for it.
+    atmosphere: |
+      Reverent silence fills the space. The colored light shifts throughout the
+      day, casting moving patterns across the pews. Whispers seem to carry
+      strangely here, sometimes echoing when they shouldn't.
+    typical_crowd: |
+      Those seeking prayer, Sister Maren conducting services.
+
+  - location_key: chapel_records_room
+    display_name: Chapel Records Room
+    zone_key: millbrook_village
+    category: room
+    visibility: hidden
+    description: |
+      A small room lined with shelves bearing bound ledgers, scrolls, and books
+      accumulated over the chapel's long history. Sister Maren's writing desk
+      sits beneath a narrow window, perpetually covered in correspondence and
+      notes.
+
+      Most of the collection consists of mundane records - births, deaths,
+      marriages, tithes. But the oldest shelf, high on the back wall and requiring
+      a ladder to reach, holds books that predate the current faith. Their spines
+      bear no titles, only embossed symbols of stars and spirals.
+    atmosphere: |
+      Dust and old paper. The scratch of quill on parchment. Afternoon light
+      filtering through a window that hasn't been cleaned in Sister Maren's
+      memory.
+    typical_crowd: |
+      Sister Maren at her research. Rare visitors with her permission.
+
+  - location_key: blacksmith_forge
+    display_name: Henrik's Forge
+    zone_key: millbrook_village
+    category: building
+    visibility: landmark
+    description: |
+      Heat washes over you from the open-fronted smithy where Henrik plies his
+      trade. The forge glows orange-red in its brick housing, bellows wheezing
+      as an apprentice works them. Sparks fly as hammer meets metal, the rhythm
+      as regular as a heartbeat.
+
+      Tools hang in precise rows along the walls - tongs, hammers, files, chisels.
+      Finished work waits on racks: horseshoes, nails, door hinges, the occasional
+      knife or farm implement. A hand-painted sign above the entrance reads
+      "HONEST WORK, FAIR PRICES."
+    atmosphere: |
+      The clang of hammer on anvil, the hiss of hot metal quenched in water, the
+      rumble of the forge fire. The air shimmers with heat. Henrik's voice, gruff
+      but not unkind, calling instructions to his apprentice.
+    typical_crowd: |
+      Farmers needing repairs, merchants seeking horseshoes, travelers with broken
+      wagon fittings.
+
+  - location_key: old_mill
+    display_name: The Old Mill
+    zone_key: millbrook_village
+    category: building
+    visibility: visible_from_zone
+    description: |
+      The mill stands at the village's eastern edge where a stream once ran strong
+      enough to turn its wheel. The wheel itself has rotted through, wooden spokes
+      collapsed into the dry streambed like broken fingers. No one has worked here
+      in fifty years.
+
+      The building's stone foundation remains solid, but the timber upper floors
+      have surrendered to weather and neglect. Gaps show in the roof where shingles
+      have blown away. The door hangs crooked on rusted hinges, creaking in the
+      wind.
+
+      Village children dare each other to enter. Most refuse. Those who do speak
+      of strange sounds - grinding stone when no stones move, whispered voices,
+      cold spots that raise gooseflesh even in summer.
+    atmosphere: |
+      The smell of rot and damp stone. Shadows deeper than they should be. The
+      constant creak of old timbers settling. A feeling of being watched from
+      the dark corners.
+    typical_crowd: |
+      Abandoned. Occasionally brave children or curious strangers.
+
+  - location_key: sealed_shrine
+    display_name: The Sealed Shrine
+    zone_key: millbrook_village
+    category: underground
+    visibility: hidden
+    description: |
+      A spiraling stone staircase descends into darkness, each step carved with
+      the same star-spiral symbols from the well above. The air grows cold as
+      you descend, carrying the scent of ancient stone and something else -
+      ozone, like the air before a lightning strike.
+
+      The stairs open into a circular chamber perhaps thirty feet across. The
+      walls are covered in faded murals depicting robed figures raising their
+      hands toward a sky full of stars, driving back writhing shapes of pure
+      darkness. An altar of black stone stands at the chamber's center, its
+      surface etched with a constellation pattern that seems to shift when
+      viewed directly.
+
+      Behind the altar, a portion of the wall has collapsed, revealing rough-hewn
+      tunnels that descend further into the earth. Cold air rises from below,
+      carrying with it a sound like distant breathing.
+    atmosphere: |
+      The silence here is absolute - sound seems muffled, absorbed by the ancient
+      stones. Torchlight wavers despite no breeze. The constellation on the altar
+      glows faintly in the darkness, a pale blue luminescence that casts no
+      shadows.
+    typical_crowd: |
+      None. Hidden and sealed for generations.
+
+  # ---------------------------------------------------------------------------
+  # BRENNAN FARM LOCATIONS
+  # ---------------------------------------------------------------------------
+  - location_key: brennan_farm
+    display_name: Brennan Farm
+    zone_key: brennan_farm_zone
+    category: settlement
+    visibility: landmark
+    description: |
+      Two miles west of Millbrook along a rutted dirt track, Brennan Farm spreads
+      across a gentle hillside. The farmhouse is modest but well-maintained, its
+      whitewashed walls bright against the green of surrounding pastures. A
+      weathered red barn stands nearby, home to two draft horses, a milk cow,
+      and a flock of chickens that seem to rule the farmyard.
+
+      This is where Finn grew up, where Widow Brennan took him in as an infant
+      when his mother died. A small garden plot behind the house holds vegetables
+      and herbs. Hidden among the herbs, marked by a flat stone, is where Finn's
+      mother was buried - unmarked save for the stone, as she requested.
+    atmosphere: |
+      The smell of hay and animals, the distant lowing of the cow, chickens
+      squawking at perceived threats. Peace here, but also hard work - the kind
+      of honest labor that builds strong backs and simple dreams.
+    typical_crowd: |
+      Just Widow Brennan and Finn. Occasionally neighboring farmers helping with
+      harvest or Finn helping them in return.
+
+  # ---------------------------------------------------------------------------
+  # WATCHER'S TOWER LOCATIONS
+  # ---------------------------------------------------------------------------
+  - location_key: watchers_tower
+    display_name: The Watcher's Tower
+    zone_key: watchers_hill
+    category: ruins
+    visibility: landmark
+    description: |
+      Rising from a hilltop a mile north of Millbrook, the ruined tower stands
+      like a broken tooth against the sky. Once it must have been impressive -
+      five stories of fitted stone with windows facing every direction. Now only
+      two stories remain, the upper floors collapsed into a jumble of masonry
+      within the shell.
+
+      Villagers call it the "Watcher's Tower" without knowing why. Children play
+      here sometimes during the day, though none stay past sunset. The stones
+      bear the same spiral-star carvings found on the village well, though these
+      are larger, more elaborate, and include words in a language no one in
+      Millbrook can read.
+
+      The foundation is solid, and someone has cleared the rubble from the ground
+      floor, leaving a circular chamber with a fire pit at its center and signs
+      of recent habitation.
+    atmosphere: |
+      Wind whistling through broken stones, the cry of ravens nesting in the upper
+      ruins. By day, an eerie beauty - the view from here extends for miles. By
+      night, an oppressive darkness that lanterns seem to barely penetrate.
+    typical_crowd: |
+      Children during the day. The Hermit visits during new moons.
+
+  # ---------------------------------------------------------------------------
+  # GREYWOOD FOREST LOCATIONS
+  # ---------------------------------------------------------------------------
+  - location_key: forest_edge
+    display_name: Forest Edge
+    zone_key: greywood_forest
+    category: outdoor
+    visibility: visible_from_zone
+    description: |
+      Where the farmland ends and the ancient trees begin. The transition is
+      gradual - first scattered oaks, then denser growth, then the dark wall of
+      Greywood proper. A worn trail leads into the shadows, marked by stones that
+      hunters have placed over generations.
+    atmosphere: |
+      Birdsong fading as you approach the treeline. The temperature drops
+      noticeably under the canopy. The smell of leaf mold and living green.
+    typical_crowd: |
+      Hunters heading in or returning. Herb-gatherers collecting near the edge.
+
+  - location_key: hermit_clearing
+    display_name: Clearing in the Woods
+    zone_key: deep_woods
+    category: outdoor
+    visibility: hidden
+    description: |
+      The forest parts reluctantly here, forming a rough circle perhaps fifty
+      paces across. A tumbledown cottage stands at its center, walls patched with
+      moss and roof half-covered in living sod. Smoke rises from a crooked chimney.
+
+      A vegetable garden struggles against the forest's encroachment on one side,
+      while the other holds a well-stocked woodpile and a rack for drying herbs
+      and mushrooms. The clearing feels protected somehow, quieter than the
+      surrounding woods - the birdsong here is sweeter, the light gentler.
+
+      An old man lives here, they say. He was here before anyone remembers, and
+      he keeps to himself. He has no name that Millbrook knows. They just call
+      him the Hermit.
+    atmosphere: |
+      Peace, but also watchfulness. The clearing feels like a held breath, like
+      sanctuary that knows it's temporary. The herbs drying on the rack have an
+      unfamiliar fragrance - clean and sharp, like starlight given scent.
+    typical_crowd: |
+      The Hermit alone. Rare visitors who manage to find the place.
+
+  - location_key: temple_dawn_star
+    display_name: Temple of the Dawn Star
+    zone_key: deep_woods
+    category: building
+    visibility: hidden
+    description: |
+      The forest gives way to shaped stone so gradually you almost miss the
+      transition. What seemed like a mossy hillside becomes a wall, what looked
+      like a fallen tree is a collapsed column, and before you stands a doorway
+      carved from living rock.
+
+      The temple is half-swallowed by the forest, its domed roof broken open to
+      admit a shaft of light that falls precisely on the altar at the chamber's
+      heart. The walls bear faded paintings of robed figures with stars in their
+      eyes, their hands raised to seal a howling darkness into mountain peaks.
+
+      This was a place of the Starbound Order, perhaps their most sacred site in
+      this region. The altar holds a shallow depression sized to hold a medallion.
+    atmosphere: |
+      Profound silence. Light that moves in ways it shouldn't. A sense of
+      presence, not threatening but immense - like standing in the shadow of
+      something vast that has turned to notice you.
+    typical_crowd: |
+      None. Lost and forgotten until rediscovered.
+
+  # ---------------------------------------------------------------------------
+  # RIVER MOSS LOCATION
+  # ---------------------------------------------------------------------------
+  - location_key: river_moss
+    display_name: River Moss
+    zone_key: river_moss_zone
+    category: outdoor
+    visibility: visible_from_zone
+    description: |
+      The Moss River winds through the farmland southeast of Millbrook, a lazy
+      waterway that provides irrigation for the fields and fish for village
+      tables. Willows trail their branches in the current, and flat stones along
+      the bank make good spots for fishing or washing clothes.
+
+      Lately, the river has grown strange. Fish are caught with marks on their
+      scales - circular patterns, like brands. The water runs colder than it
+      should for the season. Fishermen report their lines being cut from below,
+      or snagging on things that move against the current.
+    atmosphere: |
+      The burble of water over stones, the buzz of insects, the splash of fish
+      jumping. Peaceful, but with an undertone of wrongness lately - the water
+      is too cold, the fish too scarce.
+    typical_crowd: |
+      Fishermen, women doing laundry, children playing on hot days.
+
+  # ---------------------------------------------------------------------------
+  # ROAD LOCATIONS
+  # ---------------------------------------------------------------------------
+  - location_key: east_road
+    display_name: East Road
+    zone_key: east_road_zone
+    category: road
+    visibility: landmark
+    description: |
+      The East Road runs straight as an arrow through the farmlands, connecting
+      Millbrook to the market town of Harwick two days' travel distant. It's a
+      proper road, paved with fitted stones that the old Empire laid down
+      centuries ago, though weeds grow through the cracks now.
+
+      Travelers are common here - merchants with their wagons, farmers taking
+      goods to market, occasionally soldiers or messengers on official business.
+      Roadside shrines to the Light mark each mile, most tended, some overgrown.
+    atmosphere: |
+      The clatter of cart wheels, the call of merchants, dust rising in dry
+      weather. A sense of connection to the wider world.
+    typical_crowd: |
+      Merchants, farmers, travelers, occasional patrols.
+
+  - location_key: south_road
+    display_name: South Road
+    zone_key: south_road_zone
+    category: road
+    visibility: visible_from_zone
+    description: |
+      Less traveled than the East Road, the South Road winds through increasingly
+      hilly terrain toward Thornbury, a mining settlement a day's journey south.
+      The road is rougher here, more dirt track than paved way, and bandits have
+      been known to lurk in the rocky passes.
+
+      The hills grow higher as you travel south, eventually rising into the
+      foothills of the Hollow Mountains - visible on clear days as purple shadows
+      on the horizon.
+    atmosphere: |
+      Quieter than the East Road. The wind carries a chill from the mountains.
+      Rocky outcrops provide cover for ambush.
+    typical_crowd: |
+      Miners, ore wagons, the occasional brave traveler.

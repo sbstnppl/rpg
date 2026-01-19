@@ -1,0 +1,406 @@
+{
+  "npcs": [
+    {
+      "entity_key": "old_aldric",
+      "display_name": "Old Aldric",
+      "entity_type": "npc",
+      "age": 78,
+      "age_apparent": "ancient, weathered",
+      "gender": "male",
+      "height": "5'6\" (stooped, was taller)",
+      "build": "thin, wiry",
+      "hair_color": "white",
+      "hair_style": "long, wild",
+      "eye_color": "milky blue (cataracts)",
+      "skin_tone": "weathered, liver-spotted",
+      "species": "human",
+      "distinguishing_features": "Thick white beard that he constantly strokes while thinking. A scar across his left palm that he claims was from 'shaking hands with a star.' Missing two fingers on his right hand.",
+      "voice_description": "Reedy and wavering, but capable of surprising strength when he gets into a story. Tends to drift into sing-song rhythms when reciting old ballads.",
+      "occupation": "village storyteller",
+      "occupation_years": 15,
+      "background": "The oldest person in Millbrook by nearly a decade, Aldric was a farmer until his joints gave out. Now he spends his days in the Dusty Flagon, where Tom lets him drink for free in exchange for the customers his stories attract. He knows every story in the village's memory, and some that the village has forgotten.",
+      "personality_notes": "Loves an audience more than anything. Prone to embellishment but the core of his stories is always true. Lonely since his wife died, treasures any genuine attention. Drinks more than he should. Sharp mind hidden behind a foggy presentation.",
+      "hidden_backstory": "Aldric's grandmother was the last public member of the Starbound Order before they went into hiding. She entrusted him with their ballads, told as children's stories, preserving the true history in song. The scar on his palm came from a ritual his grandmother performed when he was seven - binding him to remember.",
+      "npc_extension": {
+        "job": "village storyteller",
+        "workplace": "dusty_flagon",
+        "home_location": "aldric_cottage",
+        "hobbies": ["collecting stories", "drinking", "watching the stars"],
+        "speech_pattern": "Speaks in rambling circles that eventually reach a point. Peppers speech with 'as my grandmother used to say' and 'in the old days.' Frequently loses his train of thought, then finds it again. Uses archaic words.",
+        "personality_traits": {
+          "lonely": true,
+          "loves_attention": true,
+          "secretly_wise": true,
+          "drinks_too_much": true,
+          "sharp_memory": true
+        },
+        "dark_secret": "He knows exactly what the symbols on the well mean. He knows the seals are weakening. He's been waiting for someone with the pendant to appear - Finn's mother told him to watch for her child, though she never told him why.",
+        "hidden_goal": "To pass on the true history before he dies. To find someone worthy to continue the vigil.",
+        "betrayal_conditions": null
+      },
+      "knowledge_areas": {
+        "starbound_ballads": {
+          "description": "Old songs about 'star warriors' who guarded against darkness",
+          "disclosure_threshold": 20,
+          "sample_content": "When stars fell to earth they wore the shape of men, with light in their eyes and fire in their hands, they drove the old darkness back to its den, and sealed it with iron and warding bands..."
+        },
+        "binding_ceremony": {
+          "description": "Details of how the seals were made",
+          "disclosure_threshold": 50,
+          "sample_content": "The seals weren't just magic, boy. They were sacrifice. Each one cost a life freely given. That's why they held so long. That's why they're failing now - no one remembers how to renew them."
+        },
+        "true_history": {
+          "description": "The actual history of the Starbound Order",
+          "disclosure_threshold": 80,
+          "sample_content": "My grandmother was one of them. The last to wear the symbol openly. She told me everything before she died - made me promise to remember. I've been waiting forty years for someone who needed to know."
+        },
+        "finns_mother": {
+          "description": "What he knows about Finn's mother",
+          "disclosure_threshold": 90,
+          "sample_content": "Elena came to me the night before you were born, Finn. She told me to watch for a child with her pendant. Said you'd need the old stories someday. She knew she wouldn't survive your birth - the blood price for what she'd done to keep you safe."
+        }
+      }
+    },
+    {
+      "entity_key": "sister_maren",
+      "display_name": "Sister Maren",
+      "entity_type": "npc",
+      "age": 45,
+      "age_apparent": "middle-aged, care-worn",
+      "gender": "female",
+      "height": "5'4\"",
+      "build": "slight, narrow-shouldered",
+      "hair_color": "brown with gray streaks",
+      "hair_style": "kept short and practical",
+      "eye_color": "gray",
+      "skin_tone": "pale (spends time indoors)",
+      "species": "human",
+      "distinguishing_features": "Ink-stained fingers from constant writing. Wire-rimmed spectacles that she's always adjusting. A habit of pressing her lips thin when she disapproves of something.",
+      "voice_description": "Quiet but clear, the voice of someone used to being heard in silent spaces. Can be warm when she allows it, but usually maintains professional distance.",
+      "occupation": "keeper of the Chapel of the Light",
+      "occupation_years": 20,
+      "background": "Sent to Millbrook as a young acolyte twenty years ago, Sister Maren expected a quiet rural posting. What she found was a chapel built on older foundations, a records room full of pre-faith documents, and questions that her order couldn't - or wouldn't - answer.",
+      "personality_notes": "Genuinely faithful, but questions institutional dogma. Scholar at heart, frustrated by rural isolation. Keeps people at arm's length but cares deeply about the village. Suspicious of outsiders but respects curiosity.",
+      "hidden_backstory": "Has pieced together much of the Starbound history from chapel records. Knows the 'saints' in the windows were not saints at all. Believes the faith has deliberately obscured this history. Torn between loyalty to her order and loyalty to truth.",
+      "npc_extension": {
+        "job": "chapel keeper",
+        "workplace": "chapel_of_light",
+        "home_location": "chapel_records_room",
+        "hobbies": ["historical research", "correspondence", "gardening"],
+        "speech_pattern": "Precise and measured, choosing words carefully. Asks questions instead of making statements. 'Have you considered...' is a frequent phrase. Occasionally lets slip academic enthusiasm that breaks through her reserve.",
+        "personality_traits": {
+          "scholarly": true,
+          "cautious": true,
+          "secretly_rebellious": true,
+          "genuinely_faithful": true,
+          "lonely": true
+        },
+        "dark_secret": "She has written to church authorities about the pre-faith artifacts in the chapel. Their response was to threaten her with reassignment if she continued investigating. She continues anyway, in secret.",
+        "hidden_goal": "To understand the true relationship between the Light and the older powers. To reconcile her faith with historical truth.",
+        "betrayal_conditions": "Would report someone she believed was trying to undo the seals. Would not report simple curiosity."
+      },
+      "knowledge_areas": {
+        "chapel_history": {
+          "description": "Official history of the chapel's construction",
+          "disclosure_threshold": 20,
+          "sample_content": "The chapel was consecrated two hundred years ago, built on foundations of an older shrine. The faith teaches that we brought light to a dark place."
+        },
+        "binding_records": {
+          "description": "Pre-faith documents mentioning 'the Binding'",
+          "disclosure_threshold": 60,
+          "sample_content": "I've found references to something called 'the Binding' in records that predate our faith. It seems to have been a ritual performed here, though the details are... deliberately obscured."
+        },
+        "starbound_connection": {
+          "description": "Evidence linking the chapel to the Starbound Order",
+          "disclosure_threshold": 80,
+          "sample_content": "The figures in our windows? They're not saints. I found their names in the old records - titles, not names. The Watcher. The Keeper. The Blade. Members of something called the Starbound Order."
+        },
+        "seal_locations": {
+          "description": "Where the seals were placed",
+          "disclosure_threshold": 95,
+          "sample_content": "The old records describe five sealing points, connected by ley lines. The chapel stands on one. The well is another. The Watcher's Tower. The Temple in the forest. And something in the mountains themselves."
+        }
+      }
+    },
+    {
+      "entity_key": "the_hermit",
+      "display_name": "The Hermit",
+      "entity_type": "npc",
+      "age": 94,
+      "age_apparent": "impossibly old",
+      "gender": "male",
+      "height": "6'2\" (stands straight despite age)",
+      "build": "lean, almost gaunt",
+      "hair_color": "white",
+      "hair_style": "shoulder-length, unkempt",
+      "eye_color": "pale blue, occasionally flicker with faint light",
+      "skin_tone": "weathered like old leather",
+      "species": "human",
+      "distinguishing_features": "Eyes that catch light strangely, sometimes seeming to glow faintly in darkness. A circular scar on each palm. Moves with unnatural grace for his apparent age. Barefoot always, regardless of weather or terrain.",
+      "voice_description": "Soft and surprisingly young-sounding. Speaks rarely, but when he does, his words carry weight that makes you want to listen. Occasional pauses mid-sentence as if listening to something no one else can hear.",
+      "occupation": "hermit",
+      "occupation_years": 60,
+      "background": "No one knows how long the Hermit has lived in Greywood. He was there when the oldest villagers were children. He trades herbs and remedies for supplies, speaks to no one beyond necessity, and vanishes for days at a time. Hunters claim to have seen him standing on stones during storms, arms raised to the lightning.",
+      "personality_notes": "Profoundly weary. Has seen too much to be surprised by anything. Speaks truth but often cryptically, not from choice but from decades of isolation. Longs for rest but cannot abandon duty. Sees something of himself in young people with burdens they don't yet understand.",
+      "hidden_backstory": "Real name: Aldric Starfell (no relation to Old Aldric). Was initiated into the Starbound Order at age 14, one of the last. Participated in the final Binding ceremony sixty years ago. His fellow Order members died or scattered; he alone remained to watch the seals. His longevity comes from the Starbound ritual - the binding keeps him alive while the seals hold. When they break, so will he. He has the key to the village well. He has been waiting for Elena's child to come of age.",
+      "npc_extension": {
+        "job": "guardian of the seals",
+        "workplace": "hermit_clearing",
+        "home_location": "hermit_clearing",
+        "hobbies": ["ward maintenance", "herb cultivation", "stargazing"],
+        "speech_pattern": "Sparse words, heavy with meaning. Long silences between statements. Speaks in observations rather than opinions: 'The stars are brighter tonight' instead of 'I think something is wrong.'",
+        "personality_traits": {
+          "ancient_burden": true,
+          "secretly_kind": true,
+          "cryptic": true,
+          "observant": true,
+          "ready_to_die": true
+        },
+        "dark_secret": "He could have stopped Elena from dying. She asked him not to. The blood price for protecting her son from the darkness's attention had to be paid, and she chose to pay it herself. He has carried this guilt for nineteen years.",
+        "hidden_goal": "To pass his knowledge and duty to Finn before the seals break completely. To finally rest.",
+        "betrayal_conditions": "Would stop anyone trying to break the seals, with lethal force if necessary. Even Finn, if he chose that path."
+      },
+      "knowledge_areas": {
+        "herb_lore": {
+          "description": "Knowledge of medicinal and magical herbs",
+          "disclosure_threshold": 30,
+          "sample_content": "Starwort blooms only under new moons. Its petals ease nightmares when brewed correctly. Three petals, no more - four brings visions you may not want."
+        },
+        "starbound_basics": {
+          "description": "General information about the Order",
+          "disclosure_threshold": 50,
+          "sample_content": "They called themselves Starbound because they believed their power came from beyond the world. Perhaps it did. Perhaps that's why they could face what they faced."
+        },
+        "pendant_nature": {
+          "description": "What Finn's pendant actually is",
+          "disclosure_threshold": 70,
+          "sample_content": "That pendant is a key, and a shield, and a chain. It protects you from Their notice while the seals hold. It will lead you to the places you need to find. And it binds you to finish what your mother started."
+        },
+        "full_truth": {
+          "description": "Everything about the Starbound and the seals",
+          "disclosure_threshold": 90,
+          "sample_content": "I am Aldric Starfell, last of the Starbound Order. I have watched these seals for sixty years. Your mother was to be my successor, but she chose differently. She chose you. And now the seals are failing, and you must choose what to do."
+        },
+        "well_key": {
+          "description": "He has the key to the sealed well",
+          "disclosure_threshold": 95,
+          "sample_content": "The key has waited in my keeping all these years. It's yours by right - Elena's blood, Elena's burden. But know this: once you open that door, there is no closing it again. Are you ready for what lies below?"
+        }
+      }
+    },
+    {
+      "entity_key": "master_corin",
+      "display_name": "Master Corin",
+      "entity_type": "npc",
+      "age": 52,
+      "age_apparent": "fifties, well-preserved",
+      "gender": "male",
+      "height": "5'8\"",
+      "build": "stocky, barrel-chested",
+      "hair_color": "black with gray at temples",
+      "hair_style": "slicked back, oiled",
+      "eye_color": "brown, calculating",
+      "skin_tone": "tanned from travel",
+      "species": "human",
+      "distinguishing_features": "Gold tooth that flashes when he smiles. Rings on every finger, each with a different stone. Always wears a heavy leather coat regardless of weather, its pockets bulging with mysterious contents.",
+      "voice_description": "Smooth and persuasive, the voice of a born salesman. Shifts tone expertly - sympathetic with the sad, enthusiastic with the eager, conspiratorial with the curious.",
+      "occupation": "traveling merchant and collector",
+      "occupation_years": 30,
+      "background": "Master Corin travels a circuit through a dozen villages, buying and selling whatever turns a profit. He passes through Millbrook three or four times a year, always with new goods and stranger stories. What most don't know is that his true passion is collecting - specifically, objects marked with star symbols.",
+      "personality_notes": "Charming when he wants something, ruthless in negotiation. Genuinely curious about the unusual. More honest than his profession suggests, but not above misdirection. Fears magic but is drawn to it anyway.",
+      "hidden_backstory": "Corin's grandmother (in a different village) was also descended from the Starbound, though she died before passing on the knowledge. Corin has a latent sensitivity to Starbound artifacts - they 'call' to him. He's collected several minor pieces without understanding what they are.",
+      "npc_extension": {
+        "job": "traveling merchant",
+        "workplace": "market_square",
+        "home_location": "harwick",
+        "hobbies": ["collecting artifacts", "gambling", "storytelling"],
+        "speech_pattern": "Fluid and adaptable. Uses 'my friend' frequently. Drops hints about rare items to gauge interest. 'I shouldn't tell you this, but...' followed by exactly what he wanted to tell you all along.",
+        "personality_traits": {
+          "charming": true,
+          "opportunistic": true,
+          "genuinely_curious": true,
+          "artifact_obsessed": true,
+          "lonely_despite_travels": true
+        },
+        "dark_secret": "Sold an artifact last year that he later learned was responsible for a series of deaths. He doesn't know if the buyer caused them or the artifact did. The guilt haunts him.",
+        "hidden_goal": "To understand what the star-marked items actually are. To find someone who can explain his sensitivity to them.",
+        "betrayal_conditions": "Would sell out someone's secrets for the right artifact. Would feel bad about it afterward."
+      },
+      "knowledge_areas": {
+        "trade_gossip": {
+          "description": "News from other villages",
+          "disclosure_threshold": 20,
+          "sample_content": "Strange times, my friend. Thornbury's had three mining accidents this month. Harwick's cattle are birthing calves with extra eyes. And I met a woman on the road who swore she saw lights moving in the Hollow Mountains at night."
+        },
+        "artifact_collection": {
+          "description": "Star-marked items he's collected",
+          "disclosure_threshold": 50,
+          "sample_content": "I've got a weakness for these old things with the star markings. Buttons, buckles, the odd coin. Most folks think they're just decoration, but... well, you hold one in moonlight and tell me there's nothing special about them."
+        },
+        "black_market": {
+          "description": "Where to find forbidden knowledge/items",
+          "disclosure_threshold": 75,
+          "sample_content": "There's a collector in Harwick, calls himself the Antiquarian. Deals in... unusual goods. He'd pay well for anything Starbound-related. But be careful - his buyers have a habit of disappearing."
+        }
+      }
+    },
+    {
+      "entity_key": "henrik_blacksmith",
+      "display_name": "Henrik",
+      "entity_type": "npc",
+      "age": 41,
+      "age_apparent": "early forties, weathered",
+      "gender": "male",
+      "height": "6'1\"",
+      "build": "massive, heavily muscled",
+      "hair_color": "brown, singed at the ends",
+      "hair_style": "short, practical",
+      "eye_color": "brown",
+      "skin_tone": "ruddy from forge heat",
+      "species": "human",
+      "distinguishing_features": "Burn scars on forearms from forge accidents. Permanent squint from years of staring at hot metal. Hands like leather gloves, callused beyond feeling.",
+      "voice_description": "Deep and gruff, often shouting over the noise of his work. Speaks in short, practical sentences. Rarely wastes words.",
+      "occupation": "blacksmith",
+      "occupation_years": 25,
+      "background": "Henrik has been Millbrook's only smith since his father died fifteen years ago. He makes nails, horseshoes, farm tools, hinges - honest work for honest pay. He refuses to make weapons, though he has the skill for it. He lost his wife to the winter fever five years ago. Raised his son Thomas alone since then.",
+      "personality_notes": "Salt of the earth, suspicious of fancy talk. Respects hard work, dismisses 'foolishness' like old stories and superstitions. Protective of his son. Quietly kind beneath gruff exterior. Afraid of anything he can't understand.",
+      "hidden_backstory": null,
+      "npc_extension": {
+        "job": "blacksmith",
+        "workplace": "blacksmith_forge",
+        "home_location": "blacksmith_forge",
+        "hobbies": ["woodcarving", "teaching his son", "playing dice at the Flagon"],
+        "speech_pattern": "Terse and practical. 'Aye' and 'Nay' for most answers. Grunts when thinking. 'That'll cost you' is a frequent phrase. Surprisingly gentle when talking about his late wife or his son.",
+        "personality_traits": {
+          "practical": true,
+          "hardworking": true,
+          "skeptical_of_magic": true,
+          "quietly_grieving": true,
+          "protective": true
+        },
+        "dark_secret": null,
+        "hidden_goal": null,
+        "betrayal_conditions": null
+      },
+      "knowledge_areas": {
+        "village_gossip": {
+          "description": "Practical news about village life",
+          "disclosure_threshold": 20,
+          "sample_content": "The Widow Brennan's having trouble with her fence again. That boy Finn needs to learn carpentry, not just farmwork. Can't do everything with strong arms alone."
+        },
+        "metalwork": {
+          "description": "Expert knowledge of smithing",
+          "disclosure_threshold": 30,
+          "sample_content": "Aye, I can fix that. But this metal's odd - where'd you find it? Doesn't ring right. Almost like it's... never mind. Probably just old iron."
+        }
+      }
+    },
+    {
+      "entity_key": "widow_brennan",
+      "display_name": "Widow Brennan",
+      "entity_type": "npc",
+      "age": 58,
+      "age_apparent": "late fifties, worn but strong",
+      "gender": "female",
+      "height": "5'5\"",
+      "build": "sturdy, farm-strong",
+      "hair_color": "gray (was auburn)",
+      "hair_style": "practical bun",
+      "eye_color": "green",
+      "skin_tone": "weathered fair",
+      "species": "human",
+      "distinguishing_features": "Hands rough from farmwork. Deep laugh lines around eyes. Always wears her late husband's wedding ring on a chain around her neck. Slight limp from a long-ago injury.",
+      "voice_description": "Warm but firm, the voice of someone used to managing both animals and children. Can shift from gentle comfort to sharp scolding in an instant.",
+      "occupation": "farmer",
+      "occupation_years": 40,
+      "background": "Martha Brennan has worked Brennan Farm since she married into the family at eighteen. Her husband died of the same winter fever that took Henrik's wife, leaving her to manage alone. She would have had to sell the farm if not for Finn, who she took in as a newborn.",
+      "personality_notes": "Fiercely protective of Finn. Practical about hardship but secretly afraid of losing him the way she lost everything else. More perceptive than she lets on - noticed long ago that Finn's pendant does strange things in moonlight.",
+      "hidden_backstory": "Elena told Martha something before she died: 'The darkness is coming. Keep him safe until he's ready. The pendant will protect him, but only if he doesn't know what it is.' Martha has kept this secret for nineteen years, hating every moment of it.",
+      "npc_extension": {
+        "job": "farmer",
+        "workplace": "brennan_farm",
+        "home_location": "brennan_farm",
+        "hobbies": ["preserving food", "quilting", "worrying about Finn"],
+        "speech_pattern": "Motherly but businesslike. Uses 'dear' and 'child' for Finn even though he's grown. Sighs often. 'Now, Finn...' precedes most corrections. Can be sharp when frightened.",
+        "personality_traits": {
+          "protective": true,
+          "secretive_from_love": true,
+          "farm_wise": true,
+          "secretly_terrified": true,
+          "stronger_than_she_looks": true
+        },
+        "dark_secret": "She knows more about Finn's origins than she's ever said. Elena trusted her with knowledge that has been a burden for nineteen years.",
+        "hidden_goal": "To keep Finn safe and on the farm. To never let him discover his 'destiny' if she can help it.",
+        "betrayal_conditions": "Would lie, manipulate, even steal to keep Finn safe. But would never betray him - only believes she's protecting him."
+      },
+      "knowledge_areas": {
+        "finn_childhood": {
+          "description": "Stories about raising Finn",
+          "disclosure_threshold": 20,
+          "sample_content": "He was such a quiet baby. Never fussed, just watched everything with those big eyes. First word was 'star' - pointed right at the sky and said it clear as day."
+        },
+        "elena_arrival": {
+          "description": "The night Finn's mother came",
+          "disclosure_threshold": 60,
+          "sample_content": "She came in a storm, near dead from the road. Gave birth that night. Asked me to raise him, then... passed. I buried her behind the house like she asked. Never knew where she came from."
+        },
+        "elena_secrets": {
+          "description": "What Elena actually said",
+          "disclosure_threshold": 90,
+          "sample_content": "She made me promise, Finn. She said... she said darkness was coming, and you'd have to face it. That the pendant would protect you, but only if you didn't know what it was. I've hated this secret every day for nineteen years, but I thought I was keeping you safe. I thought..."
+        }
+      }
+    },
+    {
+      "entity_key": "tom_barkeep",
+      "display_name": "Tom",
+      "entity_type": "npc",
+      "age": 35,
+      "age_apparent": "mid-thirties",
+      "gender": "male",
+      "height": "5'10\"",
+      "build": "soft, comfortable",
+      "hair_color": "brown",
+      "hair_style": "receding, kept short",
+      "eye_color": "hazel",
+      "skin_tone": "fair",
+      "species": "human",
+      "distinguishing_features": "Round face made for smiling. Apron perpetually stained with ale. Nervous habit of polishing glasses when thinking.",
+      "voice_description": "Friendly and welcoming, the perfect barkeep's voice. Gets quieter when sharing gossip. Surprisingly firm when cutting someone off.",
+      "occupation": "barkeep and tavern owner",
+      "occupation_years": 10,
+      "background": "Tom inherited the Dusty Flagon from his uncle, who inherited it from his father. He's the third generation of his family to pour drinks here, and he intends to be the best. He knows the mysterious shield on his wall came with the tavern. His uncle told him never to take it down, never explained why.",
+      "personality_notes": "Good-natured, curious, reliable. Knows everyone's business but keeps most secrets. Terrified of anything supernatural. Would rather pretend things are normal than confront strangeness.",
+      "hidden_backstory": "The shield on his wall is a genuine Starbound artifact, placed there three generations ago to ward the tavern. Tom doesn't know this. The shield knows him, in its way.",
+      "npc_extension": {
+        "job": "barkeep",
+        "workplace": "flagon_common_room",
+        "home_location": "dusty_flagon",
+        "hobbies": ["cooking", "gossip", "sleeping"],
+        "speech_pattern": "Warm and inclusive. 'What'll it be?' is his standard greeting. Lowers voice for gossip: 'Now I shouldn't say, but...' Has a nervous laugh when uncomfortable.",
+        "personality_traits": {
+          "friendly": true,
+          "gossipy": true,
+          "loyal_to_regulars": true,
+          "deliberately_oblivious": true,
+          "simple_pleasures": true
+        },
+        "dark_secret": null,
+        "hidden_goal": null,
+        "betrayal_conditions": null
+      },
+      "knowledge_areas": {
+        "village_gossip": {
+          "description": "Everything everyone says in the tavern",
+          "disclosure_threshold": 30,
+          "sample_content": "Old Aldric's been more agitated lately. Muttering about stars and seals. Henrik thinks he's gone senile, but... I've seen him sober enough when it matters."
+        },
+        "mysterious_shield": {
+          "description": "What he knows about the shield",
+          "disclosure_threshold": 50,
+          "sample_content": "My uncle said never to take it down. Didn't say why. But sometimes... sometimes I swear it hums during thunderstorms. And there was one night when a stranger tried to steal it - burned his hands something terrible, screamed about 'light from the old days.' Never saw him again."
+        }
+      }
+    }
+  ]
+}

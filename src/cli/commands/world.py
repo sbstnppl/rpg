@@ -570,3 +570,104 @@ def import_world(
                 console.print(f"  - {error}")
 
         console.print()
+
+
+@app.command("load")
+def load_world(
+    world_name: str = typer.Argument(..., help="World name (e.g., 'millbrook')"),
+    world_dir: str = typer.Option(
+        "data/worlds",
+        "--dir",
+        "-d",
+        help="Directory containing world files",
+    ),
+    session_id: Optional[int] = typer.Option(None, "--session", "-s", help="Session ID"),
+) -> None:
+    """Load a complete world with NPCs, schedules, items, and facts.
+
+    Expects files in the world directory:
+      - {world_name}.yaml - Zones, locations, connections
+      - {world_name}_npcs.json - NPC definitions
+      - {world_name}_schedules.json - NPC schedules
+      - {world_name}_items.json - Item definitions
+      - {world_name}_facts.json - World facts
+
+    Example:
+      rpg world load millbrook
+    """
+    from pathlib import Path
+
+    from src.services.world_loader_extended import load_complete_world
+
+    path = Path(world_dir)
+
+    if not path.exists():
+        display_error(f"World directory not found: {path}")
+        raise typer.Exit(1)
+
+    with get_db_session() as db:
+        if session_id:
+            game_session = db.query(GameSession).filter(GameSession.id == session_id).first()
+        else:
+            game_session = _get_active_session(db)
+
+        if not game_session:
+            display_error("No active session found. Create a session first.")
+            raise typer.Exit(1)
+
+        try:
+            results = load_complete_world(db, game_session, path, world_name)
+        except Exception as e:
+            display_error(f"Failed to load world: {e}")
+            raise typer.Exit(1)
+
+        # Report results
+        console.print()
+        console.print(f"[bold green]Loaded world '{world_name}'[/bold green]")
+        console.print()
+
+        # World (zones, locations, connections)
+        if results.get("world"):
+            world = results["world"]
+            console.print("[bold]Base World:[/bold]")
+            console.print(f"  - {world.get('zones', 0)} zones")
+            console.print(f"  - {world.get('connections', 0)} connections")
+            console.print(f"  - {world.get('locations', 0)} locations")
+            if world.get("errors"):
+                for err in world["errors"]:
+                    console.print(f"  [yellow]Warning: {err}[/yellow]")
+
+        # NPCs
+        if results.get("npcs"):
+            npcs = results["npcs"]
+            console.print(f"[bold]NPCs:[/bold] {npcs.get('count', 0)} loaded")
+            if npcs.get("errors"):
+                for err in npcs["errors"]:
+                    console.print(f"  [yellow]Warning: {err}[/yellow]")
+
+        # Schedules
+        if results.get("schedules"):
+            scheds = results["schedules"]
+            console.print(f"[bold]Schedules:[/bold] {scheds.get('count', 0)} entries")
+            if scheds.get("errors"):
+                for err in scheds["errors"]:
+                    console.print(f"  [yellow]Warning: {err}[/yellow]")
+
+        # Items
+        if results.get("items"):
+            items = results["items"]
+            console.print(f"[bold]Items:[/bold] {items.get('count', 0)} loaded")
+            if items.get("errors"):
+                for err in items["errors"]:
+                    console.print(f"  [yellow]Warning: {err}[/yellow]")
+
+        # Facts
+        if results.get("facts"):
+            facts = results["facts"]
+            console.print(f"[bold]Facts:[/bold] {facts.get('count', 0)} loaded")
+            if facts.get("errors"):
+                for err in facts["errors"]:
+                    console.print(f"  [yellow]Warning: {err}[/yellow]")
+
+        console.print()
+        display_success(f"World '{world_name}' loaded successfully!")

@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Millbrook World Generation for Finn's Journey** - Complete world content for medieval fantasy setting
+  - New `data/worlds/millbrook.yaml` with 9 terrain zones and 18+ locations
+  - New `data/worlds/millbrook_npcs.json` with 7 NPCs (Old Aldric, Sister Maren, The Hermit, Master Corin, Henrik, Widow Brennan, Tom)
+  - New `data/worlds/millbrook_schedules.json` with daily schedules for all NPCs
+  - New `data/worlds/millbrook_items.json` with 6 items including 4 Starbound artifacts
+  - New `data/worlds/millbrook_facts.json` with 20+ world facts (public legends, secret truths, omens)
+  - Extended `src/schemas/world_template.py` with NPCTemplate, ScheduleTemplate, ItemTemplate, FactTemplate
+  - New `src/services/world_loader_extended.py` for loading complete worlds
+  - New `rpg world load <world_name>` CLI command (`src/cli/commands/world.py`)
+  - 14 unit tests (`tests/test_services/test_world_loader_extended.py`)
+  - 26 integration tests (`tests/test_integration/test_millbrook_world.py`)
+
 - **Context-Aware Location Resolution** - LLM picks destination using conversation context, then validates
   - New `candidate_locations` field in `GroundingManifest` for non-exit locations (`src/gm/grounding.py`)
   - New `_get_candidate_locations()` method finds locations matching destination text (`src/gm/context_builder.py`)

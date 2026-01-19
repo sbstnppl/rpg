@@ -1,0 +1,319 @@
+{
+  "schedules": [
+    {
+      "entity_key": "old_aldric",
+      "entries": [
+        {
+          "day_pattern": "daily",
+          "start_time": "10:00",
+          "end_time": "12:00",
+          "activity": "shuffling around village, visiting neighbors",
+          "location_key": "market_square",
+          "priority": 0
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "12:00",
+          "end_time": "22:00",
+          "activity": "holding court in the tavern, telling stories",
+          "location_key": "flagon_common_room",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "22:00",
+          "end_time": "10:00",
+          "activity": "sleeping at home",
+          "location_key": "aldric_cottage",
+          "priority": 2
+        },
+        {
+          "day_pattern": "sunday",
+          "start_time": "09:00",
+          "end_time": "11:00",
+          "activity": "attending chapel service",
+          "location_key": "chapel_sanctuary",
+          "priority": 3
+        }
+      ]
+    },
+    {
+      "entity_key": "sister_maren",
+      "entries": [
+        {
+          "day_pattern": "daily",
+          "start_time": "05:00",
+          "end_time": "06:00",
+          "activity": "morning prayers",
+          "location_key": "chapel_sanctuary",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "06:00",
+          "end_time": "08:00",
+          "activity": "tending chapel garden, breakfast",
+          "location_key": "chapel_of_light",
+          "priority": 0
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "08:00",
+          "end_time": "12:00",
+          "activity": "available in chapel for visitors",
+          "location_key": "chapel_sanctuary",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "12:00",
+          "end_time": "14:00",
+          "activity": "research in records room",
+          "location_key": "chapel_records_room",
+          "priority": 0
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "14:00",
+          "end_time": "18:00",
+          "activity": "pastoral visits in village",
+          "location_key": "millbrook_village",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "18:00",
+          "end_time": "21:00",
+          "activity": "evening research",
+          "location_key": "chapel_records_room",
+          "priority": 0
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "21:00",
+          "end_time": "05:00",
+          "activity": "sleeping",
+          "location_key": "chapel_records_room",
+          "priority": 2
+        },
+        {
+          "day_pattern": "sunday",
+          "start_time": "09:00",
+          "end_time": "11:00",
+          "activity": "conducting services",
+          "location_key": "chapel_sanctuary",
+          "priority": 3
+        }
+      ]
+    },
+    {
+      "entity_key": "the_hermit",
+      "entries": [
+        {
+          "day_pattern": "daily",
+          "start_time": "06:00",
+          "end_time": "10:00",
+          "activity": "gathering herbs, tending garden",
+          "location_key": "hermit_clearing",
+          "priority": 0
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "10:00",
+          "end_time": "16:00",
+          "activity": "meditating, watching the seals",
+          "location_key": "hermit_clearing",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "16:00",
+          "end_time": "22:00",
+          "activity": "crafting remedies, sometimes in village",
+          "location_key": "hermit_clearing",
+          "priority": 0
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "22:00",
+          "end_time": "06:00",
+          "activity": "stargazing, maintaining wards",
+          "location_key": "hermit_clearing",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "entity_key": "master_corin",
+      "entries": [
+        {
+          "day_pattern": "daily",
+          "start_time": "08:00",
+          "end_time": "18:00",
+          "activity": "trading in market square",
+          "location_key": "market_square",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "18:00",
+          "end_time": "23:00",
+          "activity": "drinking and dealing at the tavern",
+          "location_key": "flagon_common_room",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "23:00",
+          "end_time": "08:00",
+          "activity": "sleeping at the Flagon",
+          "location_key": "flagon_private_room",
+          "priority": 2
+        }
+      ]
+    },
+    {
+      "entity_key": "henrik_blacksmith",
+      "entries": [
+        {
+          "day_pattern": "daily",
+          "start_time": "06:00",
+          "end_time": "18:00",
+          "activity": "working at the forge",
+          "location_key": "blacksmith_forge",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "18:00",
+          "end_time": "20:00",
+          "activity": "dinner with Thomas, cleaning up",
+          "location_key": "blacksmith_forge",
+          "priority": 0
+        },
+        {
+          "day_pattern": "weekday",
+          "start_time": "20:00",
+          "end_time": "22:00",
+          "activity": "one drink at the Flagon",
+          "location_key": "flagon_common_room",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "22:00",
+          "end_time": "06:00",
+          "activity": "sleeping",
+          "location_key": "blacksmith_forge",
+          "priority": 2
+        },
+        {
+          "day_pattern": "sunday",
+          "start_time": "09:00",
+          "end_time": "11:00",
+          "activity": "chapel with Thomas",
+          "location_key": "chapel_sanctuary",
+          "priority": 3
+        }
+      ]
+    },
+    {
+      "entity_key": "widow_brennan",
+      "entries": [
+        {
+          "day_pattern": "daily",
+          "start_time": "05:00",
+          "end_time": "07:00",
+          "activity": "morning chores, breakfast preparation",
+          "location_key": "brennan_farm",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "07:00",
+          "end_time": "12:00",
+          "activity": "farm work (varies by season)",
+          "location_key": "brennan_farm",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "12:00",
+          "end_time": "13:00",
+          "activity": "midday meal",
+          "location_key": "brennan_farm",
+          "priority": 0
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "13:00",
+          "end_time": "18:00",
+          "activity": "more farm work",
+          "location_key": "brennan_farm",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "18:00",
+          "end_time": "21:00",
+          "activity": "dinner, evening chores",
+          "location_key": "brennan_farm",
+          "priority": 0
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "21:00",
+          "end_time": "05:00",
+          "activity": "sleeping",
+          "location_key": "brennan_farm",
+          "priority": 2
+        },
+        {
+          "day_pattern": "sunday",
+          "start_time": "09:00",
+          "end_time": "11:00",
+          "activity": "chapel service",
+          "location_key": "chapel_sanctuary",
+          "priority": 2
+        },
+        {
+          "day_pattern": "sunday",
+          "start_time": "11:30",
+          "end_time": "13:00",
+          "activity": "Sunday drink at the Flagon (tradition)",
+          "location_key": "flagon_common_room",
+          "priority": 1
+        }
+      ]
+    },
+    {
+      "entity_key": "tom_barkeep",
+      "entries": [
+        {
+          "day_pattern": "daily",
+          "start_time": "10:00",
+          "end_time": "12:00",
+          "activity": "opening up, cleaning, stocking",
+          "location_key": "dusty_flagon",
+          "priority": 1
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "12:00",
+          "end_time": "23:00",
+          "activity": "working the bar",
+          "location_key": "flagon_common_room",
+          "priority": 2
+        },
+        {
+          "day_pattern": "daily",
+          "start_time": "23:00",
+          "end_time": "10:00",
+          "activity": "sleeping upstairs",
+          "location_key": "dusty_flagon",
+          "priority": 2
+        }
+      ]
+    }
+  ]
+}
