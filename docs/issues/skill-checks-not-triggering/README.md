@@ -1,9 +1,11 @@
 # Skill Checks Not Triggering
 
-**Status**: Fixed
+**Status**: Awaiting Verification
 **Priority**: MEDIUM
 **Discovered**: Session 347 Play Test (2026-01-18)
 **Fixed**: 2026-01-18
+**Verification**: 0/3
+**Last Verified**: -
 
 ## Problem
 
