@@ -344,13 +344,14 @@ class DeltaPostProcessor:
                             f"UPDATE_LOCATION for unknown entity '{entity_key}'",
                         )
 
-                # Validate destination location exists in exits
+                # Validate destination location exists in exits or candidate_locations
                 destination = delta.changes.get("location_key")
-                if destination and destination not in self.manifest.exits:
+                valid_destinations = set(self.manifest.exits.keys()) | set(self.manifest.candidate_locations.keys())
+                if destination and destination not in valid_destinations:
                     return (
                         True,
                         f"UPDATE_LOCATION to unknown destination '{destination}'. "
-                        f"Valid exits: {list(self.manifest.exits.keys())}",
+                        f"Valid locations: {list(valid_destinations)}",
                     )
 
         return False, None
@@ -361,20 +362,22 @@ class DeltaPostProcessor:
         """Check for UPDATE_LOCATION deltas referencing non-existent destinations.
 
         Unlike entity keys which can be clarified via LLM, location destinations
-        must exist in the manifest's exits. Invalid locations cannot be fixed and
-        require regeneration.
+        must exist in the manifest's exits or candidate_locations. Invalid
+        locations cannot be fixed and require regeneration.
 
         Returns:
             (needs_regeneration, reason) tuple.
         """
+        valid_destinations = set(self.manifest.exits.keys()) | set(self.manifest.candidate_locations.keys())
+
         for delta in deltas:
             if delta.delta_type == DeltaType.UPDATE_LOCATION:
                 destination = delta.changes.get("location_key")
-                if destination and destination not in self.manifest.exits:
+                if destination and destination not in valid_destinations:
                     return (
                         True,
                         f"UPDATE_LOCATION to unknown destination '{destination}'. "
-                        f"Valid exits: {list(self.manifest.exits.keys())}",
+                        f"Valid locations: {list(valid_destinations)}",
                     )
 
         return False, None

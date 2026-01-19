@@ -571,3 +571,265 @@ class TestBuildConversationMessages:
         assert len(messages) == 1
         assert messages[0].role == MessageRole.USER
         assert "Hello world" in messages[0].content
+
+
+class TestGetCandidateLocations:
+    """Tests for _get_candidate_locations method (context-aware location resolution)."""
+
+    def test_finds_locations_matching_partial_key(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test finding locations by partial key match."""
+        # Create current location
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+        # Create locations with "well" in the key
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_well",
+            display_name="Village Well",
+            description="A common well in the village square",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="well_of_life",
+            display_name="Well of Life",
+            description="A mystical well high in the mountains",
+        )
+        # Create unrelated location
+        create_location(
+            db_session,
+            game_session,
+            location_key="market_square",
+            display_name="Market Square",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        candidates = builder._get_candidate_locations(
+            destination_hint="well",
+            current_location_key="village_inn",
+            exclude_keys=set(),
+        )
+
+        assert "village_well" in candidates
+        assert "well_of_life" in candidates
+        assert "market_square" not in candidates
+        assert "village_inn" not in candidates  # Current location excluded
+
+    def test_finds_locations_matching_display_name(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test finding locations by display name match."""
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="sacred_spring",
+            display_name="The Sacred Well",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        candidates = builder._get_candidate_locations(
+            destination_hint="well",
+            current_location_key="village_inn",
+            exclude_keys=set(),
+        )
+
+        assert "sacred_spring" in candidates
+
+    def test_excludes_exit_locations(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test that exits are excluded from candidate locations."""
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_well",
+            display_name="Village Well",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        candidates = builder._get_candidate_locations(
+            destination_hint="well",
+            current_location_key="village_inn",
+            exclude_keys={"village_well"},  # Simulating village_well is an exit
+        )
+
+        assert "village_well" not in candidates
+
+    def test_strips_common_prefixes(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test stripping 'the', 'that', 'this' prefixes."""
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_well",
+            display_name="Village Well",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+
+        # With "that" prefix
+        candidates = builder._get_candidate_locations(
+            destination_hint="that well",
+            current_location_key="village_inn",
+            exclude_keys=set(),
+        )
+        assert "village_well" in candidates
+
+        # With "the" prefix
+        candidates = builder._get_candidate_locations(
+            destination_hint="the well",
+            current_location_key="village_inn",
+            exclude_keys=set(),
+        )
+        assert "village_well" in candidates
+
+    def test_empty_hint_returns_empty_dict(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test that empty destination hint returns empty dict."""
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        candidates = builder._get_candidate_locations(
+            destination_hint="",
+            current_location_key="village_inn",
+            exclude_keys=set(),
+        )
+
+        assert candidates == {}
+
+    def test_returns_grounded_entities(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test that returned candidates are GroundedEntity objects with proper fields."""
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="well_of_life",
+            display_name="Well of Life",
+            description="A mystical well high in the mountains that grants visions",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        candidates = builder._get_candidate_locations(
+            destination_hint="well",
+            current_location_key="village_inn",
+            exclude_keys=set(),
+        )
+
+        assert "well_of_life" in candidates
+        entity = candidates["well_of_life"]
+        assert entity.key == "well_of_life"
+        assert entity.display_name == "Well of Life"
+        assert entity.entity_type == "location"
+        # Description truncated with ellipsis
+        assert "mystical well" in entity.short_description
+
+
+class TestBuildGroundingManifestWithDestinationHint:
+    """Tests for build_grounding_manifest with destination_hint parameter."""
+
+    def test_adds_candidate_locations_for_destination_hint(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test that destination_hint populates candidate_locations."""
+        player = create_entity(
+            db_session,
+            game_session,
+            entity_type=EntityType.PLAYER,
+            entity_key="player_001",
+            display_name="Finn",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_well",
+            display_name="Village Well",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="well_of_life",
+            display_name="Well of Life",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        manifest = builder.build_grounding_manifest(
+            player_id=player.id,
+            location_key="village_inn",
+            destination_hint="well",
+        )
+
+        # Should have candidate locations
+        assert manifest.candidate_locations
+        # Both wells should be candidates (unless one is an exit)
+        assert "village_well" in manifest.candidate_locations or "well_of_life" in manifest.candidate_locations
+
+    def test_no_destination_hint_gives_empty_candidates(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test that without destination_hint, candidate_locations is empty."""
+        player = create_entity(
+            db_session,
+            game_session,
+            entity_type=EntityType.PLAYER,
+            entity_key="player_001",
+            display_name="Finn",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        manifest = builder.build_grounding_manifest(
+            player_id=player.id,
+            location_key="village_inn",
+        )
+
+        assert manifest.candidate_locations == {}

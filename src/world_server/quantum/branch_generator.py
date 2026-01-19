@@ -389,13 +389,20 @@ The narrative should describe:
 3. Arriving at {context.location_display}
 The SCENE below shows the DESTINATION - describe arrival there, NOT departure from there."""
 
+        # Build recent events context (helps LLM understand references like "that well")
+        recent_events_context = ""
+        if context.recent_events:
+            recent_events_context = "\nRECENT EVENTS (for context):\n"
+            for event in context.recent_events[-3:]:  # Last 3 events
+                recent_events_context += f"- {event}\n"
+
         prompt = f"""Generate narrative variants for this player action.
 
 SCENE: {context.location_display}
 TIME: Day {context.game_day}, {context.game_time} ({context.game_period})
 PLAYER ENTITY KEY: {context.player_key}
 {entities_list}
-{movement_context}
+{recent_events_context}{movement_context}
 PLAYER ACTION: {action_desc}{player_input_context}
 {twist_context}
 
@@ -457,9 +464,16 @@ Generate the JSON response now."""
                 lines.append(f"  - [{key}:{entity.display_name}]")
 
         if manifest.exits:
-            lines.append("Exits:")
+            lines.append("Exits (directly adjacent locations):")
             for key, entity in manifest.exits.items():
                 lines.append(f"  - [{key}:{entity.display_name}]")
+
+        # Candidate locations (non-adjacent but known/mentioned)
+        if manifest.candidate_locations:
+            lines.append("Other known locations (may require travel):")
+            for key, entity in manifest.candidate_locations.items():
+                desc = f" - {entity.short_description}" if entity.short_description else ""
+                lines.append(f"  - [{key}:{entity.display_name}]{desc}")
 
         return "\n".join(lines)
 

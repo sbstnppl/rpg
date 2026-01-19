@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Context-Aware Location Resolution** - LLM picks destination using conversation context, then validates
+  - New `candidate_locations` field in `GroundingManifest` for non-exit locations (`src/gm/grounding.py`)
+  - New `_get_candidate_locations()` method finds locations matching destination text (`src/gm/context_builder.py`)
+  - New `destination_hint` parameter for `build_grounding_manifest()` to populate candidates
+  - Recent events now included in branch generation prompt for discourse reference (`src/world_server/quantum/branch_generator.py`)
+  - Validation accepts candidate_locations as valid destinations (`src/world_server/quantum/delta_postprocessor.py`)
+  - Fuzzy matching suggestions in validation error messages (`src/world_server/quantum/validation.py`)
+  - 14 new tests for candidate locations functionality (`tests/test_gm/test_grounding.py`, `tests/test_gm/test_context_builder.py`)
+
 - **OOC Handler for Out-of-Character Queries** - Routes OOC queries to game state instead of placeholder
   - New `OOCHandler` class with keyword-based query classification (`src/world_server/quantum/ooc_handler.py`)
   - Fast-path handlers for exits, time, inventory, location, NPCs, stats, and help

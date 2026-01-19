@@ -720,7 +720,10 @@ class GMContextBuilder(BaseManager):
         return keys
 
     def build_grounding_manifest(
-        self, player_id: int, location_key: str
+        self,
+        player_id: int,
+        location_key: str,
+        destination_hint: str | None = None,
     ) -> GroundingManifest:
         """Build a manifest of all entities the GM can reference.
 
@@ -732,6 +735,9 @@ class GMContextBuilder(BaseManager):
         Args:
             player_id: Player entity ID.
             location_key: Current location key.
+            destination_hint: Optional text describing intended destination for
+                MOVE actions. Used to find candidate locations that aren't direct
+                exits (e.g., locations mentioned in recent conversation).
 
         Returns:
             GroundingManifest with all valid entity keys.
@@ -830,6 +836,15 @@ class GMContextBuilder(BaseManager):
         except Exception:
             pass  # Skip if location lookup fails
 
+        # Build candidate locations (non-exit locations matching destination hint)
+        candidate_locations: dict[str, GroundedEntity] = {}
+        if destination_hint:
+            candidate_locations = self._get_candidate_locations(
+                destination_hint=destination_hint,
+                current_location_key=location_key,
+                exclude_keys=set(exits.keys()),
+            )
+
         return GroundingManifest(
             location_key=location_key,
             location_display=location_display,
@@ -841,7 +856,86 @@ class GMContextBuilder(BaseManager):
             equipped=equipped,
             storages=storages,
             exits=exits,
+            candidate_locations=candidate_locations,
         )
+
+    def _get_candidate_locations(
+        self,
+        destination_hint: str,
+        current_location_key: str,
+        exclude_keys: set[str],
+    ) -> dict[str, GroundedEntity]:
+        """Find all locations matching destination text for LLM to choose from.
+
+        Used when player references a location that isn't a direct exit (e.g.,
+        "go to that well" when well_of_life was mentioned in conversation but
+        isn't directly adjacent).
+
+        Args:
+            destination_hint: Text describing destination (e.g., "that well", "the tavern").
+            current_location_key: Current location (to exclude from results).
+            exclude_keys: Location keys already in exits (to avoid duplicates).
+
+        Returns:
+            Dict of location_key -> GroundedEntity for matching locations.
+        """
+        if not destination_hint:
+            return {}
+
+        candidates: dict[str, GroundedEntity] = {}
+        destination_hint = destination_hint.strip().lower()
+
+        # Normalize: remove "the", "that", "this" prefixes
+        for prefix in ("the ", "that ", "this ", "a ", "an "):
+            if destination_hint.startswith(prefix):
+                destination_hint = destination_hint[len(prefix):]
+                break
+
+        # Convert to key format for matching
+        normalized = destination_hint.replace(" ", "_")
+
+        # Get all locations in the session
+        all_locations = (
+            self.db.query(Location)
+            .filter(Location.session_id == self.session_id)
+            .all()
+        )
+
+        for loc in all_locations:
+            # Skip current location and exits (they're already available)
+            if loc.location_key == current_location_key:
+                continue
+            if loc.location_key in exclude_keys:
+                continue
+
+            # Check various match strategies
+            match_found = False
+
+            # 1. Partial key match: "well" matches "village_well", "well_of_life"
+            if normalized in loc.location_key:
+                match_found = True
+
+            # 2. Key part match: "well" matches key parts
+            if not match_found:
+                key_parts = loc.location_key.split("_")
+                if any(part == normalized or normalized in part for part in key_parts):
+                    match_found = True
+
+            # 3. Display name match (case-insensitive, partial)
+            if not match_found and loc.display_name:
+                display_lower = loc.display_name.lower()
+                if destination_hint in display_lower or normalized in display_lower.replace(" ", "_"):
+                    match_found = True
+
+            if match_found:
+                candidates[loc.location_key] = GroundedEntity(
+                    key=loc.location_key,
+                    display_name=loc.display_name or loc.location_key,
+                    entity_type="location",
+                    short_description=loc.description[:50] + "..." if loc.description and len(loc.description) > 50 else (loc.description or ""),
+                )
+
+        return candidates
 
     # =========================================================================
     # Conversational Context Methods

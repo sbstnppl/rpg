@@ -65,6 +65,10 @@ class GroundingManifest(BaseModel):
     exits: dict[str, GroundedEntity] = Field(
         default_factory=dict, description="Accessible locations/exits"
     )
+    candidate_locations: dict[str, GroundedEntity] = Field(
+        default_factory=dict,
+        description="Locations matching player's destination that aren't direct exits (for context-aware resolution)",
+    )
     additional_valid_keys: set[str] = Field(
         default_factory=set,
         description="Keys created mid-turn (e.g., via create_entity) that should be valid",
@@ -95,6 +99,7 @@ class GroundingManifest(BaseModel):
             or key in self.equipped
             or key in self.storages
             or key in self.exits
+            or key in self.candidate_locations
         )
 
     def all_keys(self) -> set[str]:
@@ -110,6 +115,7 @@ class GroundingManifest(BaseModel):
         keys.update(self.equipped.keys())
         keys.update(self.storages.keys())
         keys.update(self.exits.keys())
+        keys.update(self.candidate_locations.keys())
         keys.update(self.additional_valid_keys)
         return keys
 
@@ -126,6 +132,7 @@ class GroundingManifest(BaseModel):
         result.update(self.equipped)
         result.update(self.storages)
         result.update(self.exits)
+        result.update(self.candidate_locations)
         return result
 
     def get_entity(self, key: str) -> GroundedEntity | None:
@@ -144,6 +151,7 @@ class GroundingManifest(BaseModel):
             self.equipped,
             self.storages,
             self.exits,
+            self.candidate_locations,
         ):
             if key in category:
                 return category[key]
@@ -250,11 +258,19 @@ class GroundingManifest(BaseModel):
                 lines.append(f"- KEY={key} | {entity.display_name}")
             lines.append("")
 
-        # Exits
+        # Exits (directly accessible)
         if self.exits:
-            lines.append("**Exits/accessible locations:**")
+            lines.append("**Exits/accessible locations (directly adjacent):**")
             for key, entity in self.exits.items():
                 lines.append(f"- KEY={key} | {entity.display_name}")
+            lines.append("")
+
+        # Candidate locations (not directly adjacent but known/mentioned)
+        if self.candidate_locations:
+            lines.append("**Other known locations (may require travel):**")
+            for key, entity in self.candidate_locations.items():
+                desc = f" ({entity.short_description})" if entity.short_description else ""
+                lines.append(f"- KEY={key} | {entity.display_name}{desc}")
             lines.append("")
 
         lines.append(

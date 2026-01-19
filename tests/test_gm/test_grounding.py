@@ -221,6 +221,128 @@ class TestGroundingManifest:
         )
         assert manifest.additional_valid_keys == set()
 
+    # =========================================================================
+    # Candidate Locations Tests (for context-aware location resolution)
+    # =========================================================================
+
+    def test_candidate_locations_contains_key(self):
+        """Test contains_key for candidate locations."""
+        manifest = GroundingManifest(
+            location_key="village_inn",
+            location_display="Village Inn",
+            player_key="player_001",
+            exits={
+                "village_square": GroundedEntity(
+                    key="village_square",
+                    display_name="Village Square",
+                    entity_type="location",
+                ),
+            },
+            candidate_locations={
+                "well_of_life": GroundedEntity(
+                    key="well_of_life",
+                    display_name="Well of Life",
+                    entity_type="location",
+                    short_description="A mystical well in the mountains",
+                ),
+                "village_well": GroundedEntity(
+                    key="village_well",
+                    display_name="Village Well",
+                    entity_type="location",
+                    short_description="The common well",
+                ),
+            },
+        )
+        # Both exits and candidate locations should be valid
+        assert manifest.contains_key("village_square") is True
+        assert manifest.contains_key("well_of_life") is True
+        assert manifest.contains_key("village_well") is True
+
+    def test_candidate_locations_in_all_keys(self):
+        """Test all_keys includes candidate locations."""
+        manifest = GroundingManifest(
+            location_key="village_inn",
+            location_display="Village Inn",
+            player_key="player_001",
+            candidate_locations={
+                "well_of_life": GroundedEntity(
+                    key="well_of_life",
+                    display_name="Well of Life",
+                    entity_type="location",
+                ),
+            },
+        )
+        all_keys = manifest.all_keys()
+        assert "well_of_life" in all_keys
+
+    def test_candidate_locations_in_all_entities(self):
+        """Test all_entities includes candidate locations."""
+        manifest = GroundingManifest(
+            location_key="village_inn",
+            location_display="Village Inn",
+            player_key="player_001",
+            candidate_locations={
+                "well_of_life": GroundedEntity(
+                    key="well_of_life",
+                    display_name="Well of Life",
+                    entity_type="location",
+                ),
+            },
+        )
+        all_entities = manifest.all_entities()
+        assert "well_of_life" in all_entities
+        assert all_entities["well_of_life"].display_name == "Well of Life"
+
+    def test_get_entity_candidate_location(self):
+        """Test get_entity returns candidate location."""
+        manifest = GroundingManifest(
+            location_key="village_inn",
+            location_display="Village Inn",
+            player_key="player_001",
+            candidate_locations={
+                "well_of_life": GroundedEntity(
+                    key="well_of_life",
+                    display_name="Well of Life",
+                    entity_type="location",
+                    short_description="A mystical well",
+                ),
+            },
+        )
+        entity = manifest.get_entity("well_of_life")
+        assert entity is not None
+        assert entity.display_name == "Well of Life"
+        assert entity.short_description == "A mystical well"
+
+    def test_candidate_locations_default_empty(self):
+        """Test candidate_locations defaults to empty dict."""
+        manifest = GroundingManifest(
+            location_key="loc_001",
+            location_display="Test Location",
+            player_key="player_001",
+        )
+        assert manifest.candidate_locations == {}
+
+    def test_format_for_prompt_includes_candidate_locations(self):
+        """Test format_for_prompt includes candidate locations section."""
+        manifest = GroundingManifest(
+            location_key="village_inn",
+            location_display="Village Inn",
+            player_key="player_001",
+            candidate_locations={
+                "well_of_life": GroundedEntity(
+                    key="well_of_life",
+                    display_name="Well of Life",
+                    entity_type="location",
+                    short_description="A mystical well in the mountains",
+                ),
+            },
+        )
+        output = manifest.format_for_prompt()
+        assert "Other known locations" in output
+        assert "well_of_life" in output
+        assert "Well of Life" in output
+        assert "mystical well" in output
+
 
 # =============================================================================
 # GroundingValidator Tests

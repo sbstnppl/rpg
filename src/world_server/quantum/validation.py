@@ -780,22 +780,57 @@ class DeltaValidator:
                 severity=IssueSeverity.ERROR,
             ))
 
-        # Soft check: destination should be a known exit
+        # Soft check: destination should be a known exit or candidate location
         # Note: This uses the manifest passed to validator which may be the destination
         # manifest for MOVE actions. The real validation happens in collapse.py which
         # checks if the location exists in the database before applying the delta.
         destination = changes.get("location_key")
         if destination and self.manifest:
             exits = getattr(self.manifest, 'exits', None) or {}
-            if exits and destination not in exits:
+            candidates = getattr(self.manifest, 'candidate_locations', None) or {}
+            valid_destinations = set(exits.keys()) | set(candidates.keys())
+
+            if valid_destinations and destination not in valid_destinations:
+                # Try to find a similar location key
+                similar = self._find_similar_location(destination, valid_destinations)
+                suggestion = f"Available locations: {list(valid_destinations)}"
+                if similar:
+                    suggestion = f"Did you mean '{similar}'? {suggestion}"
+
                 issues.append(ValidationIssue(
                     category="delta",
-                    message=f"{prefix}: Destination '{destination}' not in manifest exits (will validate at collapse)",
+                    message=f"{prefix}: Destination '{destination}' not in known locations (will validate at collapse)",
                     severity=IssueSeverity.WARNING,
-                    suggestion=f"Available exits: {list(exits.keys())}",
+                    suggestion=suggestion,
                 ))
 
         return issues
+
+    def _find_similar_location(
+        self, invalid_key: str, valid_keys: set[str], threshold: float = 0.5
+    ) -> str | None:
+        """Find a similar valid location key using fuzzy matching.
+
+        Args:
+            invalid_key: The invalid location key.
+            valid_keys: Set of valid location keys.
+            threshold: Minimum similarity score to consider a match.
+
+        Returns:
+            The most similar valid key if above threshold, None otherwise.
+        """
+        from difflib import SequenceMatcher
+
+        best_match: str | None = None
+        best_score = threshold
+
+        for valid_key in valid_keys:
+            score = SequenceMatcher(None, invalid_key.lower(), valid_key.lower()).ratio()
+            if score > best_score:
+                best_match = valid_key
+                best_score = score
+
+        return best_match
 
     def _check_conflicts(self, deltas: list[StateDelta]) -> list[ValidationIssue]:
         """Check for conflicting deltas."""

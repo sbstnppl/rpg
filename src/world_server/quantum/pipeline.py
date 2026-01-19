@@ -469,12 +469,16 @@ class QuantumPipeline:
         self,
         player_id: int | None,
         location_key: str,
+        destination_hint: str | None = None,
     ) -> GroundingManifest:
         """Build grounding manifest for current scene.
 
         Args:
             player_id: Optional player entity ID
             location_key: Current location key
+            destination_hint: Optional text describing intended destination for MOVE
+                actions. Used to populate candidate_locations for context-aware
+                location resolution.
 
         Returns:
             GroundingManifest with all scene entities
@@ -486,6 +490,7 @@ class QuantumPipeline:
         return self._context_builder.build_grounding_manifest(
             player_id=player_id,
             location_key=location_key,
+            destination_hint=destination_hint,
         )
 
     def _get_player_entity(self):
@@ -880,18 +885,40 @@ class QuantumPipeline:
         generation_manifest = manifest
         generation_location = location_key
 
+        # Extract destination hint for MOVE actions (used to find candidate locations)
+        destination_hint: str | None = None
+        if action.action_type == ActionType.MOVE:
+            # Priority: intent_result.target_display > action.context.destination > target_key
+            if intent_result and intent_result.target_display:
+                destination_hint = intent_result.target_display
+            elif action.context and action.context.get("destination"):
+                destination_hint = action.context.get("destination")
+            elif action.target_key:
+                destination_hint = action.target_key
+
         origin_location_for_context = None  # Only set for MOVE actions
         if action.action_type == ActionType.MOVE and action.target_key:
             # Build manifest for destination so narrative describes where player arrives
             try:
                 generation_manifest = await self._build_manifest(
-                    self._get_player_id(), action.target_key
+                    self._get_player_id(),
+                    action.target_key,
+                    destination_hint=destination_hint,
                 )
                 origin_location_for_context = location_key  # Remember where we came from
                 generation_location = action.target_key
                 logger.debug(f"Using destination manifest for MOVE to {action.target_key}")
             except Exception as e:
                 logger.warning(f"Failed to build destination manifest: {e}, using current")
+        elif action.action_type == ActionType.MOVE and destination_hint:
+            # MOVE action with destination hint but no resolved target_key yet
+            # Add candidate locations to the current manifest so LLM can pick
+            logger.debug(f"MOVE with destination hint '{destination_hint}' - adding candidate locations")
+            generation_manifest = await self._build_manifest(
+                self._get_player_id(),
+                location_key,
+                destination_hint=destination_hint,
+            )
 
         context = self._build_branch_context(
             generation_location,
