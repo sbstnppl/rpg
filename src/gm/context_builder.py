@@ -845,6 +845,10 @@ class GMContextBuilder(BaseManager):
                 exclude_keys=set(exits.keys()),
             )
 
+        # Query ALL entity and item keys from this session
+        # This prevents branch generator from creating duplicates of existing entities
+        session_entity_keys = self._get_all_session_keys()
+
         return GroundingManifest(
             location_key=location_key,
             location_display=location_display,
@@ -857,7 +861,39 @@ class GMContextBuilder(BaseManager):
             storages=storages,
             exits=exits,
             candidate_locations=candidate_locations,
+            additional_valid_keys=session_entity_keys,
+            session_id=self.session_id,
         )
+
+    def _get_all_session_keys(self) -> set[str]:
+        """Get all entity and item keys from the current session.
+
+        This is used to populate additional_valid_keys in the manifest,
+        preventing the branch generator from creating entities with keys
+        that already exist in the database from previous turns.
+
+        Returns:
+            Set of all entity and item keys in the session.
+        """
+        keys: set[str] = set()
+
+        # Get all entity keys from the session
+        entity_keys = (
+            self.db.query(Entity.entity_key)
+            .filter(Entity.session_id == self.session_id)
+            .all()
+        )
+        keys.update(row[0] for row in entity_keys)
+
+        # Get all item keys from the session
+        item_keys = (
+            self.db.query(Item.item_key)
+            .filter(Item.session_id == self.session_id)
+            .all()
+        )
+        keys.update(row[0] for row in item_keys)
+
+        return keys
 
     def _get_candidate_locations(
         self,

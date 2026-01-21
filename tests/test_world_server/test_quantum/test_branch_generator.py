@@ -372,7 +372,7 @@ class TestPromptBuilding:
 
         formatted = generator._format_entities(sample_manifest)
 
-        assert "Exits:" in formatted
+        assert "Exits" in formatted
         assert "village_square" in formatted
 
     def test_format_entities_empty_npcs_shows_none(

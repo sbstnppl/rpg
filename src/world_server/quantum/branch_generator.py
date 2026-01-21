@@ -355,7 +355,14 @@ CRITICAL: All entity references MUST use [key:text] format. Never mention an ent
 CRITICAL: You may ONLY reference entities that appear in the AVAILABLE ENTITIES list in the prompt.
 - Do NOT invent, hallucinate, or reference NPCs, items, or locations not in the list.
 - If no NPCs are listed, the scene has NO NPCs present - do not create dialog with non-existent characters.
-- If the player tries to interact with a non-existent entity, narrate that they cannot find such a person/thing."""
+- If the player tries to interact with a non-existent entity, narrate that they cannot find such a person/thing.
+
+IMPORTANT: Entity Key Uniqueness
+- Do NOT generate CREATE_ENTITY for keys that already appear in AVAILABLE ENTITIES
+- If you need to reference an existing entity, use its key directly in deltas (e.g., UPDATE_ENTITY)
+- Only create NEW entities with unique, descriptive keys that don't match existing ones
+- When creating new items, use descriptive keys like "ale_mug_fresh" or "bread_loaf_warm" to avoid collisions
+- The AVAILABLE ENTITIES list includes ALL entities from this session, not just ones at the current location"""
 
     def _build_generation_prompt(
         self,

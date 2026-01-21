@@ -73,6 +73,10 @@ class GroundingManifest(BaseModel):
         default_factory=set,
         description="Keys created mid-turn (e.g., via create_entity) that should be valid",
     )
+    session_id: int | None = Field(
+        default=None,
+        description="Session ID for tracking which session this manifest belongs to",
+    )
 
     def contains_key(self, key: str) -> bool:
         """Check if a key exists in the manifest.

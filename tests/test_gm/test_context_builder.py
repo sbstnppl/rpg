@@ -10,6 +10,7 @@ from src.llm.message_types import MessageRole
 from tests.factories import (
     create_entity,
     create_fact,
+    create_item,
     create_location,
     create_turn,
 )
@@ -833,3 +834,209 @@ class TestBuildGroundingManifestWithDestinationHint:
         )
 
         assert manifest.candidate_locations == {}
+
+
+class TestSessionEntityKeyInclusion:
+    """Tests for session-level entity key inclusion to prevent key collisions.
+
+    When the branch generator creates entities, it should not create duplicates
+    of entities that already exist in the database from previous turns. The
+    manifest's additional_valid_keys field is now populated with ALL entity
+    and item keys from the session, not just mid-turn created ones.
+    """
+
+    def test_get_all_session_keys_returns_entity_keys(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test _get_all_session_keys returns all entity keys from session."""
+        # Create some entities
+        create_entity(
+            db_session,
+            game_session,
+            entity_type=EntityType.NPC,
+            entity_key="farmer_marcus",
+            display_name="Marcus",
+        )
+        create_entity(
+            db_session,
+            game_session,
+            entity_type=EntityType.NPC,
+            entity_key="baker_anna",
+            display_name="Anna",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        keys = builder._get_all_session_keys()
+
+        assert "farmer_marcus" in keys
+        assert "baker_anna" in keys
+
+    def test_get_all_session_keys_returns_item_keys(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test _get_all_session_keys returns all item keys from session."""
+        # Create some items
+        create_item(
+            db_session,
+            game_session,
+            item_key="porridge_bowl",
+            display_name="Bowl of Porridge",
+        )
+        create_item(
+            db_session,
+            game_session,
+            item_key="bread_loaf",
+            display_name="Fresh Bread",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        keys = builder._get_all_session_keys()
+
+        assert "porridge_bowl" in keys
+        assert "bread_loaf" in keys
+
+    def test_get_all_session_keys_excludes_other_sessions(
+        self, db_session: Session, game_session: GameSession, game_session_2: GameSession
+    ):
+        """Test _get_all_session_keys only returns keys from current session."""
+        # Create entity in session 1
+        create_entity(
+            db_session,
+            game_session,
+            entity_type=EntityType.NPC,
+            entity_key="session1_npc",
+            display_name="Session 1 NPC",
+        )
+        # Create entity in session 2
+        create_entity(
+            db_session,
+            game_session_2,
+            entity_type=EntityType.NPC,
+            entity_key="session2_npc",
+            display_name="Session 2 NPC",
+        )
+
+        # Builder for session 1
+        builder = GMContextBuilder(db_session, game_session)
+        keys = builder._get_all_session_keys()
+
+        assert "session1_npc" in keys
+        assert "session2_npc" not in keys
+
+    def test_build_grounding_manifest_includes_session_keys_in_additional_valid_keys(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test build_grounding_manifest populates additional_valid_keys with session keys."""
+        player = create_entity(
+            db_session,
+            game_session,
+            entity_type=EntityType.PLAYER,
+            entity_key="player_001",
+            display_name="Finn",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+        # Create an entity and item that are NOT at the current location
+        # (simulating entities from previous turns)
+        create_entity(
+            db_session,
+            game_session,
+            entity_type=EntityType.NPC,
+            entity_key="farmer_from_turn1",
+            display_name="Old Farmer",
+        )
+        create_item(
+            db_session,
+            game_session,
+            item_key="porridge_bowl_from_turn1",
+            display_name="Bowl of Porridge",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        manifest = builder.build_grounding_manifest(
+            player_id=player.id,
+            location_key="village_inn",
+        )
+
+        # These keys should be in additional_valid_keys even though they're
+        # not at the current location
+        assert "farmer_from_turn1" in manifest.additional_valid_keys
+        assert "porridge_bowl_from_turn1" in manifest.additional_valid_keys
+        # The player key should also be included
+        assert "player_001" in manifest.additional_valid_keys
+
+    def test_manifest_contains_key_finds_session_level_entities(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test that contains_key() returns True for session-level entities."""
+        player = create_entity(
+            db_session,
+            game_session,
+            entity_type=EntityType.PLAYER,
+            entity_key="player_001",
+            display_name="Finn",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+        # Create an item from a "previous turn" (not at current location)
+        create_item(
+            db_session,
+            game_session,
+            item_key="porridge_bowl_old",
+            display_name="Old Porridge Bowl",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        manifest = builder.build_grounding_manifest(
+            player_id=player.id,
+            location_key="village_inn",
+        )
+
+        # contains_key should find the item even though it's not at location
+        assert manifest.contains_key("porridge_bowl_old") is True
+
+    def test_manifest_session_id_is_set(
+        self, db_session: Session, game_session: GameSession
+    ):
+        """Test that build_grounding_manifest sets session_id on the manifest."""
+        player = create_entity(
+            db_session,
+            game_session,
+            entity_type=EntityType.PLAYER,
+            entity_key="player_001",
+            display_name="Finn",
+        )
+        create_location(
+            db_session,
+            game_session,
+            location_key="village_inn",
+            display_name="Village Inn",
+        )
+
+        builder = GMContextBuilder(db_session, game_session)
+        manifest = builder.build_grounding_manifest(
+            player_id=player.id,
+            location_key="village_inn",
+        )
+
+        assert manifest.session_id == game_session.id

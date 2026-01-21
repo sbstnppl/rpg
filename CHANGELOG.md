@@ -75,6 +75,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Phase 5: Cleanup (code normalizes output)
 
 ### Fixed
+- **Branch Entity Key Collision Prevention** - Branch generator no longer creates duplicate entity keys
+  - Added `_get_all_session_keys()` method to query ALL entity/item keys from session (`src/gm/context_builder.py`)
+  - Manifest's `additional_valid_keys` now populated with session-wide keys, not just mid-turn ones
+  - Added entity key uniqueness guidance to branch generator system prompt (`src/world_server/quantum/branch_generator.py`)
+  - Added `session_id` field to `GroundingManifest` for debugging (`src/gm/grounding.py`)
+  - 6 new tests in `TestSessionEntityKeyInclusion` class (`tests/test_gm/test_context_builder.py`)
+
 - **Branch Regeneration for Unknown Location Destinations** - Graceful handling when LLM hallucinates locations
   - Added position vs location guidance to branch generator prompt (`src/world_server/quantum/branch_generator.py`)
   - New `_remove_invalid_location_deltas()` method removes invalid `UPDATE_LOCATION` deltas gracefully instead of failing (`src/world_server/quantum/delta_postprocessor.py`)
